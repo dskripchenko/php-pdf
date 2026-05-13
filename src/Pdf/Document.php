@@ -77,6 +77,29 @@ final class Document
     private bool $tagged = false;
 
     /**
+     * Phase 49: Embedded files (attachments).
+     *
+     * @var list<array{name: string, bytes: string, mimeType: ?string, description: ?string}>
+     */
+    private array $embeddedFiles = [];
+
+    /**
+     * Phase 49: Attach file к PDF. File doesn't show in content; available
+     * via reader's attachments panel (Acrobat Reader, Foxit etc.).
+     */
+    public function attachFile(string $name, string $bytes, ?string $mimeType = null, ?string $description = null): self
+    {
+        $this->embeddedFiles[] = [
+            'name' => $name,
+            'bytes' => $bytes,
+            'mimeType' => $mimeType,
+            'description' => $description,
+        ];
+
+        return $this;
+    }
+
+    /**
      * @var list<array{type: string, mcid: int, page: Page}>  Struct elements
      *   collected при rendering — emitted в StructTreeRoot/K.
      */
@@ -511,10 +534,9 @@ final class Document
 
         // Named destinations — emit /Names tree если есть.
         $namesRef = '';
+        $namesEntries = []; // parts собираемые для root /Names dict.
         if ($this->namedDestinations !== []) {
             $entries = [];
-            // ISO 32000-1 §7.9.6: names в Names array должны быть sorted
-            // ASCII-asc.
             $names = array_keys($this->namedDestinations);
             sort($names, SORT_STRING);
             foreach ($names as $name) {
@@ -529,7 +551,49 @@ final class Document
                 );
             }
             $destsId = $writer->addObject('<< /Names ['.implode(' ', $entries).'] >>');
-            $namesId = $writer->addObject(sprintf('<< /Dests %d 0 R >>', $destsId));
+            $namesEntries[] = "/Dests $destsId 0 R";
+        }
+
+        // Phase 49: Embedded files (attachments) — /EmbeddedFiles в Names tree.
+        if ($this->embeddedFiles !== []) {
+            $efEntries = [];
+            // Sort by name для deterministic output.
+            $sortedFiles = $this->embeddedFiles;
+            usort($sortedFiles, fn ($a, $b) => strcmp($a['name'], $b['name']));
+            foreach ($sortedFiles as $file) {
+                // Embedded file stream — bytes + Subtype + Params /Size.
+                $fileSize = strlen($file['bytes']);
+                $efStreamBody = sprintf(
+                    '<< /Type /EmbeddedFile%s /Length %d /Params << /Size %d >> >>',
+                    $file['mimeType'] !== null ? ' /Subtype /'.$this->sanitizeMimeName($file['mimeType']) : '',
+                    $fileSize,
+                    $fileSize,
+                );
+                $efStreamId = $writer->addObject(sprintf(
+                    "%s\nstream\n%s\nendstream",
+                    $efStreamBody, $file['bytes'],
+                ));
+                // Filespec dict.
+                $descPart = $file['description'] !== null
+                    ? ' /Desc '.$this->pdfString($file['description'])
+                    : '';
+                $filespecId = $writer->addObject(sprintf(
+                    '<< /Type /Filespec /F %s /UF %s%s '
+                    .'/EF << /F %d 0 R /UF %d 0 R >> >>',
+                    $this->pdfString($file['name']),
+                    $this->pdfString($file['name']),
+                    $descPart,
+                    $efStreamId,
+                    $efStreamId,
+                ));
+                $efEntries[] = $this->pdfString($file['name'])." $filespecId 0 R";
+            }
+            $efNamesId = $writer->addObject('<< /Names ['.implode(' ', $efEntries).'] >>');
+            $namesEntries[] = "/EmbeddedFiles $efNamesId 0 R";
+        }
+
+        if ($namesEntries !== []) {
+            $namesId = $writer->addObject('<< '.implode(' ', $namesEntries).' >>');
             $namesRef = ' /Names '.$namesId.' 0 R';
         }
 
@@ -940,6 +1004,25 @@ final class Document
         $writer->setObject($parentId, $parentBody);
 
         return [$parentId, $childIds];
+    }
+
+    /**
+     * Phase 49: PDF name objects only allow specific chars. Mime types
+     * с '/' нужно конвертировать в hash-escaped form (#2F).
+     */
+    private function sanitizeMimeName(string $mime): string
+    {
+        $out = '';
+        for ($i = 0; $i < strlen($mime); $i++) {
+            $c = $mime[$i];
+            if (preg_match('@[A-Za-z0-9]@', $c)) {
+                $out .= $c;
+            } else {
+                $out .= '#'.sprintf('%02X', ord($c));
+            }
+        }
+
+        return $out;
     }
 
     /**
