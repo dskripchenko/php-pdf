@@ -53,9 +53,23 @@ final class Writer
 
     private ?int $infoId = null;
 
+    /** Phase 41: encryption config (null = no encryption). */
+    private ?Encryption $encryption = null;
+
+    private ?int $encryptId = null;
+
     public function __construct(
         private readonly string $version = '1.7',
     ) {}
+
+    /**
+     * Phase 41: Enable encryption — encrypt streams через RC4-128 V2 R3.
+     */
+    public function setEncryption(Encryption $encryption, int $encryptObjectId): void
+    {
+        $this->encryption = $encryption;
+        $this->encryptId = $encryptObjectId;
+    }
 
     /**
      * Резервирует object ID. Используется когда нужно создать
@@ -127,6 +141,11 @@ final class Writer
         // Object table. Записываем offsets для xref.
         $offsets = [];
         foreach ($this->objects as $id => $body) {
+            // Phase 41: encrypt streams (НЕ применяется к Encrypt object'у
+            // самому — он содержит ключи в clear).
+            if ($this->encryption !== null && $id !== $this->encryptId) {
+                $body = $this->encryptStreamsInBody($body, $id);
+            }
             $offsets[$id] = strlen($out);
             $out .= $id.' 0 obj'.self::LINE_ENDING;
             $out .= $body.self::LINE_ENDING;
@@ -148,11 +167,41 @@ final class Writer
         // Trailer.
         $out .= 'trailer'.self::LINE_ENDING;
         $infoPart = $this->infoId !== null ? ' /Info '.$this->infoId.' 0 R' : '';
-        $out .= '<< /Size '.$count.' /Root '.$this->rootId.' 0 R'.$infoPart.' >>'.self::LINE_ENDING;
+        $encryptPart = '';
+        $idPart = '';
+        if ($this->encryption !== null && $this->encryptId !== null) {
+            $encryptPart = ' /Encrypt '.$this->encryptId.' 0 R';
+            $idHex = bin2hex($this->encryption->fileId);
+            // ID array — 16 bytes твой fileId; repeat для permanent + current.
+            $idPart = ' /ID [<'.$idHex.'> <'.$idHex.'>]';
+        }
+        $out .= '<< /Size '.$count.' /Root '.$this->rootId.' 0 R'.$infoPart.$encryptPart.$idPart.' >>'.self::LINE_ENDING;
         $out .= 'startxref'.self::LINE_ENDING;
         $out .= $xrefOffset.self::LINE_ENDING;
         $out .= '%%EOF'.self::LINE_ENDING;
 
         return $out;
+    }
+
+    /**
+     * Phase 41: Find stream blocks в object body и encrypt их contents
+     * через per-object RC4 key.
+     */
+    private function encryptStreamsInBody(string $body, int $objId): string
+    {
+        if ($this->encryption === null) {
+            return $body;
+        }
+        $enc = $this->encryption;
+        // Encrypt stream content: `stream\n<bytes>\nendstream`.
+        return preg_replace_callback(
+            '@stream\n(.*?)\nendstream@s',
+            function (array $m) use ($enc, $objId): string {
+                $encrypted = $enc->encryptObject($m[1], $objId);
+
+                return 'stream'."\n".$encrypted."\n".'endstream';
+            },
+            $body,
+        ) ?? $body;
     }
 }

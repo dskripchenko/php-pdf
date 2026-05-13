@@ -62,6 +62,25 @@ final class Document
     private array $metadata = [];
 
     /**
+     * Phase 41: optional encryption config. Если задан — emit /Encrypt
+     * в trailer + encrypt все stream content на per-object level.
+     */
+    private ?Encryption $encryption = null;
+
+    /**
+     * Phase 41: enable RC4-128 encryption (V2 R3 standard security handler).
+     */
+    public function encrypt(
+        string $userPassword,
+        ?string $ownerPassword = null,
+        int $permissions = Encryption::PERM_PRINT | Encryption::PERM_COPY | Encryption::PERM_PRINT_HIGH,
+    ): self {
+        $this->encryption = new Encryption($userPassword, $ownerPassword, $permissions);
+
+        return $this;
+    }
+
+    /**
      * @param  array{0: float, 1: float}|null  $defaultCustomDimensionsPt
      */
     public function __construct(
@@ -448,6 +467,21 @@ final class Document
             }
             $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
             $writer->setInfo($infoId);
+        }
+
+        // Phase 41: emit /Encrypt object и hook encryption в writer.
+        if ($this->encryption !== null) {
+            $enc = $this->encryption;
+            $oHex = bin2hex($enc->oValue);
+            $uHex = bin2hex($enc->uValue);
+            $encryptBody = sprintf(
+                '<< /Filter /Standard /V 2 /R 3 /Length 128 /O <%s> /U <%s> /P %d >>',
+                $oHex,
+                $uHex,
+                $enc->permissions,
+            );
+            $encryptId = $writer->addObject($encryptBody);
+            $writer->setEncryption($enc, $encryptId);
         }
 
         return $writer->toBytes();
