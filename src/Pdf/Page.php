@@ -517,6 +517,9 @@ final class Page
         ?string $calculateScript = null,
         ?string $formatScript = null,
         ?string $keystrokeScript = null,
+        ?string $buttonCaption = null,
+        ?string $submitUrl = null,
+        ?string $clickScript = null,
     ): self {
         $this->formFields[] = [
             'type' => $type,
@@ -535,6 +538,9 @@ final class Page
             'calculateScript' => $calculateScript,
             'formatScript' => $formatScript,
             'keystrokeScript' => $keystrokeScript,
+            'buttonCaption' => $buttonCaption,
+            'submitUrl' => $submitUrl,
+            'clickScript' => $clickScript,
         ];
 
         return $this;

@@ -1541,6 +1541,9 @@ final class Engine
             calculateScript: $field->calculateScript,
             formatScript: $field->formatScript,
             keystrokeScript: $field->keystrokeScript,
+            buttonCaption: $field->buttonCaption,
+            submitUrl: $field->submitUrl,
+            clickScript: $field->clickScript,
         );
 
         $ctx->cursorY -= $h;

@@ -39,10 +39,17 @@ final readonly class FormField implements BlockElement
 
     public const TYPE_SIGNATURE = 'signature';
 
+    public const TYPE_SUBMIT_BUTTON = 'submit';
+
+    public const TYPE_RESET_BUTTON = 'reset';
+
+    public const TYPE_PUSH_BUTTON = 'push';
+
     public const SUPPORTED_TYPES = [
         self::TYPE_TEXT, self::TYPE_TEXT_MULTILINE, self::TYPE_PASSWORD,
         self::TYPE_CHECKBOX, self::TYPE_RADIO_GROUP, self::TYPE_COMBO,
         self::TYPE_LIST, self::TYPE_SIGNATURE,
+        self::TYPE_SUBMIT_BUTTON, self::TYPE_RESET_BUTTON, self::TYPE_PUSH_BUTTON,
     ];
 
     /**
@@ -73,6 +80,13 @@ final readonly class FormField implements BlockElement
         public ?string $calculateScript = null,
         public ?string $formatScript = null,
         public ?string $keystrokeScript = null,
+        // Phase 83: button-specific.
+        // Caption: button label (для push/submit/reset — defaults к type label).
+        public ?string $buttonCaption = null,
+        // SubmitURL — для TYPE_SUBMIT_BUTTON, target endpoint.
+        public ?string $submitUrl = null,
+        // /A click action JavaScript (alternative или supplement to submit/reset).
+        public ?string $clickScript = null,
     ) {
         if (! in_array($type, self::SUPPORTED_TYPES, true)) {
             throw new \InvalidArgumentException("Unsupported FormField type: $type");

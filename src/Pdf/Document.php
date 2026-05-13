@@ -1036,6 +1036,35 @@ final class Document
                 $rect, $namePart, $tooltipPart, $flags, $pageId, $aaPart,
             );
         }
+        if ($type === 'submit' || $type === 'reset' || $type === 'push') {
+            // Phase 83: button с pushbutton flag (bit 17 = 65536).
+            $flags |= 65536;
+            $caption = $field['buttonCaption'] ?? ucfirst($type);
+            $mkPart = ' /MK << /CA '.$this->pdfString($caption).' >>';
+
+            // /A action dict.
+            $actionPart = '';
+            if ($type === 'submit') {
+                $url = $field['submitUrl'] ?? '';
+                $actionPart = ' /A << /Type /Action /S /SubmitForm '
+                    .'/F << /FS /URL /F '.$this->pdfString($url).' >> '
+                    .'/Flags 0 >>';
+            } elseif ($type === 'reset') {
+                $actionPart = ' /A << /Type /Action /S /ResetForm >>';
+            } elseif ($type === 'push' && ! empty($field['clickScript'])) {
+                $actionPart = sprintf(
+                    ' /A << /Type /Action /S /JavaScript /JS %s >>',
+                    $this->pdfString($field['clickScript']),
+                );
+            }
+
+            return sprintf(
+                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                .'%s%s /Ff %d /P %d 0 R%s%s%s >>',
+                $rect, $namePart, $tooltipPart, $flags, $pageId,
+                $mkPart, $actionPart, $aaPart,
+            );
+        }
         if ($type === 'combo' || $type === 'list') {
             $optsArray = '['.implode(' ', array_map(fn ($o) => $this->pdfString($o), $field['options'])).']';
             $valuePart = $field['defaultValue'] !== ''
