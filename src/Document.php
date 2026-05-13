@@ -22,15 +22,32 @@ use Dskripchenko\PhpPdf\Layout\Engine;
  */
 final readonly class Document
 {
+    /**
+     * @param  array<string, string>  $metadata  PDF /Info dict fields
+     *                                            (Title, Author, Subject,
+     *                                            Keywords, Creator, Producer).
+     */
     public function __construct(
         public Section $section,
+        public array $metadata = [],
     ) {}
 
     public function toBytes(?Engine $engine = null): string
     {
         $engine ??= new Engine;
+        $pdf = $engine->render($this);
+        if ($this->metadata !== []) {
+            $pdf->metadata(
+                title: $this->metadata['Title'] ?? null,
+                author: $this->metadata['Author'] ?? null,
+                subject: $this->metadata['Subject'] ?? null,
+                keywords: $this->metadata['Keywords'] ?? null,
+                creator: $this->metadata['Creator'] ?? null,
+                producer: $this->metadata['Producer'] ?? null,
+            );
+        }
 
-        return $engine->render($this)->toBytes();
+        return $pdf->toBytes();
     }
 
     public function toFile(string $path, ?Engine $engine = null): int

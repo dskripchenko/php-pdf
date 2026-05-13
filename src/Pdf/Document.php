@@ -53,6 +53,15 @@ final class Document
     private string $pdfVersion = '1.7';
 
     /**
+     * @var array<string, string>  metadata fields (Title, Author, Subject,
+     *                              Keywords, Creator, Producer). Values
+     *                              shown в PDF reader's "Document Properties"
+     *                              dialog. Все optional; emit'ятся в /Info
+     *                              dict если хотя бы одно задано.
+     */
+    private array $metadata = [];
+
+    /**
      * @param  array{0: float, 1: float}|null  $defaultCustomDimensionsPt
      */
     public function __construct(
@@ -84,6 +93,51 @@ final class Document
         $this->pdfVersion = $version;
 
         return $this;
+    }
+
+    /**
+     * Устанавливает PDF metadata (/Info dict). Все параметры optional.
+     * Только заданные fields эмитятся (не-null). CreationDate авто-
+     * заполняется если не передан.
+     */
+    public function metadata(
+        ?string $title = null,
+        ?string $author = null,
+        ?string $subject = null,
+        ?string $keywords = null,
+        ?string $creator = null,
+        ?string $producer = null,
+        ?\DateTimeInterface $creationDate = null,
+    ): self {
+        if ($title !== null) {
+            $this->metadata['Title'] = $title;
+        }
+        if ($author !== null) {
+            $this->metadata['Author'] = $author;
+        }
+        if ($subject !== null) {
+            $this->metadata['Subject'] = $subject;
+        }
+        if ($keywords !== null) {
+            $this->metadata['Keywords'] = $keywords;
+        }
+        if ($creator !== null) {
+            $this->metadata['Creator'] = $creator;
+        }
+        if ($producer !== null) {
+            $this->metadata['Producer'] = $producer;
+        }
+        if ($creationDate !== null) {
+            $this->metadata['CreationDate'] = $this->formatPdfDate($creationDate);
+        }
+
+        return $this;
+    }
+
+    private function formatPdfDate(\DateTimeInterface $dt): string
+    {
+        // PDF date format: D:YYYYMMDDHHmmSS+TZ'mm'
+        return 'D:'.$dt->format('YmdHis').'+00\'00\'';
     }
 
     /**
@@ -357,6 +411,21 @@ final class Document
         $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef >>");
 
         $writer->setRoot($catalogId);
+
+        // Phase 20: /Info dictionary (PDF metadata).
+        if ($this->metadata !== []) {
+            // Auto-default Producer + CreationDate.
+            $meta = $this->metadata + [
+                'Producer' => 'dskripchenko/php-pdf',
+                'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
+            ];
+            $entries = [];
+            foreach ($meta as $key => $value) {
+                $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
+            }
+            $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
+            $writer->setInfo($infoId);
+        }
 
         return $writer->toBytes();
     }

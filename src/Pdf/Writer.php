@@ -51,6 +51,8 @@ final class Writer
 
     private ?int $rootId = null;
 
+    private ?int $infoId = null;
+
     public function __construct(
         private readonly string $version = '1.7',
     ) {}
@@ -96,6 +98,15 @@ final class Writer
     }
 
     /**
+     * Sets /Info dictionary reference (PDF metadata). Trailer добавит
+     * `/Info N 0 R` если задан.
+     */
+    public function setInfo(int $infoId): void
+    {
+        $this->infoId = $infoId;
+    }
+
+    /**
      * Сериализует весь PDF. Бросает исключение если есть unfilled-объекты.
      */
     public function toBytes(): string
@@ -136,7 +147,8 @@ final class Writer
 
         // Trailer.
         $out .= 'trailer'.self::LINE_ENDING;
-        $out .= '<< /Size '.$count.' /Root '.$this->rootId.' 0 R >>'.self::LINE_ENDING;
+        $infoPart = $this->infoId !== null ? ' /Info '.$this->infoId.' 0 R' : '';
+        $out .= '<< /Size '.$count.' /Root '.$this->rootId.' 0 R'.$infoPart.' >>'.self::LINE_ENDING;
         $out .= 'startxref'.self::LINE_ENDING;
         $out .= $xrefOffset.self::LINE_ENDING;
         $out .= '%%EOF'.self::LINE_ENDING;
