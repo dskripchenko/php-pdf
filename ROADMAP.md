@@ -4,14 +4,16 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.0-rc1 — 22 фазы закрыты (435 + 193 printable = 628 тестов).
-Phase 22 (hyphenation) и Phase 23 (paragraph padding/bg) перенесены в v1.1.
-Phase 24 (MERGEFIELD) by-design placeholder.
+**Текущий статус:** v1.1-dev — 26 фаз закрыты (445 + 194 printable = 639 тестов).
+v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
+v1.1 в активной разработке.
 
-**v1.0 status:** Production-ready для типичных бизнес-документов. Critical
-блокеры (13-17) закрыты, Important (18-21) закрыты, остальное deferred
-к v1.1 как полировка edge-cases.
+**v1.0 final:** Production-ready для типичных бизнес-документов. Critical
+блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
+
+**v1.1 progress:** 25 (paragraph padding+bg), 26 (sup/sub sizing),
+27 (inline letter-spacing), 28 (border priority) closed.
 
 ---
 
@@ -251,9 +253,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 22 | Hyphenation — DEFERRED к v1.1 | — | — |
 | 23 | Paragraph padding/bg — DEFERRED к v1.1 | — | — |
 | 24 | MERGEFIELD — BY DESIGN (Blade-level pipeline) | — | — |
+| 25 | Paragraph padding + background (v1.1) | 4 | ee907af + fb8580e |
+| 26 | Sup/Sub visual sizing (v1.1) | 3 | b3426a5 |
+| 27 | Inline letter-spacing через span (v1.1) | +1 | 6209791 (printable) |
+| 28 | Border priority "thicker wins" (v1.1, Phase 19 deferred) | 3 | f680192 |
 
-**Итого v1.0:** 435 тестов в php-pdf, 193 теста в printable, 8 в
-Liberation package. Production-ready.
+**Итого:** 445 тестов в php-pdf, 194 теста в printable, 8 в
+Liberation package.
 
 ---
 
