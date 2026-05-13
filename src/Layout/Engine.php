@@ -9,6 +9,8 @@ use Dskripchenko\PhpPdf\Element\BlockElement;
 use Dskripchenko\PhpPdf\Element\Bookmark;
 use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Field;
+use Dskripchenko\PhpPdf\Font\FontProvider;
+use Dskripchenko\PhpPdf\Font\PdfFontResolver;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -83,6 +85,8 @@ final class Engine
      */
     private ?Section $currentSection = null;
 
+    private ?PdfFontResolver $resolver = null;
+
     public function __construct(
         public readonly ?PdfFont $defaultFont = null,
         public readonly StandardFont $fallbackStandard = StandardFont::Helvetica,
@@ -96,14 +100,40 @@ final class Engine
         public readonly ?PdfFont $boldFont = null,
         public readonly ?PdfFont $italicFont = null,
         public readonly ?PdfFont $boldItalicFont = null,
-    ) {}
+        /**
+         * Optional FontProvider — Engine consultит по Run.style.fontFamily
+         * прежде чем падать на bold/italic/default chain. Phase 13.
+         */
+        public readonly ?FontProvider $fontProvider = null,
+    ) {
+        if ($fontProvider !== null) {
+            $this->resolver = new PdfFontResolver($fontProvider);
+        }
+    }
 
     /**
-     * Resolves embedded font для given RunStyle bold/italic комбо.
-     * Fallback к defaultFont если конкретного variant'а нет.
+     * Resolves embedded font для given RunStyle.
+     *
+     * Priority:
+     *  1. Если RunStyle.fontFamily задан И fontProvider есть → resolver
+     *     (variant chain bold/italic с fallback)
+     *  2. Иначе bold/italic ctor-фолбэк chain → defaultFont
+     *  3. Иначе null (caller использует fallbackStandard base-14)
      */
     private function resolveEmbeddedFont(RunStyle $style): ?PdfFont
     {
+        if ($style->fontFamily !== null && $this->resolver !== null) {
+            $resolved = $this->resolver->resolve(
+                $style->fontFamily,
+                $style->bold,
+                $style->italic,
+            );
+            if ($resolved !== null) {
+                return $resolved;
+            }
+            // Family known but provider returned null → fall through к defaults.
+        }
+
         if ($style->bold && $style->italic) {
             return $this->boldItalicFont ?? $this->boldFont ?? $this->italicFont ?? $this->defaultFont;
         }
