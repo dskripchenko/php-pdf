@@ -67,6 +67,9 @@ final class Document
      */
     private ?Encryption $encryption = null;
 
+    /** @var list<int> Phase 43: form field object IDs (filled во время toBytes). */
+    private array $collectedFormFieldIds = [];
+
     /**
      * Phase 41-42: enable PDF encryption.
      *
@@ -403,6 +406,64 @@ final class Document
                 }
                 $annotIds[] = $writer->addObject($body);
             }
+            // Phase 43: AcroForm widgets — emit widget annotations + collect
+            // field object IDs для AcroForm.Fields array.
+            foreach ($page->formFields() as $field) {
+                $rect = sprintf(
+                    '[%s %s %s %s]',
+                    $this->fmt($field['x']), $this->fmt($field['y']),
+                    $this->fmt($field['x'] + $field['w']),
+                    $this->fmt($field['y'] + $field['h']),
+                );
+                $flags = 0;
+                if ($field['readOnly']) {
+                    $flags |= 1; // ReadOnly bit 1.
+                }
+                if ($field['required']) {
+                    $flags |= 2; // Required bit 2.
+                }
+                $tooltipPart = $field['tooltip'] !== null
+                    ? ' /TU '.$this->pdfString($field['tooltip'])
+                    : '';
+                $namePart = ' /T '.$this->pdfString($field['name']);
+                if ($field['type'] === 'text') {
+                    $valuePart = $field['defaultValue'] !== ''
+                        ? ' /V '.$this->pdfString($field['defaultValue'])
+                            .' /DV '.$this->pdfString($field['defaultValue'])
+                        : '';
+                    $body = sprintf(
+                        '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
+                        .'%s%s%s /Ff %d /P %d 0 R >>',
+                        $rect,
+                        ltrim($namePart),
+                        $valuePart,
+                        $tooltipPart,
+                        $flags,
+                        $pageIds[$i],
+                    );
+                } else {
+                    // checkbox: /Btn / NoToggleToOff не set, default unchecked.
+                    $isChecked = strcasecmp($field['defaultValue'], 'on') === 0
+                        || strcasecmp($field['defaultValue'], 'yes') === 0
+                        || $field['defaultValue'] === '1';
+                    $vPart = $isChecked ? ' /V /Yes /DV /Yes' : ' /V /Off /DV /Off';
+                    $body = sprintf(
+                        '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                        .'%s%s%s /Ff %d /P %d 0 R '
+                        .'/AS %s >>',
+                        $rect,
+                        ltrim($namePart),
+                        $vPart,
+                        $tooltipPart,
+                        $flags,
+                        $pageIds[$i],
+                        $isChecked ? '/Yes' : '/Off',
+                    );
+                }
+                $fieldId = $writer->addObject($body);
+                $annotIds[] = $fieldId;
+                $this->collectedFormFieldIds[] = $fieldId;
+            }
             $annotsRef = $annotIds === []
                 ? ''
                 : ' /Annots ['.implode(' ', array_map(fn ($id) => "$id 0 R", $annotIds)).']';
@@ -457,8 +518,19 @@ final class Document
             $kidsRefs, count($pageIds),
         ));
 
+        // Phase 43: AcroForm reference в Catalog.
+        $acroFormRef = '';
+        if ($this->collectedFormFieldIds !== []) {
+            $fieldsArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->collectedFormFieldIds));
+            $acroFormId = $writer->addObject(sprintf(
+                '<< /Fields [%s] /NeedAppearances true >>',
+                $fieldsArray,
+            ));
+            $acroFormRef = " /AcroForm $acroFormId 0 R";
+        }
+
         // 6. Catalog.
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef >>");
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef >>");
 
         $writer->setRoot($catalogId);
 

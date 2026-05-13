@@ -13,6 +13,7 @@ use Dskripchenko\PhpPdf\Font\FontProvider;
 use Dskripchenko\PhpPdf\Font\PdfFontResolver;
 use Dskripchenko\PhpPdf\Element\Barcode;
 use Dskripchenko\PhpPdf\Element\ColumnSet;
+use Dskripchenko\PhpPdf\Element\FormField;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -244,8 +245,44 @@ final class Engine
             $block instanceof ListNode => $this->renderListNode($block, $ctx, 0),
             $block instanceof Barcode => $this->renderBarcode($block, $ctx),
             $block instanceof ColumnSet => $this->renderColumnSet($block, $ctx),
+            $block instanceof FormField => $this->renderFormField($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 43: AcroForm field widget. Reserves space на странице,
+     * рисует visual border, регистрирует field annotation на page.
+     */
+    private function renderFormField(FormField $field, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $field->spaceBeforePt;
+        $h = $field->heightPt;
+        $w = min($field->widthPt, $ctx->contentWidth);
+        $this->ensureRoomFor($ctx, $h);
+
+        $x = $ctx->leftX;
+        $y = $ctx->cursorY - $h;
+
+        // Visual hint: thin border (большинство readers оverride'ит это
+        // нативным widget rendering, но fallback border важен для print).
+        $ctx->currentPage->strokeRect($x, $y, $w, $h, 0.5, 0.6, 0.6, 0.6);
+
+        $ctx->currentPage->addFormField(
+            type: $field->type,
+            name: $field->name,
+            x: $x,
+            y: $y,
+            width: $w,
+            height: $h,
+            defaultValue: $field->defaultValue,
+            tooltip: $field->tooltip,
+            required: $field->required,
+            readOnly: $field->readOnly,
+        );
+
+        $ctx->cursorY -= $h;
+        $ctx->cursorY -= $field->spaceAfterPt;
     }
 
     private function forcePageBreak(LayoutContext $ctx): void

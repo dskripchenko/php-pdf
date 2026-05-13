@@ -50,6 +50,13 @@ final class Page
      */
     private array $linkAnnotations = [];
 
+    /**
+     * Phase 43: AcroForm fields on этой page.
+     *
+     * @var list<array{type: 'text'|'checkbox', name: string, x: float, y: float, w: float, h: float, defaultValue: string, tooltip: ?string, required: bool, readOnly: bool}>
+     */
+    private array $formFields = [];
+
     private int $fontCounter = 0;
 
     private int $imageCounter = 0;
@@ -329,6 +336,47 @@ final class Page
     public function linkAnnotations(): array
     {
         return $this->linkAnnotations;
+    }
+
+    /**
+     * Phase 43: Add interactive form field widget на page.
+     */
+    public function addFormField(
+        string $type,
+        string $name,
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $defaultValue = '',
+        ?string $tooltip = null,
+        bool $required = false,
+        bool $readOnly = false,
+    ): self {
+        $this->formFields[] = [
+            'type' => $type,
+            'name' => $name,
+            'x' => $x,
+            'y' => $y,
+            'w' => $width,
+            'h' => $height,
+            'defaultValue' => $defaultValue,
+            'tooltip' => $tooltip,
+            'required' => $required,
+            'readOnly' => $readOnly,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * @return list<array{type: 'text'|'checkbox', name: string, x: float, y: float, w: float, h: float, defaultValue: string, tooltip: ?string, required: bool, readOnly: bool}>
+     *
+     * @internal
+     */
+    public function formFields(): array
+    {
+        return $this->formFields;
     }
 
     /**
