@@ -54,10 +54,11 @@ final class Code128EncoderTest extends TestCase
     }
 
     #[Test]
-    public function rejects_control_characters(): void
+    public function accepts_control_chars_via_set_a(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        new Code128Encoder("ABC\x01");
+        // Phase 78: control chars trigger Set A encoding.
+        $enc = new Code128Encoder("ABC\x01");
+        self::assertGreaterThan(0, $enc->moduleCount());
     }
 
     #[Test]

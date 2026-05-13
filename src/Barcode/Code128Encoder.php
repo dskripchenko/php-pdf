@@ -59,6 +59,8 @@ final class Code128Encoder
         '2331112',
     ];
 
+    private const START_A = 103;
+
     private const START_B = 104;
 
     private const START_C = 105;
@@ -74,13 +76,57 @@ final class Code128Encoder
 
     public function __construct(public readonly string $data)
     {
-        // Phase 57: auto-detect Set C mode для digit-only input length ≥ 4.
-        // Set C encodes 2 digits per codeword — compactнее, чем Set B.
-        if (preg_match('@^\d+$@', $data) && strlen($data) >= 4 && strlen($data) % 2 === 0) {
+        // Phase 78: Set A used когда input contains control chars И NO
+        // lowercase letters (Set A covers 0..95; lowercase 97-122 outside).
+        // Phase 57: digit-only ≥4 even → Set C.
+        // Else → Set B (default, ASCII 32..126).
+        $hasControlChars = false;
+        $hasLowercase = false;
+        for ($i = 0; $i < strlen($data); $i++) {
+            $b = ord($data[$i]);
+            if ($b < 32) {
+                $hasControlChars = true;
+            } elseif ($b >= 97 && $b <= 122) {
+                $hasLowercase = true;
+            }
+        }
+        if ($hasControlChars && ! $hasLowercase) {
+            $this->encodeSetA($data);
+        } elseif (preg_match('@^\d+$@', $data) && strlen($data) >= 4 && strlen($data) % 2 === 0) {
             $this->encodeSetC($data);
         } else {
             $this->encodeSetB($data);
         }
+    }
+
+    /**
+     * Phase 78: Code 128 Set A — supports ASCII 0..95 (including control
+     * chars).
+     *
+     * Encoding:
+     *  - ASCII 32..95 (' '..'_') → Set A values 0..63 (byte - 32).
+     *  - ASCII 0..31 (control)  → Set A values 64..95 (byte + 64).
+     */
+    private function encodeSetA(string $data): void
+    {
+        if ($data === '') {
+            throw new \InvalidArgumentException('Code 128 input must be non-empty');
+        }
+        $codes = [self::START_A];
+        $bytes = array_values(unpack('C*', $data) ?: []);
+        foreach ($bytes as $byte) {
+            if ($byte >= 0 && $byte <= 31) {
+                $codes[] = $byte + 64;
+            } elseif ($byte >= 32 && $byte <= 95) {
+                $codes[] = $byte - 32;
+            } else {
+                throw new \InvalidArgumentException(sprintf(
+                    'Code 128 Set A supports ASCII 0..95 only; got byte 0x%02X',
+                    $byte,
+                ));
+            }
+        }
+        $this->finalize($codes);
     }
 
     /**
