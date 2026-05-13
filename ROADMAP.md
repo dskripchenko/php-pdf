@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.19 — 18 фаз закрыты (423 + 193 printable = 616 тестов).
+**Текущий статус:** v0.20 — 19 фаз закрыты (426 + 193 printable = 619 тестов).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -91,12 +91,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   non-uniform borders или collapse mode → square fallback.
 - Tests: 4 в BorderRadiusTest, 1 в printable.
 
-**Phase 19: border-spacing + border priority**
-- В collapse-mode сейчас "first-drawn wins" (left cell.right убирается).
-  CSS spec требует "thicker wins" (или "more prominent style").
-- В separate-mode `border-spacing: Xpt` сейчас игнорируется (cells
-  всегда rendered впритык).
-- Нужно: priority resolution algorithm + spacing adjustment.
+**Phase 19: border-spacing** ✅ DONE (priority deferred к v1.1)
+- Done (9c76b42 + d5fd4cc): TableStyle.borderSpacingPt; Engine в
+  separate mode shrink'ет каждый cell на spacing/2 с каждой стороны.
+  CSS border-spacing parses через extractBorderSpacing (first value).
+- **Border priority resolution** ("thicker wins" CSS spec) deferred к
+  v1.1: текущий first-drawn-wins работает для типичных случаев.
+- Tests: 3 в BorderSpacingTest.
 
 **Phase 20: PDF metadata (/Info dict)**
 - Сейчас Document не пишет `/Info` объект в PDF (Title/Author/Subject/
@@ -145,6 +146,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - Footnotes / endnotes.
 - Multi-column layout (CSS `column-count`).
 - Complex script shaping (Arabic ligatures, Indic combining marks).
+- Border priority resolution в collapse mode ("thicker wins" CSS spec
+  правило vs current first-drawn-wins). Перенесено из v1.0 Phase 19.
 
 ### Typography
 
@@ -216,8 +219,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 16 | Inline images (text wrap, baseline alignment) | 6 | a084140 |
 | 17 | CSS <style>/classes (CssInliner integration) | +1 | 6921211 (printable) |
 | 18 | border-radius (rounded corners) | 4 + 1 | 4f32049 + dcf41a2 (printable) |
+| 19 | border-spacing (priority deferred к v1.1) | 3 | 9c76b42 + d5fd4cc (printable) |
 
-**Итого:** 423 теста в php-pdf, 193 теста в printable, 8 в Liberation package.
+**Итого:** 426 тестов в php-pdf, 193 теста в printable, 8 в Liberation package.
 
 ---
 
