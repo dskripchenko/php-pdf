@@ -254,29 +254,56 @@ final class SvgRenderer
             $y1 = self::parsePctOrFloat((string) ($g['y1'] ?? '0'));
             $x2 = self::parsePctOrFloat((string) ($g['x2'] ?? '1'));
             $y2 = self::parsePctOrFloat((string) ($g['y2'] ?? '0'));
-            $stops = [];
-            foreach ($g->children() as $stop) {
-                if ($stop->getName() !== 'stop') {
-                    continue;
-                }
-                $offset = self::parsePctOrFloat((string) ($stop['offset'] ?? '0'));
-                $stopColorAttr = (string) ($stop['stop-color'] ?? '#000');
-                // Parse style="stop-color: #..." attribute if present.
-                $style = (string) ($stop['style'] ?? '');
-                if ($style !== '' && preg_match('@stop-color\s*:\s*([^;]+)@', $style, $m)) {
-                    $stopColorAttr = trim($m[1]);
-                }
-                [$r, $g_, $b, $hasColor] = self::parseColor($stopColorAttr);
-                $stops[] = ['offset' => $offset, 'color' => [$r, $g_, $b]];
-            }
+            $stops = self::parseGradientStops($g);
             $out[$id] = [
                 'type' => 'linear',
                 'x1' => $x1, 'y1' => $y1, 'x2' => $x2, 'y2' => $y2,
                 'stops' => $stops,
             ];
         }
+        // Phase 91: radialGradient parsing.
+        foreach ($root->xpath('//radialGradient') ?: [] as $g) {
+            $id = (string) ($g['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $cx = self::parsePctOrFloat((string) ($g['cx'] ?? '0.5'));
+            $cy = self::parsePctOrFloat((string) ($g['cy'] ?? '0.5'));
+            $r = self::parsePctOrFloat((string) ($g['r'] ?? '0.5'));
+            $fx = isset($g['fx']) ? self::parsePctOrFloat((string) $g['fx']) : $cx;
+            $fy = isset($g['fy']) ? self::parsePctOrFloat((string) $g['fy']) : $cy;
+            $stops = self::parseGradientStops($g);
+            $out[$id] = [
+                'type' => 'radial',
+                'cx' => $cx, 'cy' => $cy, 'r' => $r, 'fx' => $fx, 'fy' => $fy,
+                'stops' => $stops,
+            ];
+        }
 
         return $out;
+    }
+
+    /**
+     * @return list<array{offset: float, color: array{0: float, 1: float, 2: float}}>
+     */
+    private static function parseGradientStops(\SimpleXMLElement $gradient): array
+    {
+        $stops = [];
+        foreach ($gradient->children() as $stop) {
+            if ($stop->getName() !== 'stop') {
+                continue;
+            }
+            $offset = self::parsePctOrFloat((string) ($stop['offset'] ?? '0'));
+            $stopColorAttr = (string) ($stop['stop-color'] ?? '#000');
+            $style = (string) ($stop['style'] ?? '');
+            if ($style !== '' && preg_match('@stop-color\s*:\s*([^;]+)@', $style, $m)) {
+                $stopColorAttr = trim($m[1]);
+            }
+            [$r, $g_, $b, $hasColor] = self::parseColor($stopColorAttr);
+            $stops[] = ['offset' => $offset, 'color' => [$r, $g_, $b]];
+        }
+
+        return $stops;
     }
 
     private static function parsePctOrFloat(string $s): float
@@ -891,10 +918,25 @@ final class SvgRenderer
         if (count($stops) < 2) {
             return null;
         }
-        $x1 = $rectX + $gradient['x1'] * $rectW;
-        $y1 = $rectY + $rectH - $gradient['y1'] * $rectH;
-        $x2 = $rectX + $gradient['x2'] * $rectW;
-        $y2 = $rectY + $rectH - $gradient['y2'] * $rectH;
+
+        // Phase 91: radial gradient — 6-element coords (cx0, cy0, r0, cx1, cy1, r1).
+        if (($gradient['type'] ?? 'linear') === 'radial') {
+            $cx = $rectX + $gradient['cx'] * $rectW;
+            $cy = $rectY + $rectH - $gradient['cy'] * $rectH;
+            $r = $gradient['r'] * min($rectW, $rectH);
+            $fx = $rectX + $gradient['fx'] * $rectW;
+            $fy = $rectY + $rectH - $gradient['fy'] * $rectH;
+            // From focal (r=0) outward к (cx, cy, r).
+            $coords = [$fx, $fy, 0.0, $cx, $cy, $r];
+            $shadingType = \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_RADIAL;
+        } else {
+            $x1 = $rectX + $gradient['x1'] * $rectW;
+            $y1 = $rectY + $rectH - $gradient['y1'] * $rectH;
+            $x2 = $rectX + $gradient['x2'] * $rectW;
+            $y2 = $rectY + $rectH - $gradient['y2'] * $rectH;
+            $coords = [$x1, $y1, $x2, $y2];
+            $shadingType = \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL;
+        }
 
         // Phase 82: 2 stops — single Type 2 function.
         // Phase 90: >2 stops — Type 3 stitching of multiple Type 2 sub-functions.
@@ -925,8 +967,8 @@ final class SvgRenderer
             );
         }
         $shading = new \Dskripchenko\PhpPdf\Pdf\PdfShading(
-            shadingType: \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL,
-            coords: [$x1, $y1, $x2, $y2],
+            shadingType: $shadingType,
+            coords: $coords,
             function: $function,
         );
         $pattern = new \Dskripchenko\PhpPdf\Pdf\PdfPattern($shading);
