@@ -40,8 +40,12 @@ final class PocR2Test extends TestCase
         self::assertStringContainsString('/FontFile2', $pdfBytes);
         self::assertStringContainsString('LiberationSans', $pdfBytes);
 
-        // Embed весь Liberation Sans Regular (~410 KB).
-        self::assertGreaterThan(400_000, strlen($pdfBytes));
+        // С Phase 2b TtfSubsetter (default subset=true) ожидаем
+        // существенное сжатие. POC-R2.a script использует default
+        // settings, должен получить subset-embed (<200 KB вместо
+        // ~412 KB full).
+        self::assertLessThan(200_000, strlen($pdfBytes));
+        self::assertGreaterThan(20_000, strlen($pdfBytes));
 
         // Самая важная проверка: pdftotext (poppler — independent
         // implementation) корректно извлекает Latin text через ToUnicode.

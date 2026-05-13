@@ -48,8 +48,15 @@ final class PdfFont
 
     private ?int $fontObjectId = null;
 
+    /**
+     * @param  bool  $subset  Если true — embed только used glyph'ы через
+     *                        TtfSubsetter (от ~411KB до ~5-50KB обычно).
+     *                        Если false — full TTF (backward-compat для
+     *                        корнер-кейсов где subset причинит проблем).
+     */
     public function __construct(
         private readonly TtfFile $ttf,
+        private readonly bool $subset = true,
     ) {}
 
     /**
@@ -64,7 +71,9 @@ final class PdfFont
         }
 
         // 1. Embed TTF binary как FontFile2 stream object.
-        $fontBytes = $this->ttf->rawBytes();
+        $fontBytes = $this->subset
+            ? (new \Dskripchenko\PhpPdf\Font\Ttf\TtfSubsetter)->subset($this->ttf, array_keys($this->usedGlyphs))
+            : $this->ttf->rawBytes();
         $fontFileObjId = $writer->addObject(sprintf(
             "<< /Length %d /Length1 %d >>\nstream\n%s\nendstream",
             strlen($fontBytes),
