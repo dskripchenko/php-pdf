@@ -15,8 +15,10 @@ use Dskripchenko\PhpPdf\Element\Barcode;
 use Dskripchenko\PhpPdf\Element\BarChart;
 use Dskripchenko\PhpPdf\Element\ColumnSet;
 use Dskripchenko\PhpPdf\Element\FormField;
+use Dskripchenko\PhpPdf\Element\GroupedBarChart;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\LineChart;
+use Dskripchenko\PhpPdf\Element\MultiLineChart;
 use Dskripchenko\PhpPdf\Element\PieChart;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -256,8 +258,240 @@ final class Engine
             $block instanceof BarChart => $this->renderBarChart($block, $ctx),
             $block instanceof LineChart => $this->renderLineChart($block, $ctx),
             $block instanceof PieChart => $this->renderPieChart($block, $ctx),
+            $block instanceof GroupedBarChart => $this->renderGroupedBarChart($block, $ctx),
+            $block instanceof MultiLineChart => $this->renderMultiLineChart($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 51: Grouped bar chart — N bars per label, side-by-side.
+     */
+    private function renderGroupedBarChart(GroupedBarChart $gbc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $gbc->spaceBeforePt;
+        $totalW = min($gbc->widthPt, $ctx->contentWidth);
+        $totalH = $gbc->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($gbc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        $titleStripH = $gbc->title !== null ? $gbc->titleSizePt + 4.0 : 0;
+        $labelStripH = $gbc->axisLabelSizePt + 4.0;
+        $legendStripH = $gbc->showLegend ? $gbc->legendSizePt + 6.0 : 0;
+        $axisLabelPaddingLeft = 32.0;
+
+        $plotTop = $topY - $titleStripH - $legendStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        if ($gbc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $gbc->titleSizePt))->widthPt($gbc->title)
+                : mb_strlen($gbc->title, 'UTF-8') * $gbc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $gbc->title,
+                $blockX + ($totalW - $titleW) / 2, $topY - $gbc->titleSizePt, $gbc->titleSizePt);
+        }
+
+        $defaultColors = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0'];
+        $colors = $gbc->seriesColors !== []
+            ? array_pad($gbc->seriesColors, count($gbc->seriesNames), '8c8c8c')
+            : array_slice($defaultColors, 0, count($gbc->seriesNames));
+
+        // Legend at top.
+        if ($gbc->showLegend) {
+            $legendY = $topY - $titleStripH - $gbc->legendSizePt;
+            $legendX = $blockX + $axisLabelPaddingLeft;
+            foreach ($gbc->seriesNames as $idx => $name) {
+                [$r, $g, $b] = $this->hexToRgb($colors[$idx]);
+                $ctx->currentPage->fillRect($legendX, $legendY, $gbc->legendSizePt, $gbc->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $name,
+                    $legendX + $gbc->legendSizePt + 3, $legendY + 1, $gbc->legendSizePt);
+                $legendX += $gbc->legendSizePt + 3
+                    + ($this->defaultFont !== null
+                        ? (new TextMeasurer($this->defaultFont, $gbc->legendSizePt))->widthPt($name)
+                        : mb_strlen($name, 'UTF-8') * $gbc->legendSizePt * 0.5)
+                    + 14;
+            }
+        }
+
+        // Max value scan.
+        $maxValue = 0.0;
+        foreach ($gbc->bars as $bar) {
+            foreach ($bar['values'] as $v) {
+                if ($v > $maxValue) {
+                    $maxValue = $v;
+                }
+            }
+        }
+        if ($maxValue <= 0) {
+            $maxValue = 1.0;
+        }
+
+        // Axes.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        $maxLabel = $this->formatChartNumber($maxValue);
+        $maxLabelW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $gbc->axisLabelSizePt))->widthPt($maxLabel)
+            : mb_strlen($maxLabel, 'UTF-8') * $gbc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $maxLabel, $plotLeft - $maxLabelW - 2, $plotTop - $gbc->axisLabelSizePt * 0.5, $gbc->axisLabelSizePt);
+
+        // Bars.
+        $nLabels = count($gbc->bars);
+        $nSeries = count($gbc->seriesNames);
+        $slotW = $plotW / max($nLabels, 1);
+        $groupPadding = 0.2; // 20% horizontal gap между groups.
+        $groupW = $slotW * (1 - $groupPadding);
+        $barW = $groupW / $nSeries;
+
+        foreach ($gbc->bars as $bi => $bar) {
+            $slotLeftX = $plotLeft + $bi * $slotW + ($slotW - $groupW) / 2;
+            foreach ($bar['values'] as $si => $value) {
+                $h = ($value / $maxValue) * $plotH;
+                $x = $slotLeftX + $si * $barW;
+                $y = $plotBottom;
+                [$r, $g, $b] = $this->hexToRgb($colors[$si]);
+                $ctx->currentPage->fillRect($x, $y, $barW * 0.9, $h, $r, $g, $b);
+            }
+            // X-axis label.
+            $label = $bar['label'];
+            $labelW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $gbc->axisLabelSizePt))->widthPt($label)
+                : mb_strlen($label, 'UTF-8') * $gbc->axisLabelSizePt * 0.5;
+            $labelX = $slotLeftX + ($groupW - $labelW) / 2;
+            $this->chartText($ctx->currentPage, $label,
+                $labelX, $plotBottom - $gbc->axisLabelSizePt - 2, $gbc->axisLabelSizePt);
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $gbc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 51: Multi-series line chart.
+     */
+    private function renderMultiLineChart(MultiLineChart $mlc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $mlc->spaceBeforePt;
+        $totalW = min($mlc->widthPt, $ctx->contentWidth);
+        $totalH = $mlc->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($mlc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        $titleStripH = $mlc->title !== null ? $mlc->titleSizePt + 4.0 : 0;
+        $labelStripH = $mlc->axisLabelSizePt + 4.0;
+        $legendStripH = $mlc->showLegend ? $mlc->legendSizePt + 6.0 : 0;
+        $axisLabelPaddingLeft = 32.0;
+
+        $plotTop = $topY - $titleStripH - $legendStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        if ($mlc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $mlc->titleSizePt))->widthPt($mlc->title)
+                : mb_strlen($mlc->title, 'UTF-8') * $mlc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $mlc->title,
+                $blockX + ($totalW - $titleW) / 2, $topY - $mlc->titleSizePt, $mlc->titleSizePt);
+        }
+
+        $defaultColors = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0'];
+
+        // Max value scan.
+        $maxValue = 0.0;
+        foreach ($mlc->series as $s) {
+            foreach ($s['values'] as $v) {
+                if ($v > $maxValue) {
+                    $maxValue = $v;
+                }
+            }
+        }
+        if ($maxValue <= 0) {
+            $maxValue = 1.0;
+        }
+
+        // Legend at top.
+        if ($mlc->showLegend) {
+            $legendY = $topY - $titleStripH - $mlc->legendSizePt;
+            $legendX = $blockX + $axisLabelPaddingLeft;
+            foreach ($mlc->series as $idx => $s) {
+                $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
+                [$r, $g, $b] = $this->hexToRgb($color);
+                $ctx->currentPage->fillRect($legendX, $legendY, $mlc->legendSizePt, $mlc->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $s['name'],
+                    $legendX + $mlc->legendSizePt + 3, $legendY + 1, $mlc->legendSizePt);
+                $legendX += $mlc->legendSizePt + 3
+                    + ($this->defaultFont !== null
+                        ? (new TextMeasurer($this->defaultFont, $mlc->legendSizePt))->widthPt($s['name'])
+                        : mb_strlen($s['name'], 'UTF-8') * $mlc->legendSizePt * 0.5)
+                    + 14;
+            }
+        }
+
+        // Axes.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        $maxLabel = $this->formatChartNumber($maxValue);
+        $maxLabelW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $mlc->axisLabelSizePt))->widthPt($maxLabel)
+            : mb_strlen($maxLabel, 'UTF-8') * $mlc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $maxLabel, $plotLeft - $maxLabelW - 2, $plotTop - $mlc->axisLabelSizePt * 0.5, $mlc->axisLabelSizePt);
+
+        $n = count($mlc->xLabels);
+        $stepX = $n > 1 ? $plotW / ($n - 1) : 0;
+
+        // X-axis labels.
+        foreach ($mlc->xLabels as $i => $label) {
+            $x = $plotLeft + $i * $stepX;
+            $labelW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $mlc->axisLabelSizePt))->widthPt($label)
+                : mb_strlen($label, 'UTF-8') * $mlc->axisLabelSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $label,
+                $x - $labelW / 2, $plotBottom - $mlc->axisLabelSizePt - 2, $mlc->axisLabelSizePt);
+        }
+
+        // Each series → polyline.
+        foreach ($mlc->series as $idx => $s) {
+            $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
+            [$lr, $lg, $lb] = $this->hexToRgb($color);
+            $coords = [];
+            foreach ($s['values'] as $i => $v) {
+                $x = $plotLeft + $i * $stepX;
+                $y = $plotBottom + ($v / $maxValue) * $plotH;
+                $coords[] = [$x, $y];
+            }
+            $ctx->currentPage->strokePolyline($coords, 1.5, $lr, $lg, $lb);
+            if ($mlc->showMarkers) {
+                foreach ($coords as $c) {
+                    $ctx->currentPage->fillRect($c[0] - 1.5, $c[1] - 1.5, 3, 3, $lr, $lg, $lb);
+                }
+            }
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $mlc->spaceAfterPt;
     }
 
     /**
