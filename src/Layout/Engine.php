@@ -7,6 +7,7 @@ namespace Dskripchenko\PhpPdf\Layout;
 use Dskripchenko\PhpPdf\Document as AstDocument;
 use Dskripchenko\PhpPdf\Element\BlockElement;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
+use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\LineBreak;
 use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
@@ -94,6 +95,7 @@ final class Engine
             $block instanceof Paragraph => $this->renderParagraph($block, $ctx),
             $block instanceof PageBreak => $this->forcePageBreak($ctx),
             $block instanceof HorizontalRule => $this->renderHorizontalRule($ctx),
+            $block instanceof Image => $this->renderImage($block, $ctx),
             default => null,
         };
     }
@@ -115,6 +117,53 @@ final class Engine
             r: 0.6, g: 0.6, b: 0.6,
         );
         $ctx->cursorY -= 6;
+    }
+
+    /**
+     * Block-level image rendering — applying alignment, sizing с aspect
+     * ratio, page-overflow detection. Image-as-inline (text wrap) — Phase L.
+     *
+     * Если image слишком high для current page → forcePageBreak'аем,
+     * затем рендерим вверху новой page. Если image больше contentHeight'а —
+     * скейлим down пропорционально (TODO Phase L; пока ассертируем).
+     */
+    private function renderImage(Image $img, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $img->spaceBeforePt;
+
+        [$widthPt, $heightPt] = $img->effectiveSizePt();
+
+        // Scale down если image больше content area по любой dimension.
+        $maxWidth = $ctx->contentWidth;
+        if ($widthPt > $maxWidth) {
+            $ratio = $maxWidth / $widthPt;
+            $widthPt *= $ratio;
+            $heightPt *= $ratio;
+        }
+        $maxHeight = $ctx->topY - $ctx->bottomY;
+        if ($heightPt > $maxHeight) {
+            $ratio = $maxHeight / $heightPt;
+            $widthPt *= $ratio;
+            $heightPt *= $ratio;
+        }
+
+        // Если не хватает места на текущей page → page break.
+        $this->ensureRoomFor($ctx, $heightPt);
+
+        // X-position по alignment'у.
+        $x = match ($img->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $widthPt) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $widthPt,
+            default => $ctx->leftX,
+        };
+
+        // Pdf coords: drawImage принимает (x, y, w, h), где y — bottom-left
+        // угол image'а (PDF Y-axis растёт вверх).
+        $y = $ctx->cursorY - $heightPt;
+        $ctx->currentPage->drawImage($img->source, $x, $y, $widthPt, $heightPt);
+
+        $ctx->cursorY -= $heightPt;
+        $ctx->cursorY -= $img->spaceAfterPt;
     }
 
     private function renderParagraph(Paragraph $p, LayoutContext $ctx): void

@@ -8,11 +8,14 @@ use Closure;
 use Dskripchenko\PhpPdf\Document;
 use Dskripchenko\PhpPdf\Element\BlockElement;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
+use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Run;
+use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Section;
+use Dskripchenko\PhpPdf\Style\Alignment;
 use Dskripchenko\PhpPdf\Style\PageSetup;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
@@ -140,6 +143,41 @@ final class DocumentBuilder
     public function block(BlockElement $element): self
     {
         $this->body[] = $element;
+
+        return $this;
+    }
+
+    /**
+     * Block-level image. $source — file path (string), готовый PdfImage,
+     * или AST Image. Sizing/alignment через keyword arguments.
+     *
+     * Examples:
+     *   ->image('/path/to/logo.png')
+     *   ->image('/path/to/photo.jpg', widthPt: 200, alignment: Alignment::Center)
+     *   ->image($pdfImage, widthPt: 300, heightPt: 200)
+     */
+    public function image(
+        string|PdfImage|Image $source,
+        ?float $widthPt = null,
+        ?float $heightPt = null,
+        Alignment $alignment = Alignment::Start,
+        float $spaceBeforePt = 0,
+        float $spaceAfterPt = 0,
+    ): self {
+        if ($source instanceof Image) {
+            $this->body[] = $source;
+
+            return $this;
+        }
+        $pdfImage = $source instanceof PdfImage ? $source : PdfImage::fromPath($source);
+        $this->body[] = new Image(
+            source: $pdfImage,
+            widthPt: $widthPt,
+            heightPt: $heightPt,
+            alignment: $alignment,
+            spaceBeforePt: $spaceBeforePt,
+            spaceAfterPt: $spaceAfterPt,
+        );
 
         return $this;
     }
