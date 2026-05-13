@@ -1,0 +1,46 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Dskripchenko\PhpPdf\Element;
+
+use Dskripchenko\PhpPdf\Style\Alignment;
+
+/**
+ * Phase 69: Math expression — minimal LaTeX-like subset.
+ *
+ * Supported syntax:
+ *  - `a^{b}` или `a^b` — superscript.
+ *  - `a_{b}` или `a_b` — subscript.
+ *  - `\frac{n}{d}` — fraction (numerator over denominator).
+ *  - `\sqrt{x}` — square root.
+ *  - Greek letters: `\alpha`, `\beta`, `\gamma`, `\delta`, `\pi`, `\theta`,
+ *    `\Sigma`, `\Omega` и т.д. → Unicode chars.
+ *  - Operators: `\cdot`, `\times`, `\div`, `\pm`, `\leq`, `\geq`,
+ *    `\neq`, `\approx`, `\infty`, `\sum`, `\int`.
+ *
+ * Не реализовано:
+ *  - Nested fractions внутри superscripts.
+ *  - Multi-line equations.
+ *  - Matrices / arrays.
+ *  - Custom font / styling.
+ *  - LaTeX environments (begin/end).
+ *
+ * Rendered как block с centered alignment по умолчанию. Font derived
+ * from default Engine font; sup/sub use 70% size + baseline shift
+ * (consistent с Phase 26 inline sup/sub).
+ */
+final readonly class MathExpression implements BlockElement
+{
+    public function __construct(
+        public string $tex,
+        public float $fontSizePt = 12.0,
+        public Alignment $alignment = Alignment::Center,
+        public float $spaceBeforePt = 4.0,
+        public float $spaceAfterPt = 4.0,
+    ) {
+        if ($tex === '') {
+            throw new \InvalidArgumentException('MathExpression requires non-empty TeX input');
+        }
+    }
+}

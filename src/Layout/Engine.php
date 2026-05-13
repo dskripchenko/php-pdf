@@ -19,6 +19,7 @@ use Dskripchenko\PhpPdf\Element\DonutChart;
 use Dskripchenko\PhpPdf\Element\FormField;
 use Dskripchenko\PhpPdf\Element\GroupedBarChart;
 use Dskripchenko\PhpPdf\Element\Heading;
+use Dskripchenko\PhpPdf\Element\MathExpression;
 use Dskripchenko\PhpPdf\Element\ScatterChart;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\LineChart;
@@ -272,8 +273,36 @@ final class Engine
             $block instanceof AreaChart => $this->renderAreaChart($block, $ctx),
             $block instanceof SvgElement => $this->renderSvgElement($block, $ctx),
             $block instanceof Heading => $this->renderHeading($block, $ctx),
+            $block instanceof MathExpression => $this->renderMathExpression($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 69: Math expression block.
+     */
+    private function renderMathExpression(MathExpression $math, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $math->spaceBeforePt;
+
+        $tokens = \Dskripchenko\PhpPdf\Math\MathRenderer::parse($math->tex);
+        $font = $this->defaultFont ?? $this->fallbackStandard;
+        $totalW = \Dskripchenko\PhpPdf\Math\MathRenderer::measureWidth($tokens, $math->fontSizePt, $font);
+        // Reserve vertical space — frac уровень ≈ 1.5× fontSize.
+        $heightPt = $math->fontSizePt * 1.6;
+        $this->ensureRoomFor($ctx, $heightPt);
+
+        $x = match ($math->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        // Baseline ~bottom of intended row.
+        $baseline = $ctx->cursorY - $math->fontSizePt;
+        \Dskripchenko\PhpPdf\Math\MathRenderer::render($tokens, $ctx->currentPage, $x, $baseline, $math->fontSizePt, $font);
+
+        $ctx->cursorY -= $heightPt;
+        $ctx->cursorY -= $math->spaceAfterPt;
     }
 
     /**
