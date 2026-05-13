@@ -6,8 +6,10 @@ namespace Dskripchenko\PhpPdf\Layout;
 
 use Dskripchenko\PhpPdf\Document as AstDocument;
 use Dskripchenko\PhpPdf\Element\BlockElement;
+use Dskripchenko\PhpPdf\Element\Bookmark;
 use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
+use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\LineBreak;
 use Dskripchenko\PhpPdf\Element\ListItem;
@@ -192,24 +194,11 @@ final class Engine
         $effectiveDefault = $p->defaultRunStyle->inheritFrom($headingStyle);
 
         // Build list of «items» — atomic units для line breaking.
-        // Word | LineBreak | (другие inline elements — Hyperlink etc.
-        // в Phase 3 пока пропускаются с warning'ом).
+        // Word | LineBreak | PageBreak | Bookmark (synthetic marker).
+        // Word items могут иметь 'link' tag для Hyperlink wrap'а — нужно
+        // для emit'а /Link annotation'а после line render'а.
         $items = [];
-        foreach ($p->children as $child) {
-            if ($child instanceof Run) {
-                $childStyle = $child->style->inheritFrom($effectiveDefault);
-                $words = $this->splitWords($child->text);
-                foreach ($words as $word) {
-                    $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle];
-                }
-            } elseif ($child instanceof LineBreak) {
-                $items[] = ['type' => 'br'];
-            } elseif ($child instanceof PageBreak) {
-                $items[] = ['type' => 'pagebreak'];
-            }
-            // Hyperlink/Bookmark/Field/Image — Phase 7 (для Phase 3
-            // ограничиваемся text content'ом).
-        }
+        $this->tokenizeChildren($p->children, $effectiveDefault, $items, null);
 
         // Layout indents для first line (firstLineIndent применяется
         // только к первой line, остальные используют indentLeft).
@@ -243,6 +232,14 @@ final class Engine
 
                 continue;
             }
+            if ($item['type'] === 'bookmark') {
+                // Bookmark — zero-width marker; attaches к current line top-Y
+                // во время emitLine(). Если current line пуста, attached к
+                // следующей line.
+                $currentLine[] = $item;
+
+                continue;
+            }
 
             $word = $item['text'] ?? '';
             $style = $item['style'] ?? $effectiveDefault;
@@ -270,6 +267,41 @@ final class Engine
     }
 
     /**
+     * Flatten inline-tree в plain list of items для line-break algorithm.
+     *
+     * Hyperlink children получают 'link' tag для последующего annotation
+     * emission'а. Bookmark вставляется как synthetic 'bookmark' item.
+     *
+     * @param  list<\Dskripchenko\PhpPdf\Element\InlineElement>  $children
+     * @param  array<string, mixed>|null  $currentLink
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function tokenizeChildren(array $children, RunStyle $effectiveDefault, array &$items, ?array $currentLink): void
+    {
+        foreach ($children as $child) {
+            if ($child instanceof Run) {
+                $childStyle = $child->style->inheritFrom($effectiveDefault);
+                foreach ($this->splitWords($child->text) as $word) {
+                    $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle, 'link' => $currentLink];
+                }
+            } elseif ($child instanceof LineBreak) {
+                $items[] = ['type' => 'br'];
+            } elseif ($child instanceof PageBreak) {
+                $items[] = ['type' => 'pagebreak'];
+            } elseif ($child instanceof Hyperlink) {
+                $link = $child->isInternal()
+                    ? ['kind' => 'internal', 'target' => $child->anchor ?? '']
+                    : ['kind' => 'uri', 'target' => $child->href ?? ''];
+                $this->tokenizeChildren($child->children, $effectiveDefault, $items, $link);
+            } elseif ($child instanceof Bookmark) {
+                $items[] = ['type' => 'bookmark', 'name' => $child->name];
+                $this->tokenizeChildren($child->children, $effectiveDefault, $items, $currentLink);
+            }
+            // Field — Phase 8 (PAGE/NUMPAGES resolution).
+        }
+    }
+
+    /**
      * Эмитит line — позиционирует слова, обновляет cursorY.
      *
      * @param  list<array{type: string, text?: string, style?: RunStyle}>  $items
@@ -282,11 +314,25 @@ final class Engine
         bool $isFirstLine,
         float $firstLineIndent,
     ): void {
-        if ($items === []) {
-            // Пустая line — все равно advance cursorY на дефолтную high.
+        // Split items на word/marker. Markers (bookmark) — zero-width;
+        // attached к line top-Y но не учитываются для line-width.
+        $wordItems = [];
+        $bookmarks = [];
+        foreach ($items as $item) {
+            if ($item['type'] === 'bookmark') {
+                $bookmarks[] = $item;
+            } else {
+                $wordItems[] = $item;
+            }
+        }
+
+        if ($wordItems === []) {
+            // Пустая line — advance cursorY на дефолтную height, attach bookmarks
+            // к current top-Y.
             $sizePt = $defaultStyle->sizePt ?? $this->defaultFontSizePt;
             $lineHeight = $sizePt * $this->effectiveLineHeightMult($p);
             $this->ensureRoomFor($ctx, $lineHeight);
+            $this->registerBookmarksAt($ctx, $bookmarks, $ctx->cursorY);
             $ctx->cursorY -= $lineHeight;
 
             return;
@@ -294,7 +340,7 @@ final class Engine
 
         // Max font size в этой line determines line height.
         $maxSizePt = 0;
-        foreach ($items as $item) {
+        foreach ($wordItems as $item) {
             $size = ($item['style'] ?? $defaultStyle)->sizePt ?? $this->defaultFontSizePt;
             if ($size > $maxSizePt) {
                 $maxSizePt = $size;
@@ -304,14 +350,17 @@ final class Engine
 
         $this->ensureRoomFor($ctx, $lineHeight);
 
+        $this->registerBookmarksAt($ctx, $bookmarks, $ctx->cursorY);
+
         // Вычислить total content width этой line.
         $totalContentWidth = 0;
-        for ($i = 0; $i < count($items); $i++) {
-            $item = $items[$i];
+        $countWords = count($wordItems);
+        for ($i = 0; $i < $countWords; $i++) {
+            $item = $wordItems[$i];
             $word = $item['text'] ?? '';
             $style = $item['style'] ?? $defaultStyle;
             $totalContentWidth += $this->measureWidth($word, $style);
-            if ($i + 1 < count($items)) {
+            if ($i + 1 < $countWords) {
                 $totalContentWidth += $this->measureWidth(' ', $style);
             }
         }
@@ -328,32 +377,91 @@ final class Engine
             case Alignment::Center:
                 $startX += ($effectiveAvail - $totalContentWidth) / 2;
                 break;
-            // Both/Distribute — justify (Phase L). Сейчас деградируем к Start.
             default:
                 break;
         }
 
-        // Baseline Y (PDF text-rendering — Y reference это baseline).
-        // cursorY — top of line. Baseline ≈ top - sizePt * 0.8 (approx).
         $baselineY = $ctx->cursorY - $maxSizePt * 0.8;
 
-        // Render items.
+        // Render items + track link segments.
+        // Link segment: consecutive items with same 'link' meta — emit single
+        // /Link annotation covering bbox от startX до endX.
         $x = $startX;
-        for ($i = 0; $i < count($items); $i++) {
-            $item = $items[$i];
+        $linkStartX = null;
+        $linkLastX = null;
+        $linkRef = null;
+        $linkFlush = function () use (&$linkStartX, &$linkLastX, &$linkRef, $ctx, $baselineY, $maxSizePt): void {
+            if ($linkRef !== null && $linkStartX !== null && $linkLastX !== null) {
+                $rectY1 = $baselineY - $maxSizePt * 0.2;
+                $rectY2 = $baselineY + $maxSizePt * 0.85;
+                if ($linkRef['kind'] === 'uri') {
+                    $ctx->currentPage->addExternalLink(
+                        $linkStartX, $rectY1, $linkLastX - $linkStartX, $rectY2 - $rectY1, $linkRef['target']
+                    );
+                } else {
+                    $ctx->currentPage->addInternalLink(
+                        $linkStartX, $rectY1, $linkLastX - $linkStartX, $rectY2 - $rectY1, $linkRef['target']
+                    );
+                }
+            }
+            $linkStartX = null;
+            $linkLastX = null;
+            $linkRef = null;
+        };
+
+        for ($i = 0; $i < $countWords; $i++) {
+            $item = $wordItems[$i];
             $word = $item['text'] ?? '';
             $style = $item['style'] ?? $defaultStyle;
             $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
+            $wordWidth = $this->measureWidth($word, $style);
+
+            $wordLink = $item['link'] ?? null;
+            if ($wordLink !== $linkRef) {
+                $linkFlush();
+                if ($wordLink !== null) {
+                    $linkRef = $wordLink;
+                    $linkStartX = $x;
+                }
+            }
+
             $this->showText($ctx->currentPage, $word, $x, $baselineY, $sizePt, $style);
-            $x += $this->measureWidth($word, $style);
-            if ($i + 1 < count($items)) {
-                $x += $this->measureWidth(' ', $style);
-                // Render space separator (для visible word separation).
-                $this->showText($ctx->currentPage, ' ', $x - $this->measureWidth(' ', $style), $baselineY, $sizePt, $style);
+            $x += $wordWidth;
+            if ($linkRef !== null) {
+                $linkLastX = $x;
+            }
+
+            if ($i + 1 < $countWords) {
+                $spaceWidth = $this->measureWidth(' ', $style);
+                $x += $spaceWidth;
+                $this->showText($ctx->currentPage, ' ', $x - $spaceWidth, $baselineY, $sizePt, $style);
+                // Если next word имеет тот же link — extend linkLastX через
+                // space; иначе linkFlush сработает на next iter.
+                if ($linkRef !== null && (($wordItems[$i + 1]['link'] ?? null) === $linkRef)) {
+                    $linkLastX = $x;
+                }
             }
         }
+        $linkFlush();
 
         $ctx->cursorY -= $lineHeight;
+    }
+
+    /**
+     * Регистрирует bookmark destinations'ы для current line top-Y.
+     *
+     * @param  list<array<string, mixed>>  $bookmarks
+     */
+    private function registerBookmarksAt(LayoutContext $ctx, array $bookmarks, float $topY): void
+    {
+        foreach ($bookmarks as $b) {
+            $ctx->pdf->registerDestination(
+                (string) $b['name'],
+                $ctx->currentPage,
+                $ctx->leftX,
+                $topY,
+            );
+        }
     }
 
     /**
@@ -751,18 +859,11 @@ final class Engine
         $effectiveDefault = $p->defaultRunStyle->inheritFrom($headingStyle);
 
         // Build items list (тот же подход что в renderParagraph).
-        /** @var list<array{type: string, text?: string, style?: RunStyle}> $items */
+        /** @var list<array<string, mixed>> $items */
         $items = [];
-        foreach ($p->children as $child) {
-            if ($child instanceof Run) {
-                $childStyle = $child->style->inheritFrom($effectiveDefault);
-                foreach ($this->splitWords($child->text) as $word) {
-                    $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle];
-                }
-            } elseif ($child instanceof LineBreak) {
-                $items[] = ['type' => 'br'];
-            }
-        }
+        $this->tokenizeChildren($p->children, $effectiveDefault, $items, null);
+        // Skip bookmark items для measurement — zero-width markers.
+        $items = array_values(array_filter($items, fn ($it): bool => $it['type'] !== 'bookmark'));
 
         $availableWidth = $contentWidth - $p->style->indentLeftPt - $p->style->indentRightPt;
         $firstLineExtraIndent = $p->style->indentFirstLinePt;

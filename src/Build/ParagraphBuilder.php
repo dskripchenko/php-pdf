@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Build;
 
 use Closure;
+use Dskripchenko\PhpPdf\Element\Bookmark;
 use Dskripchenko\PhpPdf\Element\Field;
+use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\InlineElement;
 use Dskripchenko\PhpPdf\Element\LineBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
@@ -104,6 +106,60 @@ final class ParagraphBuilder
         $this->children[] = new LineBreak;
 
         return $this;
+    }
+
+    // ── Hyperlinks ────────────────────────────────────────────────
+
+    /**
+     * External hyperlink. $href — URL; $contents — string (создаёт single Run
+     * с underline+blue style) или Closure для custom inline content.
+     */
+    public function link(string $href, string|Closure $contents): self
+    {
+        $children = $this->collectLinkChildren($contents);
+        $this->children[] = Hyperlink::external($href, $children);
+
+        return $this;
+    }
+
+    /**
+     * Internal link — переход к named bookmark.
+     */
+    public function internalLink(string $anchorName, string|Closure $contents): self
+    {
+        $children = $this->collectLinkChildren($contents);
+        $this->children[] = Hyperlink::internal($anchorName, $children);
+
+        return $this;
+    }
+
+    /**
+     * Bookmark — named destination. Опциональный $contents добавляет
+     * inline text после метки.
+     */
+    public function bookmark(string $name, string|Closure|null $contents = null): self
+    {
+        $children = $contents === null ? [] : $this->collectLinkChildren($contents);
+        $this->children[] = new Bookmark($name, $children);
+
+        return $this;
+    }
+
+    /**
+     * @return list<InlineElement>
+     */
+    private function collectLinkChildren(string|Closure $contents): array
+    {
+        if (is_string($contents)) {
+            return [new Run($contents, (new \Dskripchenko\PhpPdf\Style\RunStyle)
+                ->withUnderline()
+                ->withColor('0066cc'))];
+        }
+        $inner = new self;
+        $contents($inner);
+        $built = $inner->build();
+
+        return $built->children;
     }
 
     // ── Field placeholders ────────────────────────────────────────

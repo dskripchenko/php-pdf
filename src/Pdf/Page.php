@@ -38,6 +38,13 @@ final class Page
     /** @var array<string, PdfImage> name → image */
     private array $images = [];
 
+    /**
+     * Link annotations накопленные на этой page.
+     *
+     * @var list<array{kind: 'uri'|'internal', x1: float, y1: float, x2: float, y2: float, target: string}>
+     */
+    private array $linkAnnotations = [];
+
     private int $fontCounter = 0;
 
     private int $imageCounter = 0;
@@ -127,6 +134,46 @@ final class Page
         $this->stream->drawImage($resourceName, $x, $y, $widthPt, $heightPt);
 
         return $this;
+    }
+
+    /**
+     * Внешний URL link — клик в Rect открывает $uri.
+     */
+    public function addExternalLink(float $x, float $y, float $width, float $height, string $uri): self
+    {
+        $this->linkAnnotations[] = [
+            'kind' => 'uri',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'target' => $uri,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Internal link — клик в Rect переходит к named destination $destName.
+     */
+    public function addInternalLink(float $x, float $y, float $width, float $height, string $destName): self
+    {
+        $this->linkAnnotations[] = [
+            'kind' => 'internal',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'target' => $destName,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * @return list<array{kind: 'uri'|'internal', x1: float, y1: float, x2: float, y2: float, target: string}>
+     *
+     * @internal
+     */
+    public function linkAnnotations(): array
+    {
+        return $this->linkAnnotations;
     }
 
     /**
