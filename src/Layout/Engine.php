@@ -452,6 +452,30 @@ final class Engine
 
         $ctx->cursorY -= $p->style->spaceBeforePt;
 
+        // Phase 25: paragraph padding + background-color.
+        // Pre-measure paragraph height чтобы нарисовать bg ПЕРЕД content'ом.
+        $hasPadding = $p->style->paddingTopPt + $p->style->paddingRightPt
+            + $p->style->paddingBottomPt + $p->style->paddingLeftPt > 0;
+        $hasBackground = $p->style->backgroundColor !== null;
+        $savedLeftX = $ctx->leftX;
+        $savedContentWidth = $ctx->contentWidth;
+        if ($hasPadding || $hasBackground) {
+            $contentH = $this->measureParagraphHeight($p, $ctx->contentWidth
+                - $p->style->paddingLeftPt - $p->style->paddingRightPt)
+                - $p->style->spaceBeforePt - $p->style->spaceAfterPt;
+            $totalH = $contentH + $p->style->paddingTopPt + $p->style->paddingBottomPt;
+            if ($hasBackground) {
+                [$r, $g, $b] = $this->hexToRgb((string) $p->style->backgroundColor);
+                $ctx->currentPage->fillRect(
+                    $ctx->leftX, $ctx->cursorY - $totalH, $ctx->contentWidth, $totalH,
+                    $r, $g, $b,
+                );
+            }
+            $ctx->cursorY -= $p->style->paddingTopPt;
+            $ctx->leftX += $p->style->paddingLeftPt;
+            $ctx->contentWidth -= $p->style->paddingLeftPt + $p->style->paddingRightPt;
+        }
+
         // Outline entry для heading paragraph'а (только в final pass —
         // first pass знаниями не нужен).
         if ($p->headingLevel !== null && $this->totalPagesHint !== null) {
@@ -558,6 +582,13 @@ final class Engine
         // Flush last line.
         if ($currentLine !== []) {
             $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent);
+        }
+
+        // Phase 25: restore leftX/contentWidth + apply paddingBottom.
+        if ($hasPadding || $hasBackground) {
+            $ctx->leftX = $savedLeftX;
+            $ctx->contentWidth = $savedContentWidth;
+            $ctx->cursorY -= $p->style->paddingBottomPt;
         }
 
         $ctx->cursorY -= $p->style->spaceAfterPt;

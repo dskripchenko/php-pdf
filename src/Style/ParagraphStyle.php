@@ -27,6 +27,12 @@ final readonly class ParagraphStyle
         public ?float $lineHeightMult = null,  // null = font-default (1.2)
         public bool $pageBreakBefore = false,
         public ?BorderSet $borders = null,
+        // Phase 25: paragraph padding + background-color.
+        public float $paddingTopPt = 0,
+        public float $paddingRightPt = 0,
+        public float $paddingBottomPt = 0,
+        public float $paddingLeftPt = 0,
+        public ?string $backgroundColor = null,
     ) {}
 
     public function isEmpty(): bool
@@ -55,6 +61,11 @@ final readonly class ParagraphStyle
         ?float $lineHeightMult = null,
         ?bool $pageBreakBefore = null,
         ?BorderSet $borders = null,
+        ?float $paddingTopPt = null,
+        ?float $paddingRightPt = null,
+        ?float $paddingBottomPt = null,
+        ?float $paddingLeftPt = null,
+        ?string $backgroundColor = null,
     ): self {
         return new self(
             alignment: $alignment ?? $this->alignment,
@@ -66,6 +77,11 @@ final readonly class ParagraphStyle
             lineHeightMult: $lineHeightMult ?? $this->lineHeightMult,
             pageBreakBefore: $pageBreakBefore ?? $this->pageBreakBefore,
             borders: $borders ?? $this->borders,
+            paddingTopPt: $paddingTopPt ?? $this->paddingTopPt,
+            paddingRightPt: $paddingRightPt ?? $this->paddingRightPt,
+            paddingBottomPt: $paddingBottomPt ?? $this->paddingBottomPt,
+            paddingLeftPt: $paddingLeftPt ?? $this->paddingLeftPt,
+            backgroundColor: $backgroundColor ?? $this->backgroundColor,
         );
     }
 }
