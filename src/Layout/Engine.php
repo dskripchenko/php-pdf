@@ -258,8 +258,16 @@ final class Engine
         $section = $this->currentSection;
 
         // Watermark — рисуется первым на странице, чтобы оказаться под
-        // content'ом (PDF z-order: позже = выше).
-        if ($section->hasWatermark()) {
+        // content'ом (PDF z-order: позже = выше). Image первым, чтобы
+        // text-watermark (если оба заданы) лежал поверх.
+        if ($section->hasImageWatermark()) {
+            $this->renderWatermarkImage(
+                $section->watermarkImage,
+                $section->watermarkImageWidthPt,
+                $ctx,
+            );
+        }
+        if ($section->hasTextWatermark()) {
             $this->renderWatermark((string) $section->watermarkText, $ctx);
         }
         $setup = $ctx->pageSetup;
@@ -346,6 +354,32 @@ final class Engine
                 $text, $cx, $cy, $this->fallbackStandard, $sizePt, $angleRad,
             );
         }
+    }
+
+    /**
+     * Phase 30: Image watermark — centered на странице, scaled to
+     * $widthPt с сохранением aspect ratio. null widthPt → 50% page width.
+     *
+     * Прозрачность не применяется автоматически: рекомендуется передавать
+     * заранее подготовленный PNG с alpha-каналом или светлый JPEG, иначе
+     * водяной знак закроет контент.
+     */
+    private function renderWatermarkImage(
+        \Dskripchenko\PhpPdf\Image\PdfImage $image,
+        ?float $widthPt,
+        LayoutContext $ctx,
+    ): void {
+        $setup = $ctx->pageSetup;
+        [$pageWidth, $pageHeight] = $setup->dimensions();
+
+        $w = $widthPt ?? $pageWidth * 0.5;
+        $aspect = $image->heightPx > 0 ? $image->widthPx / $image->heightPx : 1.0;
+        $h = $aspect > 0 ? $w / $aspect : $w;
+
+        $x = ($pageWidth - $w) / 2;
+        $y = ($pageHeight - $h) / 2;
+
+        $ctx->currentPage->drawImage($image, $x, $y, $w, $h);
     }
 
     /**

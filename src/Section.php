@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf;
 
 use Dskripchenko\PhpPdf\Element\BlockElement;
+use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Style\PageSetup;
 
 /**
@@ -42,6 +43,10 @@ final readonly class Section
          */
         public ?array $firstPageHeaderBlocks = null,
         public ?array $firstPageFooterBlocks = null,
+        // Phase 30: image watermark (mutually-compatible with text — оба
+        // можно рисовать одновременно; image первым, text сверху).
+        public ?PdfImage $watermarkImage = null,
+        public ?float $watermarkImageWidthPt = null,
     ) {}
 
     public function hasHeader(): bool
@@ -56,7 +61,17 @@ final readonly class Section
 
     public function hasWatermark(): bool
     {
+        return $this->hasTextWatermark() || $this->hasImageWatermark();
+    }
+
+    public function hasTextWatermark(): bool
+    {
         return $this->watermarkText !== null && $this->watermarkText !== '';
+    }
+
+    public function hasImageWatermark(): bool
+    {
+        return $this->watermarkImage !== null;
     }
 
     /**

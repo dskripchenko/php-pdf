@@ -53,6 +53,10 @@ final class DocumentBuilder
 
     private ?string $watermarkText = null;
 
+    private ?PdfImage $watermarkImage = null;
+
+    private ?float $watermarkImageWidthPt = null;
+
     /** @var list<BlockElement>|null */
     private ?array $firstPageHeaderBlocks = null;
 
@@ -105,6 +109,19 @@ final class DocumentBuilder
     public function watermark(?string $text): self
     {
         $this->watermarkText = $text;
+
+        return $this;
+    }
+
+    /**
+     * Phase 30: Image watermark — рисуется по центру каждой страницы.
+     * $widthPt null → 50% page width; aspect ratio сохраняется.
+     * Передай null чтобы отключить.
+     */
+    public function watermarkImage(?PdfImage $image, ?float $widthPt = null): self
+    {
+        $this->watermarkImage = $image;
+        $this->watermarkImageWidthPt = $widthPt;
 
         return $this;
     }
@@ -328,6 +345,8 @@ final class DocumentBuilder
             watermarkText: $this->watermarkText,
             firstPageHeaderBlocks: $this->firstPageHeaderBlocks,
             firstPageFooterBlocks: $this->firstPageFooterBlocks,
+            watermarkImage: $this->watermarkImage,
+            watermarkImageWidthPt: $this->watermarkImageWidthPt,
         ));
     }
 
