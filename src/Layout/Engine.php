@@ -191,6 +191,10 @@ final class Engine
             $primarySetup->customDimensionsPt,
             $this->compressStreams,
         );
+        // Phase 48: forward tagged flag из AST.
+        if ($document->tagged) {
+            $pdf->enableTagged();
+        }
         $page = $pdf->addPage();
 
         $context = new LayoutContext(
@@ -1243,6 +1247,14 @@ final class Engine
             $this->forcePageBreak($ctx);
         }
 
+        // Phase 48: Tagged PDF — wrap paragraph content в BDC/EMC.
+        $taggedPdf = $ctx->pdf->isTagged();
+        $mcid = null;
+        if ($taggedPdf) {
+            $mcid = $ctx->currentPage->nextMcid();
+            $ctx->currentPage->beginMarkedContent('P', $mcid);
+        }
+
         $ctx->cursorY -= $p->style->spaceBeforePt;
 
         // Phase 25: paragraph padding + background-color.
@@ -1413,6 +1425,12 @@ final class Engine
         }
 
         $ctx->cursorY -= $p->style->spaceAfterPt;
+
+        // Phase 48: end tagged content + register struct element.
+        if ($taggedPdf && $mcid !== null) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->pdf->addStructElement('P', $mcid, $ctx->currentPage);
+        }
     }
 
     /**

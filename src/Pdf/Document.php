@@ -73,6 +73,47 @@ final class Document
     /** Phase 47: PDF/A-1b configuration. */
     private ?PdfAConfig $pdfA = null;
 
+    /** Phase 48: Tagged PDF mode (accessibility). */
+    private bool $tagged = false;
+
+    /**
+     * @var list<array{type: string, mcid: int, page: Page}>  Struct elements
+     *   collected при rendering — emitted в StructTreeRoot/K.
+     */
+    private array $structElements = [];
+
+    /**
+     * Phase 48: Enable Tagged PDF (accessibility).
+     *
+     * Adds /MarkInfo /Marked true + /StructTreeRoot к Catalog. Each rendered
+     * paragraph wrapped в BDC /P << /MCID N >> ... EMC content marking.
+     * Structure tree contains один /Document root → flat list of /P children.
+     *
+     * NOT full PDF/UA compliance:
+     *  - Все блоки tagged как /P (нет H1/H2/Table/Caption distinction).
+     *  - Alt text для images / figure не emit'ится.
+     *  - Reading order сохраняется но не explicit'но через /StructParents.
+     */
+    public function enableTagged(): self
+    {
+        $this->tagged = true;
+
+        return $this;
+    }
+
+    public function isTagged(): bool
+    {
+        return $this->tagged;
+    }
+
+    /**
+     * @internal Engine использует для registration struct elements.
+     */
+    public function addStructElement(string $type, int $mcid, Page $page): void
+    {
+        $this->structElements[] = ['type' => $type, 'mcid' => $mcid, 'page' => $page];
+    }
+
     /**
      * Phase 47: Enable PDF/A-1b compliance mode.
      */
@@ -517,6 +558,36 @@ final class Document
             $acroFormRef = " /AcroForm $acroFormId 0 R";
         }
 
+        // Phase 48: Tagged PDF — StructTreeRoot + StructElem children +
+        // MarkInfo dict.
+        $taggedRef = '';
+        if ($this->tagged && $this->structElements !== []) {
+            // Reserve root ID first (children reference it as /P).
+            $structRootId = $writer->reserveObject();
+            $childIds = [];
+            foreach ($this->structElements as $elem) {
+                $pageId = $pageObjectIdMap[$elem['page']] ?? null;
+                if ($pageId === null) {
+                    continue; // Page not registered — shouldn't happen.
+                }
+                $body = sprintf(
+                    '<< /Type /StructElem /S /%s /P %d 0 R '
+                    .'/Pg %d 0 R /K %d >>',
+                    $elem['type'], $structRootId, $pageId, $elem['mcid'],
+                );
+                $childIds[] = $writer->addObject($body);
+            }
+            $kidsArray = '['.implode(' ', array_map(fn ($id) => "$id 0 R", $childIds)).']';
+            $writer->setObject($structRootId, sprintf(
+                '<< /Type /StructTreeRoot /K %s >>',
+                $kidsArray,
+            ));
+            $taggedRef = sprintf(
+                ' /MarkInfo << /Marked true >> /StructTreeRoot %d 0 R',
+                $structRootId,
+            );
+        }
+
         // Phase 47: PDF/A-1b — Metadata stream + OutputIntent + /Lang.
         $pdfARef = '';
         if ($this->pdfA !== null) {
@@ -554,7 +625,7 @@ final class Document
         }
 
         // 6. Catalog.
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef >>");
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef >>");
 
         $writer->setRoot($catalogId);
 

@@ -43,6 +43,14 @@ final class Page
 
     private int $extGStateCounter = 0;
 
+    /** Phase 48: per-page MCID counter (monotone increment). */
+    private int $mcidCounter = 0;
+
+    public function nextMcid(): int
+    {
+        return $this->mcidCounter++;
+    }
+
     /**
      * Link annotations накопленные на этой page.
      *
@@ -259,6 +267,23 @@ final class Page
         float $r = 0, float $g = 0, float $b = 0,
     ): self {
         $this->stream->strokeRectangle($x, $y, $width, $height, $lineWidthPt, $r, $g, $b);
+
+        return $this;
+    }
+
+    /**
+     * Phase 48: Tagged PDF — emit BDC/EMC pair around content.
+     */
+    public function beginMarkedContent(string $tag, int $mcid): self
+    {
+        $this->stream->emitBeginMarkedContent($tag, $mcid);
+
+        return $this;
+    }
+
+    public function endMarkedContent(): self
+    {
+        $this->stream->emitEndMarkedContent();
 
         return $this;
     }

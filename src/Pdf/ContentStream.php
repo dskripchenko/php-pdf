@@ -161,6 +161,23 @@ final class ContentStream
      * 0..1, line width в pt.
      */
     /**
+     * Phase 48: Begin tagged marked content. Pairs с emitEndMarkedContent().
+     */
+    public function emitBeginMarkedContent(string $tag, int $mcid): self
+    {
+        $this->body .= sprintf("/%s << /MCID %d >> BDC\n", $tag, $mcid);
+
+        return $this;
+    }
+
+    public function emitEndMarkedContent(): self
+    {
+        $this->body .= "EMC\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 45: filled polygon. Points = list<[x, y]>; closed path.
      *
      * @param  list<array{0: float, 1: float}>  $points

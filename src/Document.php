@@ -37,6 +37,8 @@ final readonly class Document
         public Section $section,
         public array $metadata = [],
         public array $additionalSections = [],
+        /** Phase 48: enable Tagged PDF (accessibility) при emission. */
+        public bool $tagged = false,
     ) {}
 
     /**
