@@ -20,6 +20,7 @@ use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\LineChart;
 use Dskripchenko\PhpPdf\Element\MultiLineChart;
 use Dskripchenko\PhpPdf\Element\PieChart;
+use Dskripchenko\PhpPdf\Element\StackedBarChart;
 use Dskripchenko\PhpPdf\Element\SvgElement;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -260,6 +261,7 @@ final class Engine
             $block instanceof LineChart => $this->renderLineChart($block, $ctx),
             $block instanceof PieChart => $this->renderPieChart($block, $ctx),
             $block instanceof GroupedBarChart => $this->renderGroupedBarChart($block, $ctx),
+            $block instanceof StackedBarChart => $this->renderStackedBarChart($block, $ctx),
             $block instanceof MultiLineChart => $this->renderMultiLineChart($block, $ctx),
             $block instanceof SvgElement => $this->renderSvgElement($block, $ctx),
             default => null,
@@ -402,6 +404,123 @@ final class Engine
 
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $gbc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 54: Stacked bar chart — segments stacked vertically per category.
+     */
+    private function renderStackedBarChart(StackedBarChart $sbc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $sbc->spaceBeforePt;
+        $totalW = min($sbc->widthPt, $ctx->contentWidth);
+        $totalH = $sbc->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($sbc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        $titleStripH = $sbc->title !== null ? $sbc->titleSizePt + 4.0 : 0;
+        $labelStripH = $sbc->axisLabelSizePt + 4.0;
+        $legendStripH = $sbc->showLegend ? $sbc->legendSizePt + 6.0 : 0;
+        $axisLabelPaddingLeft = 32.0;
+
+        $plotTop = $topY - $titleStripH - $legendStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        if ($sbc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $sbc->titleSizePt))->widthPt($sbc->title)
+                : mb_strlen($sbc->title, 'UTF-8') * $sbc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $sbc->title,
+                $blockX + ($totalW - $titleW) / 2, $topY - $sbc->titleSizePt, $sbc->titleSizePt);
+        }
+
+        $defaultColors = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0'];
+        $colors = $sbc->seriesColors !== []
+            ? array_pad($sbc->seriesColors, count($sbc->seriesNames), '8c8c8c')
+            : array_slice($defaultColors, 0, count($sbc->seriesNames));
+
+        // Legend at top.
+        if ($sbc->showLegend) {
+            $legendY = $topY - $titleStripH - $sbc->legendSizePt;
+            $legendX = $blockX + $axisLabelPaddingLeft;
+            foreach ($sbc->seriesNames as $idx => $name) {
+                [$r, $g, $b] = $this->hexToRgb($colors[$idx]);
+                $ctx->currentPage->fillRect($legendX, $legendY, $sbc->legendSizePt, $sbc->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $name,
+                    $legendX + $sbc->legendSizePt + 3, $legendY + 1, $sbc->legendSizePt);
+                $legendX += $sbc->legendSizePt + 3
+                    + ($this->defaultFont !== null
+                        ? (new TextMeasurer($this->defaultFont, $sbc->legendSizePt))->widthPt($name)
+                        : mb_strlen($name, 'UTF-8') * $sbc->legendSizePt * 0.5)
+                    + 14;
+            }
+        }
+
+        // Compute max stacked total per category для scale.
+        $maxTotal = 0.0;
+        foreach ($sbc->bars as $bar) {
+            $sum = 0.0;
+            foreach ($bar['values'] as $v) {
+                $sum += max(0, $v);
+            }
+            if ($sum > $maxTotal) {
+                $maxTotal = $sum;
+            }
+        }
+        if ($maxTotal <= 0) {
+            $maxTotal = 1.0;
+        }
+
+        // Axes.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        $maxLabel = $this->formatChartNumber($maxTotal);
+        $maxLabelW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $sbc->axisLabelSizePt))->widthPt($maxLabel)
+            : mb_strlen($maxLabel, 'UTF-8') * $sbc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $maxLabel, $plotLeft - $maxLabelW - 2, $plotTop - $sbc->axisLabelSizePt * 0.5, $sbc->axisLabelSizePt);
+
+        // Bars — каждый category = stacked segments.
+        $nLabels = count($sbc->bars);
+        $slotW = $plotW / max($nLabels, 1);
+        $gapRatio = 0.3;
+        $barW = $slotW * (1 - $gapRatio);
+
+        foreach ($sbc->bars as $bi => $bar) {
+            $barX = $plotLeft + $bi * $slotW + ($slotW - $barW) / 2;
+            $stackY = $plotBottom;
+            foreach ($bar['values'] as $si => $value) {
+                if ($value <= 0) {
+                    continue;
+                }
+                $segH = ($value / $maxTotal) * $plotH;
+                [$r, $g, $b] = $this->hexToRgb($colors[$si]);
+                $ctx->currentPage->fillRect($barX, $stackY, $barW, $segH, $r, $g, $b);
+                $stackY += $segH;
+            }
+            // X-axis label.
+            $label = $bar['label'];
+            $labelW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $sbc->axisLabelSizePt))->widthPt($label)
+                : mb_strlen($label, 'UTF-8') * $sbc->axisLabelSizePt * 0.5;
+            $labelX = $barX + ($barW - $labelW) / 2;
+            $this->chartText($ctx->currentPage, $label,
+                $labelX, $plotBottom - $sbc->axisLabelSizePt - 2, $sbc->axisLabelSizePt);
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $sbc->spaceAfterPt;
     }
 
     /**
