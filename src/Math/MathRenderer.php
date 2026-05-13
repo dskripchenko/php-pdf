@@ -183,8 +183,135 @@ final class MathRenderer
 
             return [['type' => 'sqrt', 'value' => $val]];
         }
+        if ($cmd === 'matrix' || $cmd === 'pmatrix' || $cmd === 'bmatrix' || $cmd === 'vmatrix') {
+            // Phase 75: matrix syntax — \\matrix{1 & 2 \\\\ 3 & 4}.
+            // Capture raw content between balanced braces для preserving '&'
+            // и '\\\\' separators (parser нормально жрёт `\\` как 2 empty
+            // commands).
+            $raw = self::readRawBracedContent($tex, $pos);
+            $rows = self::splitMatrixRaw($raw);
+
+            return [['type' => 'matrix', 'rows' => $rows, 'variant' => $cmd]];
+        }
         // Unknown command — fallback к literal text.
         return [['type' => 'text', 'value' => $cmd]];
+    }
+
+    /**
+     * Phase 75: read balanced {...} content as raw string (preserves `\\`).
+     */
+    private static function readRawBracedContent(string $tex, int &$pos): string
+    {
+        if ($pos >= strlen($tex) || $tex[$pos] !== '{') {
+            return '';
+        }
+        $pos++; // skip {
+        $depth = 1;
+        $start = $pos;
+        while ($pos < strlen($tex) && $depth > 0) {
+            if ($tex[$pos] === '{') {
+                $depth++;
+            } elseif ($tex[$pos] === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    break;
+                }
+            }
+            $pos++;
+        }
+        $content = substr($tex, $start, $pos - $start);
+        if ($pos < strlen($tex)) {
+            $pos++; // skip closing }
+        }
+
+        return $content;
+    }
+
+    /**
+     * Phase 75: split raw matrix content `1 & 2 \\\\ 3 & 4` → rows of cells.
+     * Each cell parsed через parseGroup для inner LaTeX support (nested
+     * fractions, sup, etc.).
+     *
+     * @return list<list<list<array<string, mixed>>>>
+     */
+    private static function splitMatrixRaw(string $raw): array
+    {
+        // Split rows by `\\` (2 backslashes).
+        $rowStrs = preg_split('@\\\\\\\\@', $raw);
+        if ($rowStrs === false) {
+            return [];
+        }
+        $rows = [];
+        foreach ($rowStrs as $rowStr) {
+            $cells = explode('&', $rowStr);
+            $rowCells = [];
+            foreach ($cells as $cellStr) {
+                $cellStr = trim($cellStr);
+                if ($cellStr === '') {
+                    $rowCells[] = [];
+
+                    continue;
+                }
+                $rowCells[] = self::parse($cellStr);
+            }
+            $rows[] = $rowCells;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tokens
+     * @return list<list<list<array<string, mixed>>>>
+     */
+    private static function splitMatrix(array $tokens): array
+    {
+        $rows = [];
+        $currentRow = [];
+        $currentCell = [];
+        foreach ($tokens as $tok) {
+            if ($tok['type'] === 'text') {
+                // Process text — may contain '&' и '\\\\' separators.
+                $remaining = $tok['value'];
+                while ($remaining !== '') {
+                    $pos1 = strpos($remaining, '&');
+                    $pos2 = strpos($remaining, "\\\\"); // '\\' в input encoded как single backslash here.
+                    $cuts = array_filter([$pos1, $pos2], fn ($p) => $p !== false);
+                    if ($cuts === []) {
+                        if ($remaining !== '') {
+                            $currentCell[] = ['type' => 'text', 'value' => $remaining];
+                        }
+                        break;
+                    }
+                    $cut = min($cuts);
+                    if ($cut > 0) {
+                        $currentCell[] = ['type' => 'text', 'value' => substr($remaining, 0, $cut)];
+                    }
+                    if ($remaining[$cut] === '&') {
+                        $currentRow[] = $currentCell;
+                        $currentCell = [];
+                        $remaining = substr($remaining, $cut + 1);
+                    } else {
+                        // '\\\\' row separator (2 chars).
+                        $currentRow[] = $currentCell;
+                        $currentCell = [];
+                        $rows[] = $currentRow;
+                        $currentRow = [];
+                        $remaining = substr($remaining, $cut + 2);
+                    }
+                }
+            } else {
+                $currentCell[] = $tok;
+            }
+        }
+        if ($currentCell !== []) {
+            $currentRow[] = $currentCell;
+        }
+        if ($currentRow !== []) {
+            $rows[] = $currentRow;
+        }
+
+        return $rows;
     }
 
     /**
@@ -217,8 +344,33 @@ final class MathRenderer
                 self::measureWidth($tok['den'], $fontSize * 0.85, $font),
             ) + 4.0,
             'sqrt' => self::measureWidth($tok['value'], $fontSize, $font) + $fontSize * 0.6,
+            'matrix' => self::measureMatrix($tok['rows'], $tok['variant'], $fontSize, $font),
             default => 0.0,
         };
+    }
+
+    /**
+     * @param  list<list<list<array<string, mixed>>>>  $rows
+     */
+    private static function measureMatrix(array $rows, string $variant, float $fontSize, PdfFont|StandardFont $font): float
+    {
+        if ($rows === []) {
+            return 0.0;
+        }
+        $cols = max(array_map('count', $rows));
+        $colWidths = array_fill(0, $cols, 0.0);
+        foreach ($rows as $row) {
+            foreach ($row as $ci => $cell) {
+                $w = self::measureWidth($cell, $fontSize, $font);
+                if ($w > $colWidths[$ci]) {
+                    $colWidths[$ci] = $w;
+                }
+            }
+        }
+        $cellGap = $fontSize * 0.4;
+        $bracketGap = $variant === 'matrix' ? 0 : $fontSize * 0.5;
+
+        return array_sum($colWidths) + ($cols - 1) * $cellGap + 2 * $bracketGap;
     }
 
     /**
@@ -302,6 +454,81 @@ final class MathRenderer
                 self::render($tok['value'], $page, $x + $radWidth, $baselineY, $fontSize, $font);
 
                 return $x + $radWidth + $valW + 2;
+
+            case 'matrix':
+                return self::renderMatrix($tok['rows'], $tok['variant'], $page, $x, $baselineY, $fontSize, $font);
+        }
+
+        return $x;
+    }
+
+    /**
+     * Phase 75: render matrix — grid of cells aligned по rows + columns,
+     * с optional brackets/parentheses вокруг.
+     *
+     * @param  list<list<list<array<string, mixed>>>>  $rows
+     */
+    private static function renderMatrix(
+        array $rows, string $variant, Page $page, float $x, float $baselineY,
+        float $fontSize, PdfFont|StandardFont $font,
+    ): float {
+        if ($rows === []) {
+            return $x;
+        }
+        $cols = max(array_map('count', $rows));
+        $colWidths = array_fill(0, $cols, 0.0);
+        foreach ($rows as $row) {
+            foreach ($row as $ci => $cell) {
+                $w = self::measureWidth($cell, $fontSize, $font);
+                if ($w > $colWidths[$ci]) {
+                    $colWidths[$ci] = $w;
+                }
+            }
+        }
+        $cellGap = $fontSize * 0.4;
+        $rowHeight = $fontSize * 1.4;
+        $totalH = count($rows) * $rowHeight;
+        $bracketW = $variant === 'matrix' ? 0 : $fontSize * 0.4;
+
+        $topY = $baselineY + $rowHeight * (count($rows) - 1) * 0.5 + $fontSize * 0.3;
+        $bottomY = $topY - $totalH;
+
+        // Draw brackets / parens.
+        if ($variant === 'pmatrix') {
+            $leftCh = '(';
+            $rightCh = ')';
+        } elseif ($variant === 'bmatrix') {
+            $leftCh = '[';
+            $rightCh = ']';
+        } elseif ($variant === 'vmatrix') {
+            $leftCh = '|';
+            $rightCh = '|';
+        } else {
+            $leftCh = $rightCh = null;
+        }
+        if ($leftCh !== null) {
+            // Single tall char approximation — repeated chars.
+            self::drawText($page, $leftCh, $x, $baselineY - $totalH / 2 + $fontSize * 0.2, $fontSize * 1.5, $font);
+            $x += $bracketW;
+        }
+
+        // Render cells.
+        $cellX = $x;
+        foreach ($rows as $ri => $row) {
+            $cellY = $topY - ($ri + 1) * $rowHeight + $fontSize * 0.3;
+            $colX = $cellX;
+            foreach ($colWidths as $ci => $colW) {
+                $cell = $row[$ci] ?? [];
+                $cellW = self::measureWidth($cell, $fontSize, $font);
+                self::render($cell, $page, $colX + ($colW - $cellW) / 2, $cellY, $fontSize, $font);
+                $colX += $colW + $cellGap;
+            }
+        }
+        $x = $cellX + array_sum($colWidths) + ($cols - 1) * $cellGap;
+
+        if ($rightCh !== null) {
+            self::drawText($page, $rightCh, $x, $baselineY - $totalH / 2 + $fontSize * 0.2, $fontSize * 1.5, $font);
+            $x += $bracketW;
         }
 
         return $x;
