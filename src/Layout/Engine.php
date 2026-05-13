@@ -1208,6 +1208,9 @@ final class Engine
         // на spacing/2 с каждой стороны. В collapse игнорируется.
         $spacing = ! $collapse ? $t->style->borderSpacingPt : 0;
         $gap = $spacing / 2;
+        // Phase 28: track previous cell's right border для "thicker wins"
+        // priority resolution on shared left/right edges в collapse mode.
+        $prevCellRight = null;
 
         // 1. Backgrounds + content + borders в три pass'а (background ниже,
         //    borders сверху, content между).
@@ -1282,13 +1285,22 @@ final class Engine
                     );
                 } elseif ($collapse) {
                     $isLastCol = ($colIdx + $cell->columnSpan) >= $columnCount;
+                    // Phase 28: "thicker wins" — для shared left edge сравниваем
+                    // current.left vs previous cell's right. Top edge — current.top
+                    // (cross-row priority требует state между renderRow calls,
+                    // deferred к full implementation).
+                    $leftBorder = $borders->left;
+                    if ($prevCellRight !== null) {
+                        $leftBorder = $this->moreProminent($leftBorder, $prevCellRight);
+                    }
                     $collapsed = new BorderSet(
                         top: $borders->top,
-                        left: $borders->left,
+                        left: $leftBorder,
                         bottom: $isLastRow ? $borders->bottom : null,
                         right: $isLastCol ? $borders->right : null,
                     );
                     $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $collapsed);
+                    $prevCellRight = $borders->right;
                 } else {
                     $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $borders);
                 }
@@ -1356,6 +1368,53 @@ final class Engine
         }
 
         return null;
+    }
+
+    /**
+     * Phase 28: CSS border priority resolution для collapse-mode shared
+     * edges. Spec rules (ISO HTML 4 / CSS 2.1 §17.6.2.1):
+     *   1. Style 'hidden' beats everything (null wins; no border drawn)
+     *   2. Style 'none' loses to everything
+     *   3. Wider border wins
+     *   4. Same width: double > solid > dashed > dotted
+     *   5. Same everything: first-cell-drawn wins (left/top side preferred)
+     *
+     * Возвращает winning Border (или $a если equal).
+     */
+    private function moreProminent(?Border $a, ?Border $b): ?Border
+    {
+        if ($a === null) {
+            return $b;
+        }
+        if ($b === null) {
+            return $a;
+        }
+        // None loses.
+        $aNone = $a->style === BorderStyle::None;
+        $bNone = $b->style === BorderStyle::None;
+        if ($aNone && $bNone) {
+            return null;
+        }
+        if ($aNone) {
+            return $b;
+        }
+        if ($bNone) {
+            return $a;
+        }
+        // Wider wins.
+        if ($a->sizeEighthsOfPoint !== $b->sizeEighthsOfPoint) {
+            return $a->sizeEighthsOfPoint > $b->sizeEighthsOfPoint ? $a : $b;
+        }
+        // Style preference.
+        $rank = static fn (BorderStyle $s): int => match ($s) {
+            BorderStyle::Double => 5,
+            BorderStyle::Single => 4,
+            BorderStyle::Dashed => 3,
+            BorderStyle::Dotted => 2,
+            BorderStyle::None => 0,
+        };
+
+        return $rank($a->style) >= $rank($b->style) ? $a : $b;
     }
 
     /**
