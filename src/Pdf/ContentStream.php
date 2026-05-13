@@ -77,6 +77,31 @@ final class ContentStream
         return $this;
     }
 
+    /**
+     * Draw image (XObject) с translation + scale.
+     *
+     * PDF coords: image XObject родной 1×1 unit. Чтобы получить ширину
+     * widthPt × heightPt в точке (xPt, yPt) — CTM matrix:
+     *   widthPt 0 0 heightPt xPt yPt cm
+     * Origin image = left-bottom corner.
+     *
+     * @param  string  $name  Имя в page /Resources/XObject << /Im1 ... >>
+     */
+    public function drawImage(string $name, float $xPt, float $yPt, float $widthPt, float $heightPt): self
+    {
+        $this->body .= "q\n";
+        $this->body .= sprintf("%s 0 0 %s %s %s cm\n",
+            $this->formatNumber($widthPt),
+            $this->formatNumber($heightPt),
+            $this->formatNumber($xPt),
+            $this->formatNumber($yPt),
+        );
+        $this->body .= sprintf("/%s Do\n", $name);
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
     public function toString(): string
     {
         return $this->body;
