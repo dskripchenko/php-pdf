@@ -692,9 +692,12 @@ final class Document
                 $durRef = ' /Dur '.$this->fmt($dur);
             }
 
+            // Phase 92: /StructParents key linking page к /ParentTree entry.
+            $structParentsRef = $this->tagged ? " /StructParents $i" : '';
+
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
-                .'/Contents %d 0 R /Resources %s%s%s%s >>',
+                .'/Contents %d 0 R /Resources %s%s%s%s%s >>',
                 $pagesId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
@@ -703,6 +706,7 @@ final class Document
                 $annotsRef,
                 $transRef,
                 $durRef,
+                $structParentsRef,
             ));
         }
 
@@ -800,20 +804,19 @@ final class Document
         // MarkInfo dict.
         $taggedRef = '';
         if ($this->tagged && $this->structElements !== []) {
-            // Reserve root ID first (children reference it as /P).
             $structRootId = $writer->reserveObject();
             $childIds = [];
+            // Phase 92: track struct element IDs per page для /ParentTree.
+            $structElemsPerPage = [];
             foreach ($this->structElements as $elem) {
                 $pageId = $pageObjectIdMap[$elem['page']] ?? null;
                 if ($pageId === null) {
-                    continue; // Page not registered — shouldn't happen.
+                    continue;
                 }
                 $altPart = '';
                 if (! empty($elem['altText'])) {
                     $altPart = ' /Alt '.$this->pdfString((string) $elem['altText']);
                 }
-                // Phase 72: /Link struct uses /OBJR reference к annotation
-                // (вместо /K integer MCID).
                 if (! empty($elem['objr'])) {
                     $body = sprintf(
                         '<< /Type /StructElem /S /%s /P %d 0 R '
@@ -827,12 +830,35 @@ final class Document
                         $elem['type'], $structRootId, $pageId, $elem['mcid'], $altPart,
                     );
                 }
-                $childIds[] = $writer->addObject($body);
+                $elemId = $writer->addObject($body);
+                $childIds[] = $elemId;
+
+                $pageIdx = array_search($elem['page'], $this->pages, true);
+                if ($pageIdx !== false) {
+                    $structElemsPerPage[$pageIdx] ??= [];
+                    $structElemsPerPage[$pageIdx][] = $elemId;
+                }
             }
             $kidsArray = '['.implode(' ', array_map(fn ($id) => "$id 0 R", $childIds)).']';
+
+            // Phase 92: emit /ParentTree (number tree) — per-page arrays
+            // listing struct elements rendered на каждой page.
+            ksort($structElemsPerPage);
+            $parentTreeNums = [];
+            foreach ($structElemsPerPage as $pageIdx => $elemIds) {
+                $refs = implode(' ', array_map(fn ($id) => "$id 0 R", $elemIds));
+                $parentTreeNums[] = "$pageIdx [$refs]";
+            }
+            $parentTreeId = $writer->addObject(
+                '<< /Nums ['.implode(' ', $parentTreeNums).'] >>',
+            );
+
             $writer->setObject($structRootId, sprintf(
-                '<< /Type /StructTreeRoot /K %s >>',
+                '<< /Type /StructTreeRoot /K %s /ParentTree %d 0 R '
+                .'/ParentTreeNextKey %d >>',
                 $kidsArray,
+                $parentTreeId,
+                count($this->pages),
             ));
             $taggedRef = sprintf(
                 ' /MarkInfo << /Marked true >> /StructTreeRoot %d 0 R',
