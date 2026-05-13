@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 39 фаз закрыто (565 + 194 printable = 759 тестов).
+**Текущий статус:** v1.1-dev — 43 фазы закрыто (599 + 194 printable = 793 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,14 +12,16 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-41 closed:
+**v1.1 progress:** 25-45 closed:
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
  - 33 soft hyphen, 34 multi-section docs,
  - 35 EAN-13/UPC-A barcode, 36 QR Code byte-mode V1-10,
  - 37 QR ECC M/Q/H levels, 38 QR Numeric/Alphanumeric encoding modes,
- - 39 multi-column layout, 40 footnotes/endnotes, 41 PDF encryption V2 R3.
+ - 39 multi-column layout, 40 footnotes/endnotes,
+ - 41 PDF encryption V2 R3 RC4-128, 42 AES-128 encryption V4 R4,
+ - 43 AcroForm (text + checkbox), 44 BarChart, 45 LineChart + PieChart.
 
 ---
 
@@ -195,18 +197,26 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 ### PDF features
 
 - PDF/A-1b / PDF/A-2u compliance (для архивных требований).
-- Encryption (password-protected PDFs).
-- Form fields (interactive AcroForm).
+- ~~Encryption (password-protected PDFs) — RC4-128~~ ✅ **Phase 41 closed** (c3d7743).
+- ~~Encryption — AES-128 (V4 R4)~~ ✅ **Phase 42 closed** (2d18542).
+- AES-256 (V5, PDF 2.0).
+- String encryption (currently /Identity для strings; streams encrypted).
+- ~~Form fields (interactive AcroForm) — text + checkbox~~ ✅ **Phase 43 closed** (aac0c20).
+- AcroForm extensions: multi-line text, radio groups, combo/list box,
+  signature fields, JavaScript validation/calculation.
 - JavaScript actions.
 - Embedded files / attachments.
-- Digital signatures.
-- Tagged PDF (accessibility).
+- Digital signatures (/Sig field type + PKCS#7 signing).
+- Tagged PDF (accessibility / PDF/UA — StructTreeRoot + marked content).
 
 ### Content
 
 - SVG support (parse + rasterize или native PDF paths).
 - Math equations (LaTeX-like rendering).
-- Charts / graphs (line, bar, pie native).
+- ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
+- ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
+- Multi-series charts (grouped/stacked bars, multi-line).
+- Chart extensions: grid lines, custom axis ranges, axis titles, donut.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
 - ~~QR Code (Reed-Solomon ECC L V1-10 byte mode)~~ ✅ **Phase 36 closed** (b6521aa).
@@ -284,6 +294,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 39 | Multi-column layout (ColumnSet) (v1.1) | 7 | 5180a42 |
 | 40 | Footnotes / endnotes (v1.1) | 6 | a18a70c |
 | 41 | PDF encryption V2 R3 RC4-128 (v1.1) | 8 | c3d7743 |
+| 42 | AES-128 encryption V4 R4 (v1.1) | 7 | 2d18542 |
+| 43 | AcroForm (text + checkbox) (v1.1) | 9 | aac0c20 |
+| 44 | BarChart primitive (v1.1) | 8 | 01f22f0 |
+| 45 | LineChart + PieChart (v1.1) | 10 | 9251cd0 |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
