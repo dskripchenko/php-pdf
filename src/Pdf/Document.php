@@ -406,60 +406,28 @@ final class Document
                 }
                 $annotIds[] = $writer->addObject($body);
             }
-            // Phase 43: AcroForm widgets — emit widget annotations + collect
-            // field object IDs для AcroForm.Fields array.
+            // Phase 43+46: AcroForm widgets — emit widget annotations +
+            // collect field object IDs для AcroForm.Fields array.
             foreach ($page->formFields() as $field) {
-                $rect = sprintf(
-                    '[%s %s %s %s]',
-                    $this->fmt($field['x']), $this->fmt($field['y']),
-                    $this->fmt($field['x'] + $field['w']),
-                    $this->fmt($field['y'] + $field['h']),
-                );
-                $flags = 0;
-                if ($field['readOnly']) {
-                    $flags |= 1; // ReadOnly bit 1.
-                }
-                if ($field['required']) {
-                    $flags |= 2; // Required bit 2.
-                }
                 $tooltipPart = $field['tooltip'] !== null
                     ? ' /TU '.$this->pdfString($field['tooltip'])
                     : '';
-                $namePart = ' /T '.$this->pdfString($field['name']);
-                if ($field['type'] === 'text') {
-                    $valuePart = $field['defaultValue'] !== ''
-                        ? ' /V '.$this->pdfString($field['defaultValue'])
-                            .' /DV '.$this->pdfString($field['defaultValue'])
-                        : '';
-                    $body = sprintf(
-                        '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
-                        .'%s%s%s /Ff %d /P %d 0 R >>',
-                        $rect,
-                        ltrim($namePart),
-                        $valuePart,
-                        $tooltipPart,
-                        $flags,
-                        $pageIds[$i],
+                $namePart = '/T '.$this->pdfString($field['name']);
+
+                if ($field['type'] === 'radio-group') {
+                    [$parentId, $childIds] = $this->emitRadioGroupFields(
+                        $writer, $pageIds[$i], $field, $namePart, $tooltipPart,
                     );
-                } else {
-                    // checkbox: /Btn / NoToggleToOff не set, default unchecked.
-                    $isChecked = strcasecmp($field['defaultValue'], 'on') === 0
-                        || strcasecmp($field['defaultValue'], 'yes') === 0
-                        || $field['defaultValue'] === '1';
-                    $vPart = $isChecked ? ' /V /Yes /DV /Yes' : ' /V /Off /DV /Off';
-                    $body = sprintf(
-                        '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
-                        .'%s%s%s /Ff %d /P %d 0 R '
-                        .'/AS %s >>',
-                        $rect,
-                        ltrim($namePart),
-                        $vPart,
-                        $tooltipPart,
-                        $flags,
-                        $pageIds[$i],
-                        $isChecked ? '/Yes' : '/Off',
-                    );
+                    // Parent объект in /Fields; children in page /Annots.
+                    foreach ($childIds as $cid) {
+                        $annotIds[] = $cid;
+                    }
+                    $this->collectedFormFieldIds[] = $parentId;
+
+                    continue;
                 }
+
+                $body = $this->buildSimpleFieldObject($field, $pageIds[$i], $namePart, $tooltipPart);
                 $fieldId = $writer->addObject($body);
                 $annotIds[] = $fieldId;
                 $this->collectedFormFieldIds[] = $fieldId;
@@ -717,6 +685,134 @@ final class Document
         }
 
         return $count;
+    }
+
+    /**
+     * Phase 43+46: build single-widget AcroForm field object body.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    private function buildSimpleFieldObject(array $field, int $pageId, string $namePart, string $tooltipPart): string
+    {
+        $rect = sprintf(
+            '[%s %s %s %s]',
+            $this->fmt($field['x']), $this->fmt($field['y']),
+            $this->fmt($field['x'] + $field['w']),
+            $this->fmt($field['y'] + $field['h']),
+        );
+        $flags = 0;
+        if ($field['readOnly']) {
+            $flags |= 1;
+        }
+        if ($field['required']) {
+            $flags |= 2;
+        }
+        $type = $field['type'];
+        // Type-specific flags (high-numbered bits per ISO 32000-1 Table 228).
+        if ($type === 'text-multiline') {
+            $flags |= 4096; // Multiline bit 13.
+        }
+        if ($type === 'password') {
+            $flags |= 8192; // Password bit 14.
+        }
+        if ($type === 'combo') {
+            $flags |= 131072; // Combo bit 18.
+        }
+
+        if (in_array($type, ['text', 'text-multiline', 'password'], true)) {
+            $valuePart = $field['defaultValue'] !== ''
+                ? ' /V '.$this->pdfString($field['defaultValue'])
+                    .' /DV '.$this->pdfString($field['defaultValue'])
+                : '';
+
+            return sprintf(
+                '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
+                .'%s%s%s /Ff %d /P %d 0 R >>',
+                $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId,
+            );
+        }
+        if ($type === 'checkbox') {
+            $isChecked = strcasecmp($field['defaultValue'], 'on') === 0
+                || strcasecmp($field['defaultValue'], 'yes') === 0
+                || $field['defaultValue'] === '1';
+            $vPart = $isChecked ? ' /V /Yes /DV /Yes' : ' /V /Off /DV /Off';
+
+            return sprintf(
+                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                .'%s%s%s /Ff %d /P %d 0 R /AS %s >>',
+                $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId,
+                $isChecked ? '/Yes' : '/Off',
+            );
+        }
+        if ($type === 'combo' || $type === 'list') {
+            $optsArray = '['.implode(' ', array_map(fn ($o) => $this->pdfString($o), $field['options'])).']';
+            $valuePart = $field['defaultValue'] !== ''
+                ? ' /V '.$this->pdfString($field['defaultValue'])
+                    .' /DV '.$this->pdfString($field['defaultValue'])
+                : '';
+
+            return sprintf(
+                '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s '
+                .'%s%s%s /Opt %s /Ff %d /P %d 0 R >>',
+                $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId,
+            );
+        }
+        throw new \LogicException("Unsupported field type: $type");
+    }
+
+    /**
+     * Phase 46: emit radio-group parent + N child Widget annotations.
+     *
+     * @param  array<string, mixed>  $field
+     * @return array{0: int, 1: list<int>}  [parentObjId, childObjIds]
+     */
+    private function emitRadioGroupFields(Writer $writer, int $pageId, array $field, string $namePart, string $tooltipPart): array
+    {
+        // Reserve parent ID upfront — children reference его через /Parent.
+        $parentId = $writer->reserveObject();
+
+        // Flags: Radio bit 16 (val 32768) + NoToggleToOff bit 15 (val 16384).
+        $flags = 32768 | 16384;
+        if ($field['readOnly']) {
+            $flags |= 1;
+        }
+        if ($field['required']) {
+            $flags |= 2;
+        }
+
+        $childIds = [];
+        foreach ($field['radioWidgets'] as $idx => $widget) {
+            $optionLabel = $field['options'][$idx];
+            $isChecked = $optionLabel === $field['defaultValue'];
+            $rect = sprintf(
+                '[%s %s %s %s]',
+                $this->fmt($widget['x']), $this->fmt($widget['y']),
+                $this->fmt($widget['x'] + $widget['w']),
+                $this->fmt($widget['y'] + $widget['h']),
+            );
+            // Child widget — pure annotation, /T inherited от parent.
+            // /AS = export value (escaped как name); /Off если не selected.
+            $exportName = '/'.preg_replace('@[^A-Za-z0-9_-]@', '_', $optionLabel);
+            $body = sprintf(
+                '<< /Type /Annot /Subtype /Widget /Rect %s '
+                .'/Parent %d 0 R /AS %s >>',
+                $rect, $parentId, $isChecked ? $exportName : '/Off',
+            );
+            $childIds[] = $writer->addObject($body);
+        }
+
+        $kidsArray = '['.implode(' ', array_map(fn ($id) => "$id 0 R", $childIds)).']';
+        $vPart = $field['defaultValue'] !== ''
+            ? ' /V /'.preg_replace('@[^A-Za-z0-9_-]@', '_', $field['defaultValue'])
+                .' /DV /'.preg_replace('@[^A-Za-z0-9_-]@', '_', $field['defaultValue'])
+            : '';
+        $parentBody = sprintf(
+            '<< /FT /Btn %s%s /Ff %d /Kids %s >>',
+            $namePart, $vPart.$tooltipPart, $flags, $kidsArray,
+        );
+        $writer->setObject($parentId, $parentBody);
+
+        return [$parentId, $childIds];
     }
 
     /**

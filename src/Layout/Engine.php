@@ -549,12 +549,20 @@ final class Engine
     }
 
     /**
-     * Phase 43: AcroForm field widget. Reserves space на странице,
-     * рисует visual border, регистрирует field annotation на page.
+     * Phase 43+46: AcroForm field widget. Reserves space на странице,
+     * рисует visual border (или circles для radio buttons), регистрирует
+     * field annotation(s) на page.
      */
     private function renderFormField(FormField $field, LayoutContext $ctx): void
     {
         $ctx->cursorY -= $field->spaceBeforePt;
+
+        if ($field->type === FormField::TYPE_RADIO_GROUP) {
+            $this->renderRadioGroup($field, $ctx);
+
+            return;
+        }
+
         $h = $field->heightPt;
         $w = min($field->widthPt, $ctx->contentWidth);
         $this->ensureRoomFor($ctx, $h);
@@ -577,9 +585,65 @@ final class Engine
             tooltip: $field->tooltip,
             required: $field->required,
             readOnly: $field->readOnly,
+            options: $field->options,
         );
 
         $ctx->cursorY -= $h;
+        $ctx->cursorY -= $field->spaceAfterPt;
+    }
+
+    /**
+     * Phase 46: Radio button group. Каждый option получает свой widget
+     * (small circle outline), но все widgets share group's /T name.
+     * Layout: vertical stack, ~16pt each row.
+     */
+    private function renderRadioGroup(FormField $field, LayoutContext $ctx): void
+    {
+        $rowHeight = 16.0;
+        $totalHeight = $rowHeight * count($field->options);
+        $this->ensureRoomFor($ctx, $totalHeight);
+
+        $widgetSize = 12.0; // square button.
+        $widgets = [];
+        $rowY = $ctx->cursorY;
+        foreach ($field->options as $idx => $optionLabel) {
+            $rowY -= $rowHeight;
+            $bx = $ctx->leftX;
+            $by = $rowY + ($rowHeight - $widgetSize) / 2;
+            // Visual: circle outline (approx через square — many readers
+            // render radio как proper circle).
+            $ctx->currentPage->strokeRect($bx, $by, $widgetSize, $widgetSize, 0.5, 0.4, 0.4, 0.4);
+            // If checked, fill inner.
+            if ($optionLabel === $field->defaultValue) {
+                $ctx->currentPage->fillRect($bx + 3, $by + 3, $widgetSize - 6, $widgetSize - 6, 0.2, 0.2, 0.2);
+            }
+            // Label text.
+            $labelX = $bx + $widgetSize + 6;
+            $labelY = $by + 3;
+            if ($this->defaultFont !== null) {
+                $ctx->currentPage->showEmbeddedText($optionLabel, $labelX, $labelY, $this->defaultFont, 10);
+            } else {
+                $ctx->currentPage->showText($optionLabel, $labelX, $labelY, $this->fallbackStandard, 10);
+            }
+            $widgets[] = ['x' => $bx, 'y' => $by, 'w' => $widgetSize, 'h' => $widgetSize];
+        }
+
+        $ctx->currentPage->addFormField(
+            type: $field->type,
+            name: $field->name,
+            x: $ctx->leftX,
+            y: $rowY,
+            width: $ctx->contentWidth,
+            height: $totalHeight,
+            defaultValue: $field->defaultValue,
+            tooltip: $field->tooltip,
+            required: $field->required,
+            readOnly: $field->readOnly,
+            options: $field->options,
+            radioWidgets: $widgets,
+        );
+
+        $ctx->cursorY -= $totalHeight;
         $ctx->cursorY -= $field->spaceAfterPt;
     }
 

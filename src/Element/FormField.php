@@ -5,29 +5,50 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Phase 43: AcroForm interactive form field.
+ * Phase 43+46: AcroForm interactive form field.
  *
- * Минимальная подмножка PDF AcroForm для типичных бизнес use cases:
- *  - Text input (single-line)
- *  - Checkbox
+ * Supported types:
+ *  - text (single-line)
+ *  - text-multiline (Tx с Multiline flag)
+ *  - password (Tx с Password flag, masked input)
+ *  - checkbox
+ *  - radio-group (single AST → multiple widgets sharing same /T)
+ *  - combo (Ch с Combo flag — dropdown)
+ *  - list (Ch без Combo — listbox)
  *
  * Не реализовано:
- *  - Multi-line text (textarea)
- *  - Radio button groups
- *  - Combo box / list box
- *  - Signature fields
- *  - Calculation/validation actions (JavaScript)
- *  - Appearance streams (полагаемся на reader default rendering)
- *
- * Field name должен быть уникальным внутри document'а (PDF spec
- * требование для form data submission).
+ *  - Signature fields (/Sig).
+ *  - JavaScript calculation/validation actions.
+ *  - Custom appearance streams (полагаемся на reader default rendering).
  */
 final readonly class FormField implements BlockElement
 {
     public const TYPE_TEXT = 'text';
 
+    public const TYPE_TEXT_MULTILINE = 'text-multiline';
+
+    public const TYPE_PASSWORD = 'password';
+
     public const TYPE_CHECKBOX = 'checkbox';
 
+    public const TYPE_RADIO_GROUP = 'radio-group';
+
+    public const TYPE_COMBO = 'combo';
+
+    public const TYPE_LIST = 'list';
+
+    public const SUPPORTED_TYPES = [
+        self::TYPE_TEXT, self::TYPE_TEXT_MULTILINE, self::TYPE_PASSWORD,
+        self::TYPE_CHECKBOX, self::TYPE_RADIO_GROUP, self::TYPE_COMBO,
+        self::TYPE_LIST,
+    ];
+
+    /**
+     * @param  list<string>  $options  Choices для combo/list/radio-group.
+     *                                   Каждая string — export value/label.
+     *                                   Для radio — также используется как
+     *                                   visual button label.
+     */
     public function __construct(
         public string $name,
         public string $type = self::TYPE_TEXT,
@@ -39,9 +60,18 @@ final readonly class FormField implements BlockElement
         public ?string $tooltip = null,
         public bool $required = false,
         public bool $readOnly = false,
+        public array $options = [],
     ) {
-        if ($type !== self::TYPE_TEXT && $type !== self::TYPE_CHECKBOX) {
+        if (! in_array($type, self::SUPPORTED_TYPES, true)) {
             throw new \InvalidArgumentException("Unsupported FormField type: $type");
+        }
+        $needsOptions = in_array(
+            $type,
+            [self::TYPE_RADIO_GROUP, self::TYPE_COMBO, self::TYPE_LIST],
+            true,
+        );
+        if ($needsOptions && $options === []) {
+            throw new \InvalidArgumentException("$type FormField requires non-empty options[]");
         }
     }
 }

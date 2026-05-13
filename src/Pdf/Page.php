@@ -51,9 +51,9 @@ final class Page
     private array $linkAnnotations = [];
 
     /**
-     * Phase 43: AcroForm fields on этой page.
+     * Phase 43+46: AcroForm fields on этой page.
      *
-     * @var list<array{type: 'text'|'checkbox', name: string, x: float, y: float, w: float, h: float, defaultValue: string, tooltip: ?string, required: bool, readOnly: bool}>
+     * @var list<array<string, mixed>>
      */
     private array $formFields = [];
 
@@ -379,7 +379,10 @@ final class Page
     }
 
     /**
-     * Phase 43: Add interactive form field widget на page.
+     * Phase 43+46: Add interactive form field widget на page.
+     *
+     * @param  list<string>  $options  для combo/list/radio-group
+     * @param  list<array{x: float, y: float, w: float, h: float}>  $radioWidgets  для radio-group (one widget per option)
      */
     public function addFormField(
         string $type,
@@ -392,6 +395,8 @@ final class Page
         ?string $tooltip = null,
         bool $required = false,
         bool $readOnly = false,
+        array $options = [],
+        array $radioWidgets = [],
     ): self {
         $this->formFields[] = [
             'type' => $type,
@@ -404,13 +409,15 @@ final class Page
             'tooltip' => $tooltip,
             'required' => $required,
             'readOnly' => $readOnly,
+            'options' => $options,
+            'radioWidgets' => $radioWidgets,
         ];
 
         return $this;
     }
 
     /**
-     * @return list<array{type: 'text'|'checkbox', name: string, x: float, y: float, w: float, h: float, defaultValue: string, tooltip: ?string, required: bool, readOnly: bool}>
+     * @return list<array<string, mixed>>
      *
      * @internal
      */
