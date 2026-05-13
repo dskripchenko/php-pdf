@@ -769,7 +769,7 @@ final class SvgRenderer
     private static function parsePathD(string $d, callable $tx, callable $ty): array
     {
         // Tokenize: split on each command letter (preserve лезерные command'ы как separators).
-        $regex = '@([MmLlHhVvCcSsQqTtZz])([^MmLlHhVvCcSsQqTtZz]*)@';
+        $regex = '@([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)@';
         if (! preg_match_all($regex, $d, $matches, PREG_SET_ORDER)) {
             return [];
         }
@@ -931,9 +931,156 @@ final class SvgRenderer
                     $lastCubicCtrlX = $lastCubicCtrlY = null;
                     $lastQuadCtrlX = $lastQuadCtrlY = null;
                     break;
+
+                case 'A':
+                    // Phase 63: elliptical arc — convert к cubic Beziers.
+                    // 7 args per arc: rx, ry, x-axis-rot, large-arc-flag, sweep-flag, x, y.
+                    for ($i = 0; $i + 6 < count($nums); $i += 7) {
+                        $arcRx = $nums[$i];
+                        $arcRy = $nums[$i + 1];
+                        $xRot = $nums[$i + 2];
+                        $largeArc = (bool) $nums[$i + 3];
+                        $sweep = (bool) $nums[$i + 4];
+                        $ex = $isRel ? $cx + $nums[$i + 5] : $nums[$i + 5];
+                        $ey = $isRel ? $cy + $nums[$i + 6] : $nums[$i + 6];
+                        $arcCubics = self::arcToCubics($cx, $cy, $arcRx, $arcRy, $xRot, $largeArc, $sweep, $ex, $ey);
+                        foreach ($arcCubics as $cu) {
+                            $commands[] = [
+                                'C',
+                                $tx($cu[0]), $ty($cu[1]),
+                                $tx($cu[2]), $ty($cu[3]),
+                                $tx($cu[4]), $ty($cu[5]),
+                            ];
+                        }
+                        $cx = $ex; $cy = $ey;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
             }
         }
 
         return $commands;
+    }
+
+    /**
+     * Phase 63: Convert elliptical arc к sequence of cubic Beziers.
+     *
+     * Standard SVG endpoint→center parameterization (W3C Implementation
+     * Notes §B.2.4) + 90° max-arc subdivision.
+     *
+     * @return list<array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}>
+     *   List of cubic segments [c1x, c1y, c2x, c2y, ex, ey].
+     */
+    private static function arcToCubics(
+        float $x1, float $y1, float $rx, float $ry, float $xAxisRot,
+        bool $fA, bool $fS, float $x2, float $y2,
+    ): array {
+        if ($rx == 0.0 || $ry == 0.0 || ($x1 == $x2 && $y1 == $y2)) {
+            return [];
+        }
+        $rx = abs($rx);
+        $ry = abs($ry);
+        $phi = deg2rad($xAxisRot);
+        $cosPhi = cos($phi);
+        $sinPhi = sin($phi);
+
+        // Step 1: midpoint rotation.
+        $dx = ($x1 - $x2) / 2;
+        $dy = ($y1 - $y2) / 2;
+        $x1p = $cosPhi * $dx + $sinPhi * $dy;
+        $y1p = -$sinPhi * $dx + $cosPhi * $dy;
+
+        // Step 2: ensure radii достаточны.
+        $lambda = ($x1p * $x1p) / ($rx * $rx) + ($y1p * $y1p) / ($ry * $ry);
+        if ($lambda > 1) {
+            $scale = sqrt($lambda);
+            $rx *= $scale;
+            $ry *= $scale;
+        }
+
+        // Step 3: compute center в rotated frame.
+        $sign = $fA === $fS ? -1.0 : 1.0;
+        $sq = max(
+            0.0,
+            ($rx * $rx * $ry * $ry - $rx * $rx * $y1p * $y1p - $ry * $ry * $x1p * $x1p)
+            / ($rx * $rx * $y1p * $y1p + $ry * $ry * $x1p * $x1p),
+        );
+        $factor = $sign * sqrt($sq);
+        $cxp = $factor * ($rx * $y1p / $ry);
+        $cyp = $factor * -($ry * $x1p / $rx);
+
+        // Step 4: transform back к user space.
+        $cx = $cosPhi * $cxp - $sinPhi * $cyp + ($x1 + $x2) / 2;
+        $cy = $sinPhi * $cxp + $cosPhi * $cyp + ($y1 + $y2) / 2;
+
+        // Step 5: compute angles.
+        $startVec = [($x1p - $cxp) / $rx, ($y1p - $cyp) / $ry];
+        $endVec = [(-$x1p - $cxp) / $rx, (-$y1p - $cyp) / $ry];
+
+        $theta1 = self::angleBetween([1.0, 0.0], $startVec);
+        $dtheta = self::angleBetween($startVec, $endVec);
+        if (! $fS && $dtheta > 0) {
+            $dtheta -= 2 * M_PI;
+        } elseif ($fS && $dtheta < 0) {
+            $dtheta += 2 * M_PI;
+        }
+
+        // Step 6: split на segments ≤ 90°.
+        $segments = max(1, (int) ceil(abs($dtheta) / (M_PI / 2)));
+        $delta = $dtheta / $segments;
+        $t = 8.0 / 3.0 * sin($delta / 4) * sin($delta / 4) / sin($delta / 2);
+
+        $cubics = [];
+        for ($i = 0; $i < $segments; $i++) {
+            $angleStart = $theta1 + $i * $delta;
+            $angleEnd = $angleStart + $delta;
+
+            $cosA = cos($angleStart);
+            $sinA = sin($angleStart);
+            $cosB = cos($angleEnd);
+            $sinB = sin($angleEnd);
+
+            // Unit ellipse points.
+            $p1 = [$cosA, $sinA];
+            $c1 = [$cosA - $t * $sinA, $sinA + $t * $cosA];
+            $c2 = [$cosB + $t * $sinB, $sinB - $t * $cosB];
+            $p2 = [$cosB, $sinB];
+
+            // Scale and rotate.
+            $apply = static function (array $pt) use ($rx, $ry, $cosPhi, $sinPhi, $cx, $cy): array {
+                $sx = $pt[0] * $rx;
+                $sy = $pt[1] * $ry;
+
+                return [
+                    $cosPhi * $sx - $sinPhi * $sy + $cx,
+                    $sinPhi * $sx + $cosPhi * $sy + $cy,
+                ];
+            };
+            // p1 not needed — already at current point после prev segment.
+            [$c1x, $c1y] = $apply($c1);
+            [$c2x, $c2y] = $apply($c2);
+            [$p2x, $p2y] = $apply($p2);
+            $cubics[] = [$c1x, $c1y, $c2x, $c2y, $p2x, $p2y];
+        }
+
+        return $cubics;
+    }
+
+    /**
+     * Angle между two 2D vectors (signed).
+     *
+     * @param  array{0: float, 1: float}  $u
+     * @param  array{0: float, 1: float}  $v
+     */
+    private static function angleBetween(array $u, array $v): float
+    {
+        $dot = $u[0] * $v[0] + $u[1] * $v[1];
+        $len = sqrt(($u[0] * $u[0] + $u[1] * $u[1]) * ($v[0] * $v[0] + $v[1] * $v[1]));
+        $cosTheta = $len > 0 ? max(-1.0, min(1.0, $dot / $len)) : 1.0;
+        $angle = acos($cosTheta);
+        $cross = $u[0] * $v[1] - $u[1] * $v[0];
+
+        return $cross < 0 ? -$angle : $angle;
     }
 }
