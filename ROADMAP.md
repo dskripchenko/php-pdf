@@ -184,27 +184,21 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 ### Layout
 
-- Multi-section docs (разная orientation/margins per section).
-- Section breaks (явная смена pageSetup mid-document).
-- Footnotes / endnotes.
-- Multi-column layout (CSS `column-count`).
+- ~~Multi-section docs (разная orientation/margins per section)~~ ✅ **Phase 34 closed** (b57ddb4).
+- ~~Section breaks (явная смена pageSetup mid-document)~~ ✅ **Phase 34 closed** (b57ddb4).
+- ~~Footnotes / endnotes~~ ✅ **Phase 40 closed** (a18a70c).
+- ~~Multi-column layout (CSS `column-count`)~~ ✅ **Phase 39 closed** (5180a42).
+- ~~Border priority resolution в collapse mode~~ ✅ **Phase 28 closed** (f680192).
+- ~~Hyphenation (soft-hyphen `&shy;`)~~ ✅ **Phase 33 closed** (309f5d8).
+- ~~Paragraph padding + background~~ ✅ **Phase 25 closed** (ee907af + fb8580e).
+- ~~Inline letter-spacing через `<span>`~~ ✅ **Phase 27 closed** (6209791).
 - Complex script shaping (Arabic ligatures, Indic combining marks).
-- Border priority resolution в collapse mode ("thicker wins" CSS spec
-  правило vs current first-drawn-wins). Перенесено из v1.0 Phase 19.
-- **Hyphenation** (Phase 22): TeX-pattern или dictionary-based;
-  soft-hyphen `&shy;` support. Перенесено из v1.0.
-- **Paragraph padding + background** (Phase 23): сейчас только
-  TableCell имеет; Paragraph только margin (spaceBefore/After+indent).
-  Перенесено из v1.0.
-- Inline letter-spacing через `<span style="letter-spacing">` —
-  требует Mark::letterSpacing constant.
 - Line-height absolute (`line-height: 18pt`) точно вместо approx /11
   multiplier conversion.
 
 ### Typography
 
-- Subscript/superscript visual sizing (сейчас style сохраняется но
-  glyph не масштабируется).
+- ~~Subscript/superscript visual sizing~~ ✅ **Phase 26 closed** (b3426a5).
 - Font fallback chain (если main font не содержит glyph — fallback
   на другой).
 - Variable fonts (OpenType variations).
@@ -232,8 +226,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - AcroForm signature actual signing (PKCS#7 two-pass byte range).
 - ~~JavaScript validation / calculation / format / keystroke actions~~ ✅ **Phase 67 closed** (5c8e1b4).
 - Digital signatures (PKCS#7 signing of arbitrary fields).
-- Full PDF/UA: heading hierarchy (/H1-/H6), alt-text для figures,
-  reading-order /StructParents, role mapping.
+- ~~PDF/UA heading hierarchy (/H1-/H6)~~ ✅ **Phase 61 closed** (38b3c3b).
+- ~~PDF/UA alt-text для figures~~ ✅ **Phase 62 closed** (38ccc36).
+- Full PDF/UA: reading-order /StructParents tree, role mapping, /Link.
 
 ### Content
 
@@ -253,8 +248,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Area chart (single + stacked)~~ ✅ **Phase 60 closed** (418dea8).
 - ~~Chart grid lines (Bar/Line/Area)~~ ✅ **Phase 64 closed** (8f70f07).
 - ~~Custom y-axis range (yMin/yMax)~~ ✅ **Phase 68 closed** (68f632b).
-- Chart extensions: smoothed splines, grid для остальных charts (GroupedBar/Stacked/Scatter).
-- Chart extensions: grid lines, custom axis ranges, axis titles, donut.
+- Chart extensions: smoothed splines, grid lines для GroupedBar/Stacked/Scatter/Donut,
+  axis titles, x-axis label rotation.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
 - ~~QR Code (Reed-Solomon ECC L V1-10 byte mode)~~ ✅ **Phase 36 closed** (b6521aa).
@@ -271,8 +266,7 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 - Streaming output (избежать full-document в memory).
 - Lazy font subset (currently every used glyph embedded).
-- Image deduplication across pages (already есть для same instance,
-  но не для same bytes).
+- ~~Image deduplication by content hash~~ ✅ **Phase 29 closed** (f47c1f9).
 
 ---
 
