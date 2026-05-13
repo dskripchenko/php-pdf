@@ -25,10 +25,12 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  *  - End — flush right
  *  - Both/Distribute — деградируют к Start (для image'й не имеют смысла)
  *
- * Image inline-flow (текст обтекает картинку) — Phase L; пока всегда
- * блочный (full-line) элемент.
+ * Phase 16: Image теперь implements обоих интерфейсов. Engine routing:
+ *  - На top-level (Section.body) → block mode (full-line с alignment)
+ *  - Внутри Paragraph.children → inline mode (image как atom в текстовом
+ *    потоке; line-height accommodates image height)
  */
-final readonly class Image implements BlockElement
+final readonly class Image implements BlockElement, InlineElement
 {
     public function __construct(
         public PdfImage $source,

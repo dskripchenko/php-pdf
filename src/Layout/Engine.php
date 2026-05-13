@@ -519,6 +519,24 @@ final class Engine
                 continue;
             }
 
+            if ($item['type'] === 'image') {
+                // Image atom — width известен, sep как для слова.
+                $atomWidth = $item['width'];
+                $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $effectiveDefault);
+                if ($currentLine !== [] && $currentWidth + $sepWidth + $atomWidth > $effectiveAvail) {
+                    $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
+                    $currentLine = [$item];
+                    $currentWidth = $atomWidth;
+                    $isFirstLine = false;
+                    $effectiveAvail = $availableWidth;
+                } else {
+                    $currentLine[] = $item;
+                    $currentWidth += $sepWidth + $atomWidth;
+                }
+
+                continue;
+            }
+
             $word = $item['text'] ?? '';
             $style = $item['style'] ?? $effectiveDefault;
             $wordWidth = $this->measureWidth($word, $style);
@@ -592,6 +610,18 @@ final class Engine
                     // Сохраняем trailing space (важно для "Page X of Y" layout'а).
                     $items[] = ['type' => 'word', 'text' => '', 'style' => $childStyle, 'link' => $currentLink];
                 }
+            } elseif ($child instanceof Image) {
+                // Phase 16: inline image — atom в line-break algorithm.
+                // Width/height из effectiveSizePt(); link tag propagates
+                // (image wrapped в Hyperlink → clickable image).
+                [$imgW, $imgH] = $child->effectiveSizePt();
+                $items[] = [
+                    'type' => 'image',
+                    'image' => $child->source,
+                    'width' => $imgW,
+                    'height' => $imgH,
+                    'link' => $currentLink,
+                ];
             }
         }
     }
@@ -701,15 +731,30 @@ final class Engine
             return;
         }
 
-        // Max font size в этой line determines line height.
+        // Max font size в этой line determines line height. Images
+        // также contribute через высоту (inline image увеличивает
+        // line-height если выше чем текст).
         $maxSizePt = 0;
+        $maxImageHeight = 0;
         foreach ($wordItems as $item) {
+            if (($item['type'] ?? null) === 'image') {
+                if ($item['height'] > $maxImageHeight) {
+                    $maxImageHeight = $item['height'];
+                }
+
+                continue;
+            }
             $size = ($item['style'] ?? $defaultStyle)->sizePt ?? $this->defaultFontSizePt;
             if ($size > $maxSizePt) {
                 $maxSizePt = $size;
             }
         }
-        $lineHeight = $maxSizePt * $this->effectiveLineHeightMult($p);
+        if ($maxSizePt === 0) {
+            // Line содержит только images — line-height = image-height.
+            $maxSizePt = $defaultStyle->sizePt ?? $this->defaultFontSizePt;
+        }
+        $textLineHeight = $maxSizePt * $this->effectiveLineHeightMult($p);
+        $lineHeight = max($textLineHeight, $maxImageHeight + 2);
 
         $this->ensureRoomFor($ctx, $lineHeight);
 
@@ -720,9 +765,13 @@ final class Engine
         $countWords = count($wordItems);
         for ($i = 0; $i < $countWords; $i++) {
             $item = $wordItems[$i];
-            $word = $item['text'] ?? '';
             $style = $item['style'] ?? $defaultStyle;
-            $totalContentWidth += $this->measureWidth($word, $style);
+            if (($item['type'] ?? null) === 'image') {
+                $totalContentWidth += $item['width'];
+            } else {
+                $word = $item['text'] ?? '';
+                $totalContentWidth += $this->measureWidth($word, $style);
+            }
             if ($i + 1 < $countWords) {
                 $totalContentWidth += $this->measureWidth(' ', $style);
             }
@@ -792,8 +841,37 @@ final class Engine
 
         for ($i = 0; $i < $countWords; $i++) {
             $item = $wordItems[$i];
-            $word = $item['text'] ?? '';
             $style = $item['style'] ?? $defaultStyle;
+
+            // Image atom: draw at baseline (image bottom = baseline).
+            if (($item['type'] ?? null) === 'image') {
+                $imgW = $item['width'];
+                $imgH = $item['height'];
+                $wordLink = $item['link'] ?? null;
+                if ($wordLink !== $linkRef) {
+                    $linkFlush();
+                    if ($wordLink !== null) {
+                        $linkRef = $wordLink;
+                        $linkStartX = $x;
+                    }
+                }
+                $ctx->currentPage->drawImage($item['image'], $x, $baselineY, $imgW, $imgH);
+                $x += $imgW;
+                if ($linkRef !== null) {
+                    $linkLastX = $x;
+                }
+                if ($i + 1 < $countWords) {
+                    $spaceWidth = $this->measureWidth(' ', $defaultStyle) + $extraPerGap;
+                    $x += $spaceWidth;
+                    if ($linkRef !== null && (($wordItems[$i + 1]['link'] ?? null) === $linkRef)) {
+                        $linkLastX = $x;
+                    }
+                }
+
+                continue;
+            }
+
+            $word = $item['text'] ?? '';
             $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
             $wordWidth = $this->measureWidth($word, $style);
 
