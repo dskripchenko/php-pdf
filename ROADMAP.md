@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 29 фаз закрыты (468 + 194 printable = 662 теста).
+**Текущий статус:** v1.1-dev — 30 фаз закрыты (485 + 194 printable = 679 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -14,7 +14,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 **v1.1 progress:** 25 (paragraph padding+bg), 26 (sup/sub sizing),
 27 (inline letter-spacing), 28 (border priority), 29 (image content
-dedup), 30 (image watermark), 31 (watermark opacity через ExtGState) closed.
+dedup), 30 (image watermark), 31 (watermark opacity через ExtGState),
+32 (Code 128 barcode) closed.
 
 ---
 
@@ -202,7 +203,9 @@ dedup), 30 (image watermark), 31 (watermark opacity через ExtGState) closed
 - SVG support (parse + rasterize или native PDF paths).
 - Math equations (LaTeX-like rendering).
 - Charts / graphs (line, bar, pie native).
-- Barcode / QR code primitives.
+- ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
+- Barcode formats: Code 128 Set A/C, EAN-13/UPC-A, DataMatrix.
+- QR Code (требует Reed-Solomon Q/M/L/H levels с нуля).
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
 - ~~Watermark opacity через ExtGState `/ca`~~ ✅ **Phase 31 closed** (5d588b9).
 
@@ -262,6 +265,7 @@ dedup), 30 (image watermark), 31 (watermark opacity через ExtGState) closed
 | 29 | Image content dedup by hash (v1.1) | 3 | f47c1f9 |
 | 30 | Image watermark (v1.1) | 7 | 197cc0b |
 | 31 | Watermark opacity через ExtGState (v1.1) | 13 | 5d588b9 |
+| 32 | Code 128 barcode primitive (v1.1) | 17 | 8aa8f6c |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
