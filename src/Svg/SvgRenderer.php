@@ -207,7 +207,71 @@ final class SvgRenderer
             self::applyCssToTree($xml, $cssRules);
         }
 
+        // Phase 74: resolve <use> references к <defs> children. Replace
+        // <use xlink:href="#id"> elements в place с cloned referenced
+        // element (с inherited attributes from <use>).
+        self::resolveUseReferences($xml);
+
         self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY);
+    }
+
+    /**
+     * Phase 74: Walk dom, replace each <use> с deep-clone of referenced
+     * element. xlink:href или href both supported.
+     */
+    private static function resolveUseReferences(\SimpleXMLElement $root): void
+    {
+        // Build id → element map.
+        $idMap = [];
+        foreach ($root->xpath('//*[@id]') ?: [] as $el) {
+            $idMap[(string) $el['id']] = $el;
+        }
+        if ($idMap === []) {
+            return;
+        }
+        // Find все use elements.
+        $uses = $root->xpath('//use') ?: [];
+        foreach ($uses as $use) {
+            $href = (string) ($use['href'] ?? $use->attributes('xlink', true)?->href ?? '');
+            if ($href === '' || ! str_starts_with($href, '#')) {
+                continue;
+            }
+            $refId = substr($href, 1);
+            if (! isset($idMap[$refId])) {
+                continue;
+            }
+            $ref = $idMap[$refId];
+            // Replace tag content in-place: convert <use> into cloned ref tag.
+            $newName = $ref->getName();
+            $dom = dom_import_simplexml($use);
+            $refDom = dom_import_simplexml($ref);
+            $clone = $refDom->cloneNode(true);
+            // Rename use → ref tag by replacing element.
+            $newEl = $dom->ownerDocument->createElement($newName);
+            // Copy attributes from ref (cloned) — first.
+            if ($clone instanceof \DOMElement) {
+                foreach ($clone->attributes as $attr) {
+                    /** @var \DOMAttr $attr */
+                    if ($attr->name === 'id') {
+                        continue;
+                    }
+                    $newEl->setAttribute($attr->name, $attr->value);
+                }
+                // Copy child nodes.
+                foreach ($clone->childNodes as $childNode) {
+                    $newEl->appendChild($childNode->cloneNode(true));
+                }
+            }
+            // Override с use's attributes (use x/y/transform overrides ref's).
+            foreach ($dom->attributes as $attr) {
+                /** @var \DOMAttr $attr */
+                if (in_array($attr->name, ['href', 'xlink:href'], true)) {
+                    continue;
+                }
+                $newEl->setAttribute($attr->name, $attr->value);
+            }
+            $dom->parentNode?->replaceChild($newEl, $dom);
+        }
     }
 
     /**
@@ -261,6 +325,8 @@ final class SvgRenderer
                 'path' => self::renderPath($child, $page, $elTx, $elTy, $scaleX),
                 'text' => self::renderText($child, $page, $elTx, $elTy, $scaleX),
                 'g' => self::walkElement($child, $page, $elTx, $elTy, $scaleX, $scaleY),
+                'defs' => null, // Phase 74: <defs> children referenced by <use>, не рендерятся напрямую.
+                'style' => null, // Phase 73: <style> parsed separately, не рендерится.
                 default => null,
             };
         }
