@@ -26,11 +26,26 @@ final readonly class Document
      * @param  array<string, string>  $metadata  PDF /Info dict fields
      *                                            (Title, Author, Subject,
      *                                            Keywords, Creator, Producer).
+     * @param  list<Section>  $additionalSections  Phase 34: extra sections,
+     *                                              rendered after primary
+     *                                              section. Каждая создаёт
+     *                                              forced page break + переход
+     *                                              на её PageSetup / header /
+     *                                              footer / watermark.
      */
     public function __construct(
         public Section $section,
         public array $metadata = [],
+        public array $additionalSections = [],
     ) {}
+
+    /**
+     * @return list<Section>
+     */
+    public function sections(): array
+    {
+        return [$this->section, ...$this->additionalSections];
+    }
 
     public function toBytes(?Engine $engine = null): string
     {

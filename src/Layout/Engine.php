@@ -174,14 +174,16 @@ final class Engine
 
     private function renderOnce(AstDocument $document): PdfDocument
     {
-        $section = $document->section;
-        $this->currentSection = $section;
-        $pageSetup = $section->pageSetup;
+        // Phase 34: iterate через все sections. First section initializes
+        // PDF document; subsequent sections — force new page с её PageSetup.
+        $sections = $document->sections();
+        $primary = $sections[0];
+        $primarySetup = $primary->pageSetup;
 
         $pdf = new PdfDocument(
-            $pageSetup->paperSize,
-            $pageSetup->orientation,
-            $pageSetup->customDimensionsPt,
+            $primarySetup->paperSize,
+            $primarySetup->orientation,
+            $primarySetup->customDimensionsPt,
             $this->compressStreams,
         );
         $page = $pdf->addPage();
@@ -189,19 +191,34 @@ final class Engine
         $context = new LayoutContext(
             pdf: $pdf,
             currentPage: $page,
-            cursorY: $pageSetup->dimensions()[1] - $pageSetup->margins->topPt,
-            leftX: $pageSetup->leftXForPage(1),
-            contentWidth: $pageSetup->contentWidthPtForPage(1),
-            bottomY: $pageSetup->margins->bottomPt,
-            topY: $pageSetup->dimensions()[1] - $pageSetup->margins->topPt,
-            pageSetup: $pageSetup,
+            cursorY: $primarySetup->dimensions()[1] - $primarySetup->margins->topPt,
+            leftX: $primarySetup->leftXForPage(1),
+            contentWidth: $primarySetup->contentWidthPtForPage(1),
+            bottomY: $primarySetup->margins->bottomPt,
+            topY: $primarySetup->dimensions()[1] - $primarySetup->margins->topPt,
+            pageSetup: $primarySetup,
         );
 
-        // Render header/footer на first page.
-        $this->renderHeaderFooter($context);
+        foreach ($sections as $idx => $section) {
+            $this->currentSection = $section;
+            if ($idx > 0) {
+                // Section break — force new page с new PageSetup.
+                $context->pageSetup = $section->pageSetup;
+                $newPage = $pdf->addPage(
+                    $section->pageSetup->paperSize,
+                    $section->pageSetup->orientation,
+                    $section->pageSetup->customDimensionsPt,
+                );
+                $context->currentPage = $newPage;
+                $this->applyPerPageMargins($context);
+                $context->cursorY = $context->topY;
+            }
+            // Render header/footer на новой first page section'а.
+            $this->renderHeaderFooter($context);
 
-        foreach ($section->body as $block) {
-            $this->renderBlock($block, $context);
+            foreach ($section->body as $block) {
+                $this->renderBlock($block, $context);
+            }
         }
 
         $this->currentSection = null;
@@ -225,7 +242,15 @@ final class Engine
 
     private function forcePageBreak(LayoutContext $ctx): void
     {
-        $ctx->currentPage = $ctx->pdf->addPage();
+        // Phase 34: новая page внутри section должна сохранить её
+        // PageSetup (paper, orientation, customDimensions), даже если
+        // у document есть другая default orientation.
+        $setup = $ctx->pageSetup;
+        $ctx->currentPage = $ctx->pdf->addPage(
+            $setup->paperSize,
+            $setup->orientation,
+            $setup->customDimensionsPt,
+        );
         $this->applyPerPageMargins($ctx);
         $ctx->cursorY = $ctx->topY;
         $this->renderHeaderFooter($ctx);
