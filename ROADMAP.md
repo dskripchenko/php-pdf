@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.16 — 15 фаз закрыты (413 тестов, 917 assertions).
+**Текущий статус:** v0.17 — 16 фаз закрыты (419 тестов, 929 assertions).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -62,12 +62,14 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - 60% fill-ratio threshold — короткие lines не stretch'аются нелепо.
 - Tests: 6 в JustifyAlignmentTest.
 
-**Phase 16: Inline images (text wrap)**
-- Image AST элемент сейчас всегда block-level. `<img>` внутри
-  параграфа становится отдельным блоком (Image при mapAsBlock).
-- Нужно: inline image flow с baseline alignment + размерами в pt/px.
-- Сложность средняя: line-break algorithm должен учитывать image как
-  inline atom с width/height; baseline mapping.
+**Phase 16: Inline images (text wrap)** ✅ DONE
+- ~~Image AST всегда block-level.~~
+- Done (a084140): Image implements BlockElement AND InlineElement.
+  Engine routing: top-level → block (Phase 4 behavior), внутри paragraph
+  → inline atom. tokenizeChildren создаёт 'image' atom; emitLine рендерит
+  drawImage(x, baselineY, w, h) с baseline-aligned image bottom; line-
+  height = max(text, image+2pt buffer). Hyperlink-wrapped image → clickable.
+- Tests: 6 в InlineImageTest.
 
 **Phase 17: CSS `<style>` блоки + классы**
 - Сейчас `HtmlParser` парсит только inline `style="..."`. `<style>`
@@ -207,8 +209,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 13 | Custom font registration (FontProvider + Liberation bundle) | 10 + 8 + 2 | 4dc641c (php-pdf) + af2efea (fonts) + 4bc1cd9 (printable) |
 | 14 | PDF compression (FlateDecode content + font streams) | 5 | ba25389 |
 | 15 | Justify alignment (word-spacing distribution) | 6 | 8e45e75 |
+| 16 | Inline images (text wrap, baseline alignment) | 6 | a084140 |
 
-**Итого:** 413 тестов в php-pdf, 191 теста в printable, 8 в Liberation package.
+**Итого:** 419 тестов в php-pdf, 191 теста в printable, 8 в Liberation package.
 
 ---
 
