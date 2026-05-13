@@ -441,6 +441,10 @@ final class Page
         bool $readOnly = false,
         array $options = [],
         array $radioWidgets = [],
+        ?string $validateScript = null,
+        ?string $calculateScript = null,
+        ?string $formatScript = null,
+        ?string $keystrokeScript = null,
     ): self {
         $this->formFields[] = [
             'type' => $type,
@@ -455,6 +459,10 @@ final class Page
             'readOnly' => $readOnly,
             'options' => $options,
             'radioWidgets' => $radioWidgets,
+            'validateScript' => $validateScript,
+            'calculateScript' => $calculateScript,
+            'formatScript' => $formatScript,
+            'keystrokeScript' => $keystrokeScript,
         ];
 
         return $this;

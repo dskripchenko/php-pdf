@@ -1404,6 +1404,10 @@ final class Engine
             required: $field->required,
             readOnly: $field->readOnly,
             options: $field->options,
+            validateScript: $field->validateScript,
+            calculateScript: $field->calculateScript,
+            formatScript: $field->formatScript,
+            keystrokeScript: $field->keystrokeScript,
         );
 
         $ctx->cursorY -= $h;

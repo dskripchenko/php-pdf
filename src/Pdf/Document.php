@@ -495,8 +495,8 @@ final class Document
                 }
                 $annotIds[] = $writer->addObject($body);
             }
-            // Phase 43+46: AcroForm widgets — emit widget annotations +
-            // collect field object IDs для AcroForm.Fields array.
+            // Phase 43+46+67: AcroForm widgets — emit widget annotations +
+            // optional /AA JavaScript actions + collect field object IDs.
             foreach ($page->formFields() as $field) {
                 $tooltipPart = $field['tooltip'] !== null
                     ? ' /TU '.$this->pdfString($field['tooltip'])
@@ -507,7 +507,6 @@ final class Document
                     [$parentId, $childIds] = $this->emitRadioGroupFields(
                         $writer, $pageIds[$i], $field, $namePart, $tooltipPart,
                     );
-                    // Parent объект in /Fields; children in page /Annots.
                     foreach ($childIds as $cid) {
                         $annotIds[] = $cid;
                     }
@@ -516,7 +515,10 @@ final class Document
                     continue;
                 }
 
-                $body = $this->buildSimpleFieldObject($field, $pageIds[$i], $namePart, $tooltipPart);
+                // Phase 67: emit JavaScript action objects + /AA dict ref.
+                $aaPart = $this->emitFieldActions($writer, $field);
+
+                $body = $this->buildSimpleFieldObject($field, $pageIds[$i], $namePart, $tooltipPart, $aaPart);
                 $fieldId = $writer->addObject($body);
                 $annotIds[] = $fieldId;
                 $this->collectedFormFieldIds[] = $fieldId;
@@ -900,11 +902,45 @@ final class Document
     }
 
     /**
+     * Phase 67: emit JavaScript action objects + return /AA dict string.
+     * Returns empty string если no actions defined.
+     *
+     * @param  array<string, mixed>  $field
+     */
+    private function emitFieldActions(Writer $writer, array $field): string
+    {
+        $entries = [];
+        $scriptMap = [
+            'K' => 'keystrokeScript',
+            'V' => 'validateScript',
+            'C' => 'calculateScript',
+            'F' => 'formatScript',
+        ];
+        foreach ($scriptMap as $entry => $key) {
+            $script = $field[$key] ?? null;
+            if ($script === null) {
+                continue;
+            }
+            $actionBody = sprintf(
+                '<< /Type /Action /S /JavaScript /JS %s >>',
+                $this->pdfString($script),
+            );
+            $actionId = $writer->addObject($actionBody);
+            $entries[] = "/$entry $actionId 0 R";
+        }
+        if ($entries === []) {
+            return '';
+        }
+
+        return ' /AA << '.implode(' ', $entries).' >>';
+    }
+
+    /**
      * Phase 43+46: build single-widget AcroForm field object body.
      *
      * @param  array<string, mixed>  $field
      */
-    private function buildSimpleFieldObject(array $field, int $pageId, string $namePart, string $tooltipPart): string
+    private function buildSimpleFieldObject(array $field, int $pageId, string $namePart, string $tooltipPart, string $aaPart = ''): string
     {
         $rect = sprintf(
             '[%s %s %s %s]',
@@ -939,8 +975,8 @@ final class Document
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
-                .'%s%s%s /Ff %d /P %d 0 R >>',
-                $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId,
+                .'%s%s%s /Ff %d /P %d 0 R%s >>',
+                $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId, $aaPart,
             );
         }
         if ($type === 'checkbox') {
@@ -951,18 +987,17 @@ final class Document
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
-                .'%s%s%s /Ff %d /P %d 0 R /AS %s >>',
+                .'%s%s%s /Ff %d /P %d 0 R /AS %s%s >>',
                 $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId,
                 $isChecked ? '/Yes' : '/Off',
+                $aaPart,
             );
         }
         if ($type === 'signature') {
-            // Phase 56: Signature field — placeholder без real signing.
-            // /V можно set later through external signing tools.
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Sig /Rect %s '
-                .'%s%s /Ff %d /P %d 0 R >>',
-                $rect, $namePart, $tooltipPart, $flags, $pageId,
+                .'%s%s /Ff %d /P %d 0 R%s >>',
+                $rect, $namePart, $tooltipPart, $flags, $pageId, $aaPart,
             );
         }
         if ($type === 'combo' || $type === 'list') {
@@ -974,8 +1009,8 @@ final class Document
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s '
-                .'%s%s%s /Opt %s /Ff %d /P %d 0 R >>',
-                $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId,
+                .'%s%s%s /Opt %s /Ff %d /P %d 0 R%s >>',
+                $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId, $aaPart,
             );
         }
         throw new \LogicException("Unsupported field type: $type");

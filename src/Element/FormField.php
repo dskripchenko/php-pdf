@@ -63,6 +63,16 @@ final readonly class FormField implements BlockElement
         public bool $required = false,
         public bool $readOnly = false,
         public array $options = [],
+        // Phase 67: AcroForm JavaScript additional actions (/AA dict).
+        // Each — optional script run on event:
+        //  - validateScript: run on /V (Validate) — return false to reject input.
+        //  - calculateScript: run on /C (Calculate) — derive value from другими fields.
+        //  - formatScript: run on /F (Format) — modify display value.
+        //  - keystrokeScript: run on /K (Keystroke) — per-keypress filter.
+        public ?string $validateScript = null,
+        public ?string $calculateScript = null,
+        public ?string $formatScript = null,
+        public ?string $keystrokeScript = null,
     ) {
         if (! in_array($type, self::SUPPORTED_TYPES, true)) {
             throw new \InvalidArgumentException("Unsupported FormField type: $type");
