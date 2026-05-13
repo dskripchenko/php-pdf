@@ -600,6 +600,11 @@ final class Engine
             }
         }
 
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $ac->xAxisTitle, $ac->yAxisTitle, $ac->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
+
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $ac->spaceAfterPt;
     }
@@ -1180,6 +1185,11 @@ final class Engine
             }
         }
 
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $lc->xAxisTitle, $lc->yAxisTitle, $lc->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
+
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $lc->spaceAfterPt;
     }
@@ -1372,8 +1382,43 @@ final class Engine
             $this->chartText($ctx->currentPage, $label, $labelX, $plotBottom - $bc->axisLabelSizePt - 2, $bc->axisLabelSizePt);
         }
 
+        // Phase 70: axis titles.
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $bc->xAxisTitle, $bc->yAxisTitle, $bc->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
+
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 70: draw axis titles. xTitle centered below x-axis labels;
+     * yTitle rotated 90° counter-clockwise centered left of y-axis labels.
+     */
+    private function drawChartAxisTitles(
+        \Dskripchenko\PhpPdf\Pdf\Page $page,
+        ?string $xTitle, ?string $yTitle, float $sizePt,
+        float $plotLeft, float $plotRight, float $plotBottom, float $plotTop,
+    ): void {
+        $charWidth = $sizePt * 0.5;
+        if ($xTitle !== null && $xTitle !== '') {
+            $w = mb_strlen($xTitle, 'UTF-8') * $charWidth;
+            $cx = $plotLeft + ($plotRight - $plotLeft - $w) / 2;
+            $cy = $plotBottom - $sizePt - 14.0;
+            $this->chartText($page, $xTitle, $cx, $cy, $sizePt);
+        }
+        if ($yTitle !== null && $yTitle !== '') {
+            $w = mb_strlen($yTitle, 'UTF-8') * $charWidth;
+            // Rotated 90° counter-clockwise.
+            $cx = $plotLeft - 22.0;
+            $cy = $plotBottom + ($plotTop - $plotBottom - $w) / 2;
+            if ($this->defaultFont !== null) {
+                $page->drawWatermarkEmbedded($yTitle, $cx, $cy, $this->defaultFont, $sizePt, M_PI / 2, 0, 0, 0);
+            } else {
+                $page->drawWatermark($yTitle, $cx, $cy, $this->fallbackStandard, $sizePt, M_PI / 2, 0, 0, 0);
+            }
+        }
     }
 
     /**

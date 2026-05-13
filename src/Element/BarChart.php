@@ -38,6 +38,9 @@ final readonly class BarChart implements BlockElement
         // Phase 68: optional fixed y-axis range. null = auto (max value).
         public ?float $yMin = null,
         public ?float $yMax = null,
+        public ?string $xAxisTitle = null,
+        public ?string $yAxisTitle = null,
+        public float $axisTitleSizePt = 9.0,
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
