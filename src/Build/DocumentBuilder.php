@@ -6,6 +6,8 @@ namespace Dskripchenko\PhpPdf\Build;
 
 use Closure;
 use Dskripchenko\PhpPdf\Document;
+use Dskripchenko\PhpPdf\Element\Barcode;
+use Dskripchenko\PhpPdf\Element\BarcodeFormat;
 use Dskripchenko\PhpPdf\Element\BlockElement;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -318,6 +320,38 @@ final class DocumentBuilder
         $b = new TableBuilder;
         $content($b);
         $this->body[] = $b->build();
+
+        return $this;
+    }
+
+    /**
+     * Phase 32: Add Code 128 barcode (или другой supported format).
+     *
+     * \$widthPt null → auto: 1pt × moduleCount. Typical SKU barcode
+     * (~10 chars) при 1pt-per-module = 150-200pt wide.
+     */
+    public function barcode(
+        string $value,
+        BarcodeFormat $format = BarcodeFormat::Code128,
+        ?float $widthPt = null,
+        float $heightPt = 40.0,
+        bool $showText = true,
+        float $textSizePt = 8.0,
+        Alignment $alignment = Alignment::Start,
+        float $spaceBeforePt = 0,
+        float $spaceAfterPt = 0,
+    ): self {
+        $this->body[] = new Barcode(
+            value: $value,
+            format: $format,
+            widthPt: $widthPt,
+            heightPt: $heightPt,
+            showText: $showText,
+            textSizePt: $textSizePt,
+            alignment: $alignment,
+            spaceBeforePt: $spaceBeforePt,
+            spaceAfterPt: $spaceAfterPt,
+        );
 
         return $this;
     }

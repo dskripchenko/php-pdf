@@ -11,6 +11,7 @@ use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Field;
 use Dskripchenko\PhpPdf\Font\FontProvider;
 use Dskripchenko\PhpPdf\Font\PdfFontResolver;
+use Dskripchenko\PhpPdf\Element\Barcode;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -217,6 +218,7 @@ final class Engine
             $block instanceof Image => $this->renderImage($block, $ctx),
             $block instanceof Table => $this->renderTable($block, $ctx),
             $block instanceof ListNode => $this->renderListNode($block, $ctx, 0),
+            $block instanceof Barcode => $this->renderBarcode($block, $ctx),
             default => null,
         };
     }
@@ -451,6 +453,101 @@ final class Engine
      * затем рендерим вверху новой page. Если image больше contentHeight'а —
      * скейлим down пропорционально (TODO Phase L; пока ассертируем).
      */
+    /**
+     * Phase 32: Code 128 barcode block.
+     *
+     * Algorithm:
+     *  1. Encode value через Code128Encoder → list<bool> modules (с quiet
+     *     zone).
+     *  2. Module width = barcodeWidth / moduleCount. Default barcode width
+     *     = moduleCount × 1pt (rough; обычно нужен tweak в caller'е).
+     *  3. Draw bars: каждый contiguous run of black modules → fillRect.
+     *  4. Optional caption under bars (human-readable).
+     */
+    private function renderBarcode(Barcode $bc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $bc->spaceBeforePt;
+
+        // Encode.
+        $encoder = new \Dskripchenko\PhpPdf\Barcode\Code128Encoder($bc->value);
+        $modules = $encoder->modulesWithQuietZone(10);
+        $moduleCount = count($modules);
+
+        // Width / height.
+        $totalWidth = $bc->widthPt ?? (float) $moduleCount;
+        $totalWidth = min($totalWidth, $ctx->contentWidth);
+        $moduleWidth = $totalWidth / $moduleCount;
+        $barsHeight = $bc->heightPt;
+
+        // Caption math.
+        $captionHeight = 0;
+        if ($bc->showText) {
+            $captionHeight = $bc->textSizePt + 2.0; // text + small gap.
+        }
+
+        $totalHeight = $barsHeight + $captionHeight;
+        $this->ensureRoomFor($ctx, $totalHeight);
+
+        // X-position по alignment.
+        $blockX = match ($bc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalWidth) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalWidth,
+            default => $ctx->leftX,
+        };
+
+        // Draw bars: collapse contiguous black runs в single fillRect.
+        $yBottom = $ctx->cursorY - $barsHeight;
+        $runStart = null;
+        for ($i = 0; $i < $moduleCount; $i++) {
+            if ($modules[$i]) {
+                if ($runStart === null) {
+                    $runStart = $i;
+                }
+            } elseif ($runStart !== null) {
+                $w = ($i - $runStart) * $moduleWidth;
+                $ctx->currentPage->fillRect(
+                    $blockX + $runStart * $moduleWidth, $yBottom, $w, $barsHeight,
+                    0, 0, 0,
+                );
+                $runStart = null;
+            }
+        }
+        if ($runStart !== null) {
+            $w = ($moduleCount - $runStart) * $moduleWidth;
+            $ctx->currentPage->fillRect(
+                $blockX + $runStart * $moduleWidth, $yBottom, $w, $barsHeight,
+                0, 0, 0,
+            );
+        }
+
+        // Caption (human-readable). Используем base-14 Helvetica либо
+        // embedded font если задан. Code 128 input — printable ASCII,
+        // safely encoded WinAnsi → Standard font работает.
+        if ($bc->showText) {
+            $captionY = $yBottom - $bc->textSizePt - 1.0;
+            // Estimate caption width для centering.
+            $captionWidth = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($bc->value)
+                : mb_strlen($bc->value, 'UTF-8') * $bc->textSizePt * 0.5;
+            $captionX = $blockX + ($totalWidth - $captionWidth) / 2;
+
+            if ($this->defaultFont !== null) {
+                $ctx->currentPage->showEmbeddedText(
+                    $bc->value, $captionX, $captionY,
+                    $this->defaultFont, $bc->textSizePt,
+                );
+            } else {
+                $ctx->currentPage->showText(
+                    $bc->value, $captionX, $captionY,
+                    $this->fallbackStandard, $bc->textSizePt,
+                );
+            }
+        }
+
+        $ctx->cursorY -= $totalHeight;
+        $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
     private function renderImage(Image $img, LayoutContext $ctx): void
     {
         $ctx->cursorY -= $img->spaceBeforePt;
