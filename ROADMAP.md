@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 34 фаз закрыто (521 + 194 printable = 715 тестов).
+**Текущий статус:** v1.1-dev — 39 фаз закрыто (565 + 194 printable = 759 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,11 +12,14 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25 (paragraph padding+bg), 26 (sup/sub sizing),
-27 (inline letter-spacing), 28 (border priority), 29 (image content
-dedup), 30 (image watermark), 31 (watermark opacity через ExtGState),
-32 (Code 128 barcode), 33 (soft hyphen &shy;), 34 (multi-section docs),
-35 (EAN-13 / UPC-A barcode), 36 (QR Code byte-mode ECC L V1-10) closed.
+**v1.1 progress:** 25-41 closed:
+ - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
+ - 28 border priority, 29 image content dedup, 30 image watermark,
+ - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
+ - 33 soft hyphen, 34 multi-section docs,
+ - 35 EAN-13/UPC-A barcode, 36 QR Code byte-mode V1-10,
+ - 37 QR ECC M/Q/H levels, 38 QR Numeric/Alphanumeric encoding modes,
+ - 39 multi-column layout, 40 footnotes/endnotes, 41 PDF encryption V2 R3.
 
 ---
 
@@ -207,8 +210,11 @@ dedup), 30 (image watermark), 31 (watermark opacity через ExtGState),
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
 - ~~QR Code (Reed-Solomon ECC L V1-10 byte mode)~~ ✅ **Phase 36 closed** (b6521aa).
+- ~~QR ECC M/Q/H levels (V1-V4 full, V5+ deferred)~~ ✅ **Phase 37 closed** (12802e9).
+- ~~QR Numeric/Alphanumeric encoding modes~~ ✅ **Phase 38 closed** (8e5c680).
 - Barcode formats: Code 128 Set A/C, DataMatrix, PDF417, Aztec.
-- QR extensions: ECC M/Q/H, Numeric/Alphanumeric/Kanji modes, V11-40, auto best-mask.
+- QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
+  auto best-mask selection.
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
 - ~~Watermark opacity через ExtGState `/ca`~~ ✅ **Phase 31 closed** (5d588b9).
 
@@ -273,6 +279,11 @@ dedup), 30 (image watermark), 31 (watermark opacity через ExtGState),
 | 34 | Multi-section documents (v1.1) | 8 | b57ddb4 |
 | 35 | EAN-13 / UPC-A barcode (v1.1) | 11 | f26dcd3 |
 | 36 | QR Code byte-mode ECC L V1-10 (v1.1) | 12 | b6521aa |
+| 37 | QR ECC M/Q/H levels (V1-V4) (v1.1) | 9 | 12802e9 |
+| 38 | QR Numeric / Alphanumeric encoding modes (v1.1) | 14 | 8e5c680 |
+| 39 | Multi-column layout (ColumnSet) (v1.1) | 7 | 5180a42 |
+| 40 | Footnotes / endnotes (v1.1) | 6 | a18a70c |
+| 41 | PDF encryption V2 R3 RC4-128 (v1.1) | 8 | c3d7743 |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
