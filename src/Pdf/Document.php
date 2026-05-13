@@ -456,6 +456,17 @@ final class Document
                 $resourcesExtGState .= sprintf(' /%s %d 0 R', $name, $gsId);
             }
 
+            // Phase 82: Pattern objects (shading patterns) — emit Function +
+            // Shading + Pattern objects per pattern, add /Pattern entry в
+            // Page /Resources.
+            $resourcesPattern = '';
+            foreach ($page->patterns() as $name => $pattern) {
+                $funcId = $writer->addObject($pattern->shading->function->toDictBody());
+                $shadingId = $writer->addObject($pattern->shading->toDictBody($funcId));
+                $patternId = $writer->addObject($pattern->toDictBody($shadingId));
+                $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $patternId);
+            }
+
             $resourcesParts = [];
             if ($resourcesFont !== '') {
                 $resourcesParts[] = '/Font <<'.$resourcesFont.' >>';
@@ -465,6 +476,9 @@ final class Document
             }
             if ($resourcesExtGState !== '') {
                 $resourcesParts[] = '/ExtGState <<'.$resourcesExtGState.' >>';
+            }
+            if ($resourcesPattern !== '') {
+                $resourcesParts[] = '/Pattern <<'.$resourcesPattern.' >>';
             }
             $resourcesDict = $resourcesParts === []
                 ? '<< >>'

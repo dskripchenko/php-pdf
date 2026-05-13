@@ -46,6 +46,11 @@ final class Page
     /** Phase 48: per-page MCID counter (monotone increment). */
     private int $mcidCounter = 0;
 
+    /** @var array<string, PdfPattern> name → pattern (Phase 82) */
+    private array $patterns = [];
+
+    private int $patternCounter = 0;
+
     public function nextMcid(): int
     {
         return $this->mcidCounter++;
@@ -213,6 +218,37 @@ final class Page
         $clamped = max(0.0, $opacity);
 
         return $this->registerExtGState(new PdfExtGState(fillOpacity: $clamped, strokeOpacity: $clamped));
+    }
+
+    /**
+     * Phase 82: register shading pattern, return resource name.
+     */
+    public function registerShadingPattern(PdfPattern $pattern): string
+    {
+        $name = 'P'.(++$this->patternCounter);
+        $this->patterns[$name] = $pattern;
+
+        return $name;
+    }
+
+    /**
+     * @return array<string, PdfPattern>
+     *
+     * @internal
+     */
+    public function patterns(): array
+    {
+        return $this->patterns;
+    }
+
+    /**
+     * Phase 82: fill rectangle с shading pattern.
+     */
+    public function fillRectWithPattern(float $x, float $y, float $w, float $h, string $patternName): self
+    {
+        $this->stream->fillRectWithPattern($x, $y, $w, $h, $patternName);
+
+        return $this;
     }
 
     /**

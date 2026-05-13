@@ -239,6 +239,26 @@ final class ContentStream
     }
 
     /**
+     * Phase 82: fill rectangle с shading pattern. Operators:
+     *  /Pattern cs    — switch к pattern color space.
+     *  /Pn scn        — use pattern resource named Pn.
+     *  x y w h re f   — rect path + fill.
+     */
+    public function fillRectWithPattern(float $x, float $y, float $w, float $h, string $patternName): self
+    {
+        $this->body .= "q\n";
+        $this->body .= "/Pattern cs\n";
+        $this->body .= sprintf("/%s scn\n", $patternName);
+        $this->body .= sprintf("%s %s %s %s re\nf\n",
+            $this->formatNumber($x), $this->formatNumber($y),
+            $this->formatNumber($w), $this->formatNumber($h),
+        );
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 48: Begin tagged marked content. Pairs с emitEndMarkedContent().
      */
     public function emitBeginMarkedContent(string $tag, int $mcid): self

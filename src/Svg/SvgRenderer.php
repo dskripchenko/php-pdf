@@ -228,12 +228,65 @@ final class SvgRenderer
             self::applyCssToTree($xml, $cssRules);
         }
 
-        // Phase 74: resolve <use> references к <defs> children. Replace
-        // <use xlink:href="#id"> elements в place с cloned referenced
-        // element (с inherited attributes from <use>).
+        // Phase 74: resolve <use> references к <defs> children.
         self::resolveUseReferences($xml);
 
-        self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY);
+        // Phase 82: collect linearGradient definitions (id → params).
+        $gradients = self::parseGradients($xml);
+
+        self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY, $gradients);
+    }
+
+    /**
+     * Phase 82: parse all <linearGradient> elements в SVG → id-keyed map.
+     *
+     * @return array<string, array{type: 'linear', x1: float, y1: float, x2: float, y2: float, stops: list<array{offset: float, color: array{0:float,1:float,2:float}}>}>
+     */
+    private static function parseGradients(\SimpleXMLElement $root): array
+    {
+        $out = [];
+        foreach ($root->xpath('//linearGradient') ?: [] as $g) {
+            $id = (string) ($g['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $x1 = self::parsePctOrFloat((string) ($g['x1'] ?? '0'));
+            $y1 = self::parsePctOrFloat((string) ($g['y1'] ?? '0'));
+            $x2 = self::parsePctOrFloat((string) ($g['x2'] ?? '1'));
+            $y2 = self::parsePctOrFloat((string) ($g['y2'] ?? '0'));
+            $stops = [];
+            foreach ($g->children() as $stop) {
+                if ($stop->getName() !== 'stop') {
+                    continue;
+                }
+                $offset = self::parsePctOrFloat((string) ($stop['offset'] ?? '0'));
+                $stopColorAttr = (string) ($stop['stop-color'] ?? '#000');
+                // Parse style="stop-color: #..." attribute if present.
+                $style = (string) ($stop['style'] ?? '');
+                if ($style !== '' && preg_match('@stop-color\s*:\s*([^;]+)@', $style, $m)) {
+                    $stopColorAttr = trim($m[1]);
+                }
+                [$r, $g_, $b, $hasColor] = self::parseColor($stopColorAttr);
+                $stops[] = ['offset' => $offset, 'color' => [$r, $g_, $b]];
+            }
+            $out[$id] = [
+                'type' => 'linear',
+                'x1' => $x1, 'y1' => $y1, 'x2' => $x2, 'y2' => $y2,
+                'stops' => $stops,
+            ];
+        }
+
+        return $out;
+    }
+
+    private static function parsePctOrFloat(string $s): float
+    {
+        $s = trim($s);
+        if (str_ends_with($s, '%')) {
+            return ((float) substr($s, 0, -1)) / 100;
+        }
+
+        return (float) $s;
     }
 
     /**
@@ -312,8 +365,14 @@ final class SvgRenderer
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
      */
-    private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY): void
+    /**
+     * @var array<string, array<string, mixed>>
+     */
+    private static array $currentGradients = [];
+
+    private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY, array $gradients = []): void
     {
+        self::$currentGradients = $gradients;
         foreach ($el->children() as $child) {
             // Phase 59: apply element-level transform (если есть).
             $elTx = $tx;
@@ -780,11 +839,24 @@ final class SvgRenderer
         $y = (float) ($el['y'] ?? 0);
         $w = (float) ($el['width'] ?? 0);
         $h = (float) ($el['height'] ?? 0);
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
+
+        // Phase 82: detect fill="url(#id)" → use shading pattern.
+        $fillAttr = (string) ($el['fill'] ?? '#000');
+        $patternName = null;
+        if (preg_match('@^url\(#([^)]+)\)$@', trim($fillAttr), $m)) {
+            $gradId = $m[1];
+            if (isset(self::$currentGradients[$gradId])) {
+                $patternName = self::createPatternFromGradient(
+                    $page, self::$currentGradients[$gradId],
+                    $tx($x), $ty($y + $h), $w * $scaleX, $h * $scaleY,
+                );
+            }
+        }
+
+        [$fr, $fg, $fb, $hasFill] = self::parseColor($fillAttr);
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
-        // Phase 81: opacity.
         $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
         $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
         $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
@@ -794,14 +866,52 @@ final class SvgRenderer
         $ph = $h * $scaleY;
         $py = $ty($y + $h);
 
-        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $px, $py, $pw, $ph, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
-            if ($hasFill) {
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $px, $py, $pw, $ph, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX, $patternName): void {
+            if ($patternName !== null) {
+                $page->fillRectWithPattern($px, $py, $pw, $ph, $patternName);
+            } elseif ($hasFill) {
                 $page->fillRect($px, $py, $pw, $ph, $fr, $fg, $fb);
             }
             if ($hasStroke) {
                 $page->strokeRect($px, $py, $pw, $ph, $sw * $scaleX, $sr, $sg, $sb);
             }
         });
+    }
+
+    /**
+     * Phase 82: Create + register PDF shading pattern from SVG gradient.
+     *
+     * @param  array<string, mixed>  $gradient
+     */
+    private static function createPatternFromGradient(
+        Page $page, array $gradient,
+        float $rectX, float $rectY, float $rectW, float $rectH,
+    ): ?string {
+        $stops = $gradient['stops'];
+        if (count($stops) < 2) {
+            return null;
+        }
+        // Map gradient (0..1) coordinates к rect bounds в PDF space.
+        $x1 = $rectX + $gradient['x1'] * $rectW;
+        $y1 = $rectY + $rectH - $gradient['y1'] * $rectH; // flip y
+        $x2 = $rectX + $gradient['x2'] * $rectW;
+        $y2 = $rectY + $rectH - $gradient['y2'] * $rectH;
+
+        // Use first и last stops для 2-stop linear (multi-stop deferred).
+        $first = $stops[0];
+        $last = $stops[count($stops) - 1];
+        $function = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
+            c0: $first['color'],
+            c1: $last['color'],
+        );
+        $shading = new \Dskripchenko\PhpPdf\Pdf\PdfShading(
+            shadingType: \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL,
+            coords: [$x1, $y1, $x2, $y2],
+            function: $function,
+        );
+        $pattern = new \Dskripchenko\PhpPdf\Pdf\PdfPattern($shading);
+
+        return $page->registerShadingPattern($pattern);
     }
 
     /**
