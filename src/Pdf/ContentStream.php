@@ -161,6 +161,84 @@ final class ContentStream
      * 0..1, line width в pt.
      */
     /**
+     * Phase 53: Generic path emission для SVG path support.
+     *
+     * Commands tuple per entry:
+     *  - ['M', x, y]
+     *  - ['L', x, y]
+     *  - ['C', x1, y1, x2, y2, x3, y3]  cubic Bezier
+     *  - 'Z' close
+     *
+     * \$mode: 'fill' | 'stroke' | 'fillstroke'.
+     *
+     * @param  list<array|string>  $commands
+     * @param  array{r: float, g: float, b: float}|null  $fillRgb
+     * @param  array{r: float, g: float, b: float}|null  $strokeRgb
+     */
+    public function emitPath(
+        array $commands,
+        string $mode = 'fill',
+        ?array $fillRgb = null,
+        ?array $strokeRgb = null,
+        float $lineWidthPt = 1.0,
+    ): self {
+        if ($commands === []) {
+            return $this;
+        }
+        $this->body .= "q\n";
+        if ($fillRgb !== null && ($mode === 'fill' || $mode === 'fillstroke')) {
+            $this->body .= sprintf("%s %s %s rg\n",
+                $this->formatNumber($fillRgb['r']),
+                $this->formatNumber($fillRgb['g']),
+                $this->formatNumber($fillRgb['b']),
+            );
+        }
+        if ($strokeRgb !== null && ($mode === 'stroke' || $mode === 'fillstroke')) {
+            $this->body .= sprintf("%s w\n", $this->formatNumber($lineWidthPt));
+            $this->body .= sprintf("%s %s %s RG\n",
+                $this->formatNumber($strokeRgb['r']),
+                $this->formatNumber($strokeRgb['g']),
+                $this->formatNumber($strokeRgb['b']),
+            );
+        }
+        foreach ($commands as $cmd) {
+            if ($cmd === 'Z') {
+                $this->body .= "h\n";
+
+                continue;
+            }
+            if (! is_array($cmd)) {
+                continue;
+            }
+            $type = $cmd[0];
+            if ($type === 'M') {
+                $this->body .= sprintf("%s %s m\n",
+                    $this->formatNumber($cmd[1]), $this->formatNumber($cmd[2]),
+                );
+            } elseif ($type === 'L') {
+                $this->body .= sprintf("%s %s l\n",
+                    $this->formatNumber($cmd[1]), $this->formatNumber($cmd[2]),
+                );
+            } elseif ($type === 'C') {
+                $this->body .= sprintf("%s %s %s %s %s %s c\n",
+                    $this->formatNumber($cmd[1]), $this->formatNumber($cmd[2]),
+                    $this->formatNumber($cmd[3]), $this->formatNumber($cmd[4]),
+                    $this->formatNumber($cmd[5]), $this->formatNumber($cmd[6]),
+                );
+            }
+        }
+        $op = match ($mode) {
+            'stroke' => 'S',
+            'fillstroke' => 'B',
+            default => 'f',
+        };
+        $this->body .= $op."\n";
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 48: Begin tagged marked content. Pairs с emitEndMarkedContent().
      */
     public function emitBeginMarkedContent(string $tag, int $mcid): self

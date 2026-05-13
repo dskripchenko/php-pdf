@@ -274,8 +274,10 @@ final class SvgRenderer
     }
 
     /**
-     * Path: только M (moveto), L (lineto), Z (close). Curves / arcs / smooth
-     * deferred.
+     * Phase 53: SVG path parser с поддержкой M/L/H/V/C/S/Q/T/Z commands
+     * (uppercase = absolute, lowercase = relative).
+     *
+     * Arc (A/a) — NOT supported (требует ellipse-arc → cubic conversion).
      *
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
@@ -290,47 +292,210 @@ final class SvgRenderer
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
-        // Очень simple tokenization: каждый command + numbers.
-        $tokens = preg_split('@(?=[MmLlZz])@', trim($d));
-        if ($tokens === false) {
+        $commands = self::parsePathD($d, $tx, $ty);
+        if ($commands === []) {
             return;
         }
-        $points = [];
-        $closed = false;
-        foreach ($tokens as $cmd) {
-            $cmd = trim($cmd);
-            if ($cmd === '') {
-                continue;
-            }
-            $op = $cmd[0];
-            $args = trim(substr($cmd, 1));
-            if (strtoupper($op) === 'Z') {
-                $closed = true;
 
-                continue;
-            }
-            $nums = preg_split('@[\s,]+@', $args);
+        // Determine fill/stroke mode.
+        if ($hasFill && $hasStroke) {
+            $mode = 'fillstroke';
+        } elseif ($hasFill) {
+            $mode = 'fill';
+        } elseif ($hasStroke) {
+            $mode = 'stroke';
+        } else {
+            return; // Nothing to draw.
+        }
+
+        $page->emitPath(
+            $commands,
+            $mode,
+            $hasFill ? ['r' => $fr, 'g' => $fg, 'b' => $fb] : null,
+            $hasStroke ? ['r' => $sr, 'g' => $sg, 'b' => $sb] : null,
+            $sw * $scaleX,
+        );
+    }
+
+    /**
+     * Parse SVG path "d" attribute → list of PDF-compatible path commands.
+     * Coordinates already transformed через $tx/$ty.
+     *
+     * Quadratic Bezier (Q/T) auto-converted к cubic Bezier (PDF не имеет
+     * quadratic operator).
+     *
+     * @param  callable(float): float  $tx
+     * @param  callable(float): float  $ty
+     * @return list<array|string>
+     */
+    private static function parsePathD(string $d, callable $tx, callable $ty): array
+    {
+        // Tokenize: split on each command letter (preserve лезерные command'ы как separators).
+        $regex = '@([MmLlHhVvCcSsQqTtZz])([^MmLlHhVvCcSsQqTtZz]*)@';
+        if (! preg_match_all($regex, $d, $matches, PREG_SET_ORDER)) {
+            return [];
+        }
+        $commands = [];
+        $cx = 0;
+        $cy = 0; // current point (SVG units, NOT transformed)
+        $startX = 0;
+        $startY = 0; // path start for Z
+        $lastCubicCtrlX = null;
+        $lastCubicCtrlY = null;
+        $lastQuadCtrlX = null;
+        $lastQuadCtrlY = null;
+
+        foreach ($matches as $m) {
+            $op = $m[1];
+            $args = trim($m[2]);
+            $nums = $args === '' ? [] : preg_split('@[\s,]+|(?<=[0-9.])-@', $args);
             if ($nums === false) {
-                continue;
+                $nums = [];
             }
-            $nums = array_values(array_filter($nums, fn ($n) => $n !== ''));
-            for ($i = 0; $i + 1 < count($nums); $i += 2) {
-                $points[] = [$tx((float) $nums[$i]), $ty((float) $nums[$i + 1])];
+            $nums = array_values(array_map('floatval', array_filter($nums, fn ($n) => $n !== '')));
+            $isRel = ctype_lower($op);
+            $opUp = strtoupper($op);
+
+            switch ($opUp) {
+                case 'M':
+                    if (count($nums) < 2) {
+                        break;
+                    }
+                    $x = $isRel ? $cx + $nums[0] : $nums[0];
+                    $y = $isRel ? $cy + $nums[1] : $nums[1];
+                    $commands[] = ['M', $tx($x), $ty($y)];
+                    $cx = $x; $cy = $y;
+                    $startX = $x; $startY = $y;
+                    // Subsequent pairs treated как L.
+                    for ($i = 2; $i + 1 < count($nums); $i += 2) {
+                        $x = $isRel ? $cx + $nums[$i] : $nums[$i];
+                        $y = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
+                        $commands[] = ['L', $tx($x), $ty($y)];
+                        $cx = $x; $cy = $y;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
+
+                case 'L':
+                    for ($i = 0; $i + 1 < count($nums); $i += 2) {
+                        $x = $isRel ? $cx + $nums[$i] : $nums[$i];
+                        $y = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
+                        $commands[] = ['L', $tx($x), $ty($y)];
+                        $cx = $x; $cy = $y;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
+
+                case 'H':
+                    foreach ($nums as $n) {
+                        $x = $isRel ? $cx + $n : $n;
+                        $commands[] = ['L', $tx($x), $ty($cy)];
+                        $cx = $x;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
+
+                case 'V':
+                    foreach ($nums as $n) {
+                        $y = $isRel ? $cy + $n : $n;
+                        $commands[] = ['L', $tx($cx), $ty($y)];
+                        $cy = $y;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
+
+                case 'C':
+                    for ($i = 0; $i + 5 < count($nums); $i += 6) {
+                        $x1 = $isRel ? $cx + $nums[$i] : $nums[$i];
+                        $y1 = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
+                        $x2 = $isRel ? $cx + $nums[$i + 2] : $nums[$i + 2];
+                        $y2 = $isRel ? $cy + $nums[$i + 3] : $nums[$i + 3];
+                        $x3 = $isRel ? $cx + $nums[$i + 4] : $nums[$i + 4];
+                        $y3 = $isRel ? $cy + $nums[$i + 5] : $nums[$i + 5];
+                        $commands[] = ['C', $tx($x1), $ty($y1), $tx($x2), $ty($y2), $tx($x3), $ty($y3)];
+                        $cx = $x3; $cy = $y3;
+                        $lastCubicCtrlX = $x2;
+                        $lastCubicCtrlY = $y2;
+                    }
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
+
+                case 'S':
+                    for ($i = 0; $i + 3 < count($nums); $i += 4) {
+                        // First control = reflection prev cubic ctrl OR current point.
+                        if ($lastCubicCtrlX !== null) {
+                            $x1 = 2 * $cx - $lastCubicCtrlX;
+                            $y1 = 2 * $cy - $lastCubicCtrlY;
+                        } else {
+                            $x1 = $cx; $y1 = $cy;
+                        }
+                        $x2 = $isRel ? $cx + $nums[$i] : $nums[$i];
+                        $y2 = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
+                        $x3 = $isRel ? $cx + $nums[$i + 2] : $nums[$i + 2];
+                        $y3 = $isRel ? $cy + $nums[$i + 3] : $nums[$i + 3];
+                        $commands[] = ['C', $tx($x1), $ty($y1), $tx($x2), $ty($y2), $tx($x3), $ty($y3)];
+                        $cx = $x3; $cy = $y3;
+                        $lastCubicCtrlX = $x2;
+                        $lastCubicCtrlY = $y2;
+                    }
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
+
+                case 'Q':
+                    for ($i = 0; $i + 3 < count($nums); $i += 4) {
+                        $qx = $isRel ? $cx + $nums[$i] : $nums[$i];
+                        $qy = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
+                        $ex = $isRel ? $cx + $nums[$i + 2] : $nums[$i + 2];
+                        $ey = $isRel ? $cy + $nums[$i + 3] : $nums[$i + 3];
+                        // Quadratic к cubic: P1 = start + 2/3 * (Q - start); P2 = end + 2/3 * (Q - end).
+                        $c1x = $cx + 2 / 3 * ($qx - $cx);
+                        $c1y = $cy + 2 / 3 * ($qy - $cy);
+                        $c2x = $ex + 2 / 3 * ($qx - $ex);
+                        $c2y = $ey + 2 / 3 * ($qy - $ey);
+                        $commands[] = ['C', $tx($c1x), $ty($c1y), $tx($c2x), $ty($c2y), $tx($ex), $ty($ey)];
+                        $cx = $ex; $cy = $ey;
+                        $lastQuadCtrlX = $qx;
+                        $lastQuadCtrlY = $qy;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    break;
+
+                case 'T':
+                    for ($i = 0; $i + 1 < count($nums); $i += 2) {
+                        if ($lastQuadCtrlX !== null) {
+                            $qx = 2 * $cx - $lastQuadCtrlX;
+                            $qy = 2 * $cy - $lastQuadCtrlY;
+                        } else {
+                            $qx = $cx; $qy = $cy;
+                        }
+                        $ex = $isRel ? $cx + $nums[$i] : $nums[$i];
+                        $ey = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
+                        $c1x = $cx + 2 / 3 * ($qx - $cx);
+                        $c1y = $cy + 2 / 3 * ($qy - $cy);
+                        $c2x = $ex + 2 / 3 * ($qx - $ex);
+                        $c2y = $ey + 2 / 3 * ($qy - $ey);
+                        $commands[] = ['C', $tx($c1x), $ty($c1y), $tx($c2x), $ty($c2y), $tx($ex), $ty($ey)];
+                        $cx = $ex; $cy = $ey;
+                        $lastQuadCtrlX = $qx;
+                        $lastQuadCtrlY = $qy;
+                    }
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    break;
+
+                case 'Z':
+                    $commands[] = 'Z';
+                    $cx = $startX;
+                    $cy = $startY;
+                    $lastCubicCtrlX = $lastCubicCtrlY = null;
+                    $lastQuadCtrlX = $lastQuadCtrlY = null;
+                    break;
             }
-            // M / L treated одинаково в этом simple impl.
         }
-        if ($points === []) {
-            return;
-        }
-        if ($closed && $hasFill) {
-            $page->fillPolygon($points, $fr, $fg, $fb);
-        }
-        if ($hasStroke) {
-            $line = $points;
-            if ($closed) {
-                $line[] = $points[0];
-            }
-            $page->strokePolyline($line, $sw * $scaleX, $sr, $sg, $sb);
-        }
+
+        return $commands;
     }
 }

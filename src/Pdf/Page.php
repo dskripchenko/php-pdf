@@ -329,6 +329,25 @@ final class Page
     }
 
     /**
+     * Phase 53: Emit generic path (with cubic Bezier curves).
+     *
+     * @param  list<array|string>  $commands
+     * @param  array{r: float, g: float, b: float}|null  $fillRgb
+     * @param  array{r: float, g: float, b: float}|null  $strokeRgb
+     */
+    public function emitPath(
+        array $commands,
+        string $mode = 'fill',
+        ?array $fillRgb = null,
+        ?array $strokeRgb = null,
+        float $lineWidthPt = 1.0,
+    ): self {
+        $this->stream->emitPath($commands, $mode, $fillRgb, $strokeRgb, $lineWidthPt);
+
+        return $this;
+    }
+
+    /**
      * Draw image (PNG/JPEG) at (x, y) with scaling to (widthPt, heightPt).
      */
     public function drawImage(PdfImage $image, float $x, float $y, float $widthPt, float $heightPt): self
