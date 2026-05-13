@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.13 — 12 фаз закрыты (392 теста, 888 assertions).
+**Текущий статус:** v0.14 — 13 фаз закрыты (402 теста, 902 assertions).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -32,14 +32,17 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 ### Critical (блокирует mpdf → php-pdf default switch)
 
-**Phase 13: Custom font registration**
-- Сейчас PhpPdfEmitter загружает только Liberation Sans (4 variant'а)
-  напрямую из `vendor/dskripchenko/php-pdf/.cache/fonts/...`. Это
-  dev/test path, в production не работает.
-- Нужно: `FontProvider` interface в php-pdf + бандлинг TTF файлов в
-  `dskripchenko/php-pdf-fonts-liberation` (сейчас stub).
-- Дополнительно: resolver по `font-family` CSS property (Arial →
-  LiberationSans alias уже есть; нужна интеграция в Engine).
+**Phase 13: Custom font registration** ✅ DONE
+- ~~PhpPdfEmitter loaded Liberation Sans (4 variant'а) напрямую из
+  `vendor/dskripchenko/php-pdf/.cache/fonts/...` — dev/test path.~~
+- ~~FontProvider interface + бандлинг TTF + integrated resolver.~~
+- Done (4dc641c + af2efea + 4bc1cd9): PdfFontResolver wraps existing
+  FontProvider с naming-convention variant chain (BoldItalic → Bold →
+  Italic → Regular → bare). Engine accepts optional FontProvider, routes
+  RunStyle.fontFamily через resolver. Liberation package теперь
+  реально bundle'ит 12 TTF (Sans/Serif/Mono × 4 variants) и implements
+  FontProvider с Microsoft metric aliases (Arial → LiberationSans).
+- Tests: 10 в php-pdf, 8 в liberation package, 2 в printable.
 
 **Phase 14: PDF compression**
 - Content streams сейчас raw (uncompressed). Файлы в 2-4× больше mpdf
@@ -197,9 +200,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 10e | Text color rendering (`rg`-operator) | 7 + 2 | 2c7d388 |
 | 11 | CSS borders в таблицах | 8 | 344ccc4 |
 | 12 | border-collapse + double-line render | 5 + 2 | a9efb7d |
+| 13 | Custom font registration (FontProvider + Liberation bundle) | 10 + 8 + 2 | 4dc641c (php-pdf) + af2efea (fonts) + 4bc1cd9 (printable) |
 
-**Итого:** 392 теста в php-pdf, 189 теста в printable (PhpPdfEmitter +
-borders + CSS + smoke).
+**Итого:** 402 теста в php-pdf, 191 теста в printable, 8 в Liberation package.
 
 ---
 
