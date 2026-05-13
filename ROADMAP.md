@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.17 — 16 фаз закрыты (419 тестов, 929 assertions).
+**Текущий статус:** v0.18 — 17 фаз закрыты (419 + 192 printable = 611 тестов).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -71,14 +71,16 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   height = max(text, image+2pt buffer). Hyperlink-wrapped image → clickable.
 - Tests: 6 в InlineImageTest.
 
-**Phase 17: CSS `<style>` блоки + классы**
-- Сейчас `HtmlParser` парсит только inline `style="..."`. `<style>`
-  блоки и `class=".cls { ... }"` игнорируются.
-- В printable у `DocxEmitter` уже есть `CssInliner` — может быть
-  переиспользован: применяется к HTML до парсинга, конвертирует CSS
-  rules в inline styles. PhpPdfEmitter сможет работать с inline.
-- Нужно: либо runtime CssInliner до parse, либо native cascade в
-  HtmlParser.
+**Phase 17: CSS `<style>` блоки + классы** ✅ DONE
+- ~~HtmlParser парсил только inline style; <style> и class игнорировались.~~
+- Done (printable 6921211): PhpPdfEmitter.maybeInlineCss проверяет
+  bodyHtml/headerHtml/footerHtml на наличие <style>; применяет CssInliner
+  (TijsVerkoyen, уже used by DocxEmitter) + re-parse через HtmlParser.
+  Fast-path skip если <style> отсутствует.
+- PhpPdfEmitter теперь принимает compressStreams ctor flag (default true,
+  tests opt-out для raw-stream inspection).
+- Tests: 1 в PhpPdfEmitterCssTest (`Phase 17: <style> блоки применяются
+  через CssInliner`).
 
 ### Important (feature parity, не строгий блокер)
 
@@ -210,8 +212,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 14 | PDF compression (FlateDecode content + font streams) | 5 | ba25389 |
 | 15 | Justify alignment (word-spacing distribution) | 6 | 8e45e75 |
 | 16 | Inline images (text wrap, baseline alignment) | 6 | a084140 |
+| 17 | CSS <style>/classes (CssInliner integration) | +1 | 6921211 (printable) |
 
-**Итого:** 419 тестов в php-pdf, 191 теста в printable, 8 в Liberation package.
+**Итого:** 419 тестов в php-pdf, 192 теста в printable, 8 в Liberation package.
 
 ---
 
