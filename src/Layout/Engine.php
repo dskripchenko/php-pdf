@@ -503,6 +503,11 @@ final class Engine
             }
         }
 
+        // Phase 64: grid lines.
+        if ($ac->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
+        }
+
         // Axes.
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
@@ -1093,6 +1098,11 @@ final class Engine
             $maxValue = 1.0;
         }
 
+        // Phase 64: grid lines.
+        if ($lc->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
+        }
+
         // Axes.
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
@@ -1280,6 +1290,12 @@ final class Engine
             $maxValue = 1.0;
         }
 
+        // Phase 64: grid lines (если enabled) drawn перед bars/lines чтобы
+        // не перекрывать data marks.
+        if ($bc->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
+        }
+
         // Y-axis vertical line.
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         // X-axis horizontal line.
@@ -1317,6 +1333,19 @@ final class Engine
 
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 64: draw horizontal grid lines at 25/50/75% между plotBottom
+     * и plotTop. Light-gray semi-transparent — visual reference.
+     */
+    private function drawChartGridLines(\Dskripchenko\PhpPdf\Pdf\Page $page, float $plotLeft, float $plotRight, float $plotBottom, float $plotTop): void
+    {
+        $h = $plotTop - $plotBottom;
+        foreach ([0.25, 0.5, 0.75] as $frac) {
+            $y = $plotBottom + $h * $frac;
+            $page->strokeLine($plotLeft, $y, $plotRight, $y, 0.3, 0.85, 0.85, 0.85);
+        }
     }
 
     private function chartText(\Dskripchenko\PhpPdf\Pdf\Page $page, string $text, float $x, float $y, float $sizePt): void

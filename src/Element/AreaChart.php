@@ -35,6 +35,7 @@ final readonly class AreaChart implements BlockElement
         public float $legendSizePt = 8.0,
         public bool $showLegend = true,
         public float $fillOpacityScale = 1.0,
+        public bool $showGridLines = false,
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,

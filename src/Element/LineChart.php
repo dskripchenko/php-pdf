@@ -34,6 +34,7 @@ final readonly class LineChart implements BlockElement
         public float $titleSizePt = 12.0,
         public string $lineColor = '4287f5',
         public bool $showMarkers = true,
+        public bool $showGridLines = false,
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
