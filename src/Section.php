@@ -47,6 +47,10 @@ final readonly class Section
         // можно рисовать одновременно; image первым, text сверху).
         public ?PdfImage $watermarkImage = null,
         public ?float $watermarkImageWidthPt = null,
+        // Phase 31: opacity для image/text watermark через PDF ExtGState /ca.
+        // null = full opacity. Range (0, 1) применяет alpha; ≥1 → no-op.
+        public ?float $watermarkImageOpacity = null,
+        public ?float $watermarkTextOpacity = null,
     ) {}
 
     public function hasHeader(): bool

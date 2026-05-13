@@ -57,6 +57,10 @@ final class DocumentBuilder
 
     private ?float $watermarkImageWidthPt = null;
 
+    private ?float $watermarkImageOpacity = null;
+
+    private ?float $watermarkTextOpacity = null;
+
     /** @var list<BlockElement>|null */
     private ?array $firstPageHeaderBlocks = null;
 
@@ -122,6 +126,24 @@ final class DocumentBuilder
     {
         $this->watermarkImage = $image;
         $this->watermarkImageWidthPt = $widthPt;
+
+        return $this;
+    }
+
+    /**
+     * Phase 31: Opacity для image watermark. 0..1 (1=opaque, 0=invisible).
+     * null = full opacity (default).
+     */
+    public function watermarkImageOpacity(?float $opacity): self
+    {
+        $this->watermarkImageOpacity = $opacity;
+
+        return $this;
+    }
+
+    public function watermarkTextOpacity(?float $opacity): self
+    {
+        $this->watermarkTextOpacity = $opacity;
 
         return $this;
     }
@@ -347,6 +369,8 @@ final class DocumentBuilder
             firstPageFooterBlocks: $this->firstPageFooterBlocks,
             watermarkImage: $this->watermarkImage,
             watermarkImageWidthPt: $this->watermarkImageWidthPt,
+            watermarkImageOpacity: $this->watermarkImageOpacity,
+            watermarkTextOpacity: $this->watermarkTextOpacity,
         ));
     }
 

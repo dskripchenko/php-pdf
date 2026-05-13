@@ -206,6 +206,52 @@ final class ContentStream
     }
 
     /**
+     * Phase 31: drawImage с применением ExtGState (opacity) перед draw.
+     * Operator sequence: q / gs / cm / Do / Q — Q восстановит graphics
+     * state, так что opacity не утечёт на последующий контент.
+     */
+    public function drawImageWithGs(
+        string $name,
+        string $gsName,
+        float $xPt,
+        float $yPt,
+        float $widthPt,
+        float $heightPt,
+    ): self {
+        $this->body .= "q\n";
+        $this->body .= sprintf("/%s gs\n", $gsName);
+        $this->body .= sprintf("%s 0 0 %s %s %s cm\n",
+            $this->formatNumber($widthPt),
+            $this->formatNumber($heightPt),
+            $this->formatNumber($xPt),
+            $this->formatNumber($yPt),
+        );
+        $this->body .= sprintf("/%s Do\n", $name);
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
+     * Phase 31: pushes a graphics state save и applies ExtGState by name.
+     * Caller must pair with popGraphicsState() через PDF operator Q.
+     */
+    public function pushGraphicsStateWithGs(string $gsName): self
+    {
+        $this->body .= "q\n";
+        $this->body .= sprintf("/%s gs\n", $gsName);
+
+        return $this;
+    }
+
+    public function popGraphicsState(): self
+    {
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
      * Stroked rounded rectangle. Rounded corners через 4 cubic Bezier
      * arcs (quarter-circle approximation, control points = r × 0.5523).
      */

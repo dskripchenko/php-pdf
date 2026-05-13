@@ -329,12 +329,23 @@ final class Document
                 $resourcesXObj .= sprintf(' /%s %d 0 R', $name, $imageObjectIds[$img]);
             }
 
+            // Phase 31: ExtGState objects (opacity и др.). Каждая ExtGState
+            // — separate PDF object, referenced from page /Resources.
+            $resourcesExtGState = '';
+            foreach ($page->extGStates() as $name => $gs) {
+                $gsId = $writer->addObject($gs->toDictBody());
+                $resourcesExtGState .= sprintf(' /%s %d 0 R', $name, $gsId);
+            }
+
             $resourcesParts = [];
             if ($resourcesFont !== '') {
                 $resourcesParts[] = '/Font <<'.$resourcesFont.' >>';
             }
             if ($resourcesXObj !== '') {
                 $resourcesParts[] = '/XObject <<'.$resourcesXObj.' >>';
+            }
+            if ($resourcesExtGState !== '') {
+                $resourcesParts[] = '/ExtGState <<'.$resourcesExtGState.' >>';
             }
             $resourcesDict = $resourcesParts === []
                 ? '<< >>'

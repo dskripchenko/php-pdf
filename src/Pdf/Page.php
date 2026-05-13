@@ -38,6 +38,11 @@ final class Page
     /** @var array<string, PdfImage> name → image */
     private array $images = [];
 
+    /** @var array<string, PdfExtGState> name → extGState (Phase 31) */
+    private array $extGStates = [];
+
+    private int $extGStateCounter = 0;
+
     /**
      * Link annotations накопленные на этой page.
      *
@@ -142,9 +147,17 @@ final class Page
         float $sizePt,
         float $angleRad = -0.7854,    // -45° (down-right diagonal)
         float $r = 0.88, float $g = 0.88, float $b = 0.88,
+        ?float $opacity = null,
     ): self {
         $resourceName = $this->registerStandardFont($font);
+        $gsName = $this->maybeRegisterOpacityGs($opacity);
+        if ($gsName !== null) {
+            $this->stream->pushGraphicsStateWithGs($gsName);
+        }
         $this->stream->rotatedText($resourceName, $sizePt, $cx, $cy, $angleRad, $text, $r, $g, $b);
+        if ($gsName !== null) {
+            $this->stream->popGraphicsState();
+        }
 
         return $this;
     }
@@ -157,12 +170,34 @@ final class Page
         float $sizePt,
         float $angleRad = -0.7854,
         float $r = 0.88, float $g = 0.88, float $b = 0.88,
+        ?float $opacity = null,
     ): self {
         $resourceName = $this->registerEmbeddedFont($font);
         $hex = $font->encodeText($text);
+        $gsName = $this->maybeRegisterOpacityGs($opacity);
+        if ($gsName !== null) {
+            $this->stream->pushGraphicsStateWithGs($gsName);
+        }
         $this->stream->rotatedText($resourceName, $sizePt, $cx, $cy, $angleRad, $hex, $r, $g, $b, isHex: true);
+        if ($gsName !== null) {
+            $this->stream->popGraphicsState();
+        }
 
         return $this;
+    }
+
+    /**
+     * Phase 31: для opacity ∈ (0, 1) регистрирует ExtGState и возвращает
+     * имя ресурса; null/1.0/out-of-range → null (no-op).
+     */
+    private function maybeRegisterOpacityGs(?float $opacity): ?string
+    {
+        if ($opacity === null || $opacity >= 1.0) {
+            return null;
+        }
+        $clamped = max(0.0, $opacity);
+
+        return $this->registerExtGState(new PdfExtGState(fillOpacity: $clamped, strokeOpacity: $clamped));
     }
 
     /**
@@ -228,6 +263,30 @@ final class Page
     {
         $resourceName = $this->registerImage($image);
         $this->stream->drawImage($resourceName, $x, $y, $widthPt, $heightPt);
+
+        return $this;
+    }
+
+    /**
+     * Phase 31: drawImage с opacity. opacity ∈ (0, 1) — fill alpha
+     * через ExtGState `/ca`. 1.0 эквивалентен plain drawImage.
+     */
+    public function drawImageWithOpacity(
+        PdfImage $image,
+        float $x,
+        float $y,
+        float $widthPt,
+        float $heightPt,
+        float $opacity,
+    ): self {
+        $resourceName = $this->registerImage($image);
+        if ($opacity >= 1.0) {
+            $this->stream->drawImage($resourceName, $x, $y, $widthPt, $heightPt);
+
+            return $this;
+        }
+        $gsName = $this->registerExtGState(new PdfExtGState(fillOpacity: max(0.0, $opacity)));
+        $this->stream->drawImageWithGs($resourceName, $gsName, $x, $y, $widthPt, $heightPt);
 
         return $this;
     }
@@ -366,5 +425,35 @@ final class Page
         $this->images[$name] = $image;
 
         return $name;
+    }
+
+    /**
+     * Phase 31: Register ExtGState (opacity). Dedup по key() —
+     * одинаковые opacity tuples переиспользуют resource.
+     *
+     * @return string Resource name (`Gs1`, `Gs2`, ...).
+     */
+    public function registerExtGState(PdfExtGState $state): string
+    {
+        $key = $state->key();
+        foreach ($this->extGStates as $name => $existing) {
+            if ($existing->key() === $key) {
+                return $name;
+            }
+        }
+        $name = 'Gs'.(++$this->extGStateCounter);
+        $this->extGStates[$name] = $state;
+
+        return $name;
+    }
+
+    /**
+     * @return array<string, PdfExtGState>
+     *
+     * @internal
+     */
+    public function extGStates(): array
+    {
+        return $this->extGStates;
     }
 }

@@ -264,11 +264,16 @@ final class Engine
             $this->renderWatermarkImage(
                 $section->watermarkImage,
                 $section->watermarkImageWidthPt,
+                $section->watermarkImageOpacity,
                 $ctx,
             );
         }
         if ($section->hasTextWatermark()) {
-            $this->renderWatermark((string) $section->watermarkText, $ctx);
+            $this->renderWatermark(
+                (string) $section->watermarkText,
+                $section->watermarkTextOpacity,
+                $ctx,
+            );
         }
         $setup = $ctx->pageSetup;
         [$pageWidth, $pageHeight] = $setup->dimensions();
@@ -324,7 +329,7 @@ final class Engine
      * Text positioned relative к center page'а; rotation matrix вращает
      * around этой точки.
      */
-    private function renderWatermark(string $text, LayoutContext $ctx): void
+    private function renderWatermark(string $text, ?float $opacity, LayoutContext $ctx): void
     {
         $setup = $ctx->pageSetup;
         [$pageWidth, $pageHeight] = $setup->dimensions();
@@ -348,10 +353,12 @@ final class Engine
         if ($this->defaultFont !== null) {
             $ctx->currentPage->drawWatermarkEmbedded(
                 $text, $cx, $cy, $this->defaultFont, $sizePt, $angleRad,
+                opacity: $opacity,
             );
         } else {
             $ctx->currentPage->drawWatermark(
                 $text, $cx, $cy, $this->fallbackStandard, $sizePt, $angleRad,
+                opacity: $opacity,
             );
         }
     }
@@ -367,6 +374,7 @@ final class Engine
     private function renderWatermarkImage(
         \Dskripchenko\PhpPdf\Image\PdfImage $image,
         ?float $widthPt,
+        ?float $opacity,
         LayoutContext $ctx,
     ): void {
         $setup = $ctx->pageSetup;
@@ -379,7 +387,11 @@ final class Engine
         $x = ($pageWidth - $w) / 2;
         $y = ($pageHeight - $h) / 2;
 
-        $ctx->currentPage->drawImage($image, $x, $y, $w, $h);
+        if ($opacity !== null && $opacity < 1.0) {
+            $ctx->currentPage->drawImageWithOpacity($image, $x, $y, $w, $h, $opacity);
+        } else {
+            $ctx->currentPage->drawImage($image, $x, $y, $w, $h);
+        }
     }
 
     /**
