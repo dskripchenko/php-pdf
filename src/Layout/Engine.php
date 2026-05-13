@@ -657,7 +657,12 @@ final class Engine
         $currentWidth = 0;
         $effectiveAvail = $availableWidth - ($isFirstLine ? $firstLineExtraIndent : 0);
 
-        foreach ($items as $item) {
+        // Phase 33: while-loop with explicit index because soft-hyphen
+        // overflow handling использует array_splice() для re-enqueue
+        // remainder в the same items array.
+        $i = -1;
+        while (++$i < count($items)) {
+            $item = $items[$i];
             if ($item['type'] === 'br') {
                 $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent);
                 $currentLine = [];
@@ -710,6 +715,29 @@ final class Engine
             $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $style);
 
             if ($currentLine !== [] && $currentWidth + $sepWidth + $wordWidth > $effectiveAvail) {
+                // Phase 33: Try soft-hyphen split — if word can be broken at SHY
+                // marker such that prefix + '-' fits in remaining space, place
+                // prefix here и put remainder as new item на следующую line.
+                $remainingSpace = $effectiveAvail - $currentWidth - $sepWidth;
+                $shySplit = $this->trySplitOnSoftHyphen($word, $style, $remainingSpace);
+                if ($shySplit !== null) {
+                    [$firstWithHyphen, $remainder] = $shySplit;
+                    $firstItem = $item;
+                    $firstItem['text'] = $firstWithHyphen;
+                    $currentLine[] = $firstItem;
+                    // Emit line с splitted prefix.
+                    $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
+                    $currentLine = [];
+                    $currentWidth = 0;
+                    $isFirstLine = false;
+                    $effectiveAvail = $availableWidth;
+                    // Re-enqueue remainder для следующей итерации.
+                    $remainderItem = $item;
+                    $remainderItem['text'] = $remainder;
+                    array_splice($items, $i + 1, 0, [$remainderItem]);
+
+                    continue;
+                }
                 // Overflow-driven line break — line followed by more content,
                 // so isLastLine = false (justify candidate).
                 $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
@@ -1142,6 +1170,10 @@ final class Engine
      */
     private function showText(Page $page, string $text, float $x, float $baselineY, float $sizePt, RunStyle $style): void
     {
+        // Phase 33: SHY (U+00AD) — невидимый soft hyphen marker, strip
+        // перед drawing'ом (визуально не должен рендериться, кроме как при
+        // wrap point — это уже handled через '-' append в split helper).
+        $text = self::stripSoftHyphens($text);
         $r = $g = $b = null;
         if ($style->color !== null) {
             [$r, $g, $b] = $this->hexToRgb($style->color);
@@ -1161,6 +1193,8 @@ final class Engine
      */
     private function measureWidth(string $text, RunStyle $style): float
     {
+        // Phase 33: SHY invisible → стрипим для width estimation.
+        $text = self::stripSoftHyphens($text);
         $font = $this->resolveEmbeddedFont($style);
         if ($font !== null) {
             $m = new TextMeasurer($font, $style->sizePt ?? $this->defaultFontSizePt);
@@ -1171,6 +1205,46 @@ final class Engine
         $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
 
         return mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
+    }
+
+    /**
+     * Phase 33: U+00AD (SOFT HYPHEN, HTML &shy;) — невидимый wrap hint.
+     */
+    public static function stripSoftHyphens(string $text): string
+    {
+        return str_replace("\u{00AD}", '', $text);
+    }
+
+    /**
+     * Phase 33: Tries to split word на (prefix + '-', remainder) at one of
+     * the soft hyphen positions так, чтобы prefix + '-' влез в \$maxWidth.
+     * Greedy: предпочитаем самый последний SHY, оставляющий больше места
+     * для остальной строки (но всё ещё fitting в \$maxWidth).
+     *
+     * Returns [firstWithHyphen, remainder] or null если не удалось разбить.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private function trySplitOnSoftHyphen(string $word, RunStyle $style, float $maxWidth): ?array
+    {
+        // SHY positions (byte-level в UTF-8 — U+00AD = 2 bytes: 0xC2 0xAD).
+        $shy = "\u{00AD}";
+        if (! str_contains($word, $shy)) {
+            return null;
+        }
+        $parts = explode($shy, $word);
+        // Try longest prefix first (greedy fit).
+        for ($i = count($parts) - 1; $i >= 1; $i--) {
+            $prefix = implode('', array_slice($parts, 0, $i));
+            $remainder = implode($shy, array_slice($parts, $i));
+            // measureWidth уже strip'ит SHY, безопасно.
+            $w = $this->measureWidth($prefix.'-', $style);
+            if ($w <= $maxWidth) {
+                return [$prefix.'-', $remainder];
+            }
+        }
+
+        return null;
     }
 
     private function ensureRoomFor(LayoutContext $ctx, float $heightPt): void
