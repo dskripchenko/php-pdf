@@ -27,6 +27,13 @@ final readonly class TableStyle
         public CellStyle $defaultCellStyle = new CellStyle,
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 6,
+        /**
+         * Если true — adjacent cells шарят borders. Phase 12 v1
+         * implementation: каждый cell рисует только top+left, последняя
+         * row дополнительно рисует bottom, последняя column — right.
+         * "Thicker wins" CSS rules не реализованы (first-drawn wins).
+         */
+        public bool $borderCollapse = false,
     ) {}
 
     public function copy(
@@ -38,6 +45,7 @@ final readonly class TableStyle
         ?CellStyle $defaultCellStyle = null,
         ?float $spaceBeforePt = null,
         ?float $spaceAfterPt = null,
+        ?bool $borderCollapse = null,
     ): self {
         return new self(
             widthPt: $widthPt ?? $this->widthPt,
@@ -48,6 +56,7 @@ final readonly class TableStyle
             defaultCellStyle: $defaultCellStyle ?? $this->defaultCellStyle,
             spaceBeforePt: $spaceBeforePt ?? $this->spaceBeforePt,
             spaceAfterPt: $spaceAfterPt ?? $this->spaceAfterPt,
+            borderCollapse: $borderCollapse ?? $this->borderCollapse,
         );
     }
 }

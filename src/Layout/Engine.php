@@ -24,6 +24,7 @@ use Dskripchenko\PhpPdf\Style\ListFormat;
 use Dskripchenko\PhpPdf\Style\ParagraphStyle;
 use Dskripchenko\PhpPdf\Style\Border;
 use Dskripchenko\PhpPdf\Style\BorderSet;
+use Dskripchenko\PhpPdf\Style\BorderStyle;
 use Dskripchenko\PhpPdf\Style\CellStyle;
 use Dskripchenko\PhpPdf\Style\TableStyle;
 use Dskripchenko\PhpPdf\Style\VerticalAlignment;
@@ -922,23 +923,25 @@ final class Engine
 
         $headerRows = array_values(array_filter($t->rows, fn (Row $r): bool => $r->isHeader));
 
-        foreach ($t->rows as $row) {
+        $totalRows = count($t->rows);
+        foreach ($t->rows as $rowIdx => $row) {
             $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
+            $isLastRow = $rowIdx === $totalRows - 1;
 
             if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
                 $this->forcePageBreak($ctx);
-                // На новой странице — повторяем header rows (если current
-                // row сам не header).
                 if (! $row->isHeader) {
                     foreach ($headerRows as $hr) {
                         $hh = $this->measureRowHeight($t, $hr, $colWidths);
-                        $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx);
+                        // На repeat'е header row не считаем last (это всё
+                        // ещё начало page, дальше будут data rows).
+                        $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx, false);
                         $ctx->cursorY -= $hh;
                     }
                 }
             }
 
-            $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx);
+            $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx, $isLastRow);
             $ctx->cursorY -= $rowHeight;
         }
 
@@ -1020,10 +1023,12 @@ final class Engine
     /**
      * @param  list<float>  $colWidths
      */
-    private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx): void
+    private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false): void
     {
         $rowTopY = $ctx->cursorY;
         $rowBottomY = $rowTopY - $rowHeight;
+        $collapse = $t->style->borderCollapse;
+        $columnCount = count($colWidths);
 
         // 1. Backgrounds + content + borders в три pass'а (background ниже,
         //    borders сверху, content между).
@@ -1074,7 +1079,22 @@ final class Engine
             $borders = $cs->borders ?? $this->defaultBorderSet($t->style);
 
             if ($borders !== null) {
-                $this->drawCellBorders($ctx->currentPage, $cellX, $rowBottomY, $cellWidth, $rowHeight, $borders);
+                if ($collapse) {
+                    // Border-collapse: each cell рисует top+left; last column
+                    // дополнительно right; last row дополнительно bottom.
+                    // Adjacent cells шарят edge (first-drawn wins — Phase L
+                    // priority resolution).
+                    $isLastCol = ($colIdx + $cell->columnSpan) >= $columnCount;
+                    $collapsed = new BorderSet(
+                        top: $borders->top,
+                        left: $borders->left,
+                        bottom: $isLastRow ? $borders->bottom : null,
+                        right: $isLastCol ? $borders->right : null,
+                    );
+                    $this->drawCellBorders($ctx->currentPage, $cellX, $rowBottomY, $cellWidth, $rowHeight, $collapsed);
+                } else {
+                    $this->drawCellBorders($ctx->currentPage, $cellX, $rowBottomY, $cellWidth, $rowHeight, $borders);
+                }
             }
 
             $cellX += $cellWidth;
@@ -1160,13 +1180,33 @@ final class Engine
     private function drawHorizontalBorder(\Dskripchenko\PhpPdf\Pdf\Page $page, float $x, float $y, float $w, Border $b): void
     {
         [$r, $g, $bb] = $this->hexToRgb($b->color);
-        $page->strokeRect($x, $y, $w, 0, $b->widthPt(), $r, $g, $bb);
+        $totalWidth = $b->widthPt();
+        if ($b->style === BorderStyle::Double) {
+            // Double-line: 2 параллельные strokes, каждая width=total/3,
+            // gap между ними = total/3. CSS spec: declared width = full span.
+            $stroke = $totalWidth / 3;
+            $offset = $totalWidth / 3 + $stroke / 2;
+            $page->strokeRect($x, $y + $offset, $w, 0, $stroke, $r, $g, $bb);
+            $page->strokeRect($x, $y - $offset, $w, 0, $stroke, $r, $g, $bb);
+
+            return;
+        }
+        $page->strokeRect($x, $y, $w, 0, $totalWidth, $r, $g, $bb);
     }
 
     private function drawVerticalBorder(\Dskripchenko\PhpPdf\Pdf\Page $page, float $x, float $y, float $h, Border $b): void
     {
         [$r, $g, $bb] = $this->hexToRgb($b->color);
-        $page->strokeRect($x, $y, 0, $h, $b->widthPt(), $r, $g, $bb);
+        $totalWidth = $b->widthPt();
+        if ($b->style === BorderStyle::Double) {
+            $stroke = $totalWidth / 3;
+            $offset = $totalWidth / 3 + $stroke / 2;
+            $page->strokeRect($x + $offset, $y, 0, $h, $stroke, $r, $g, $bb);
+            $page->strokeRect($x - $offset, $y, 0, $h, $stroke, $r, $g, $bb);
+
+            return;
+        }
+        $page->strokeRect($x, $y, 0, $h, $totalWidth, $r, $g, $bb);
     }
 
     /**
