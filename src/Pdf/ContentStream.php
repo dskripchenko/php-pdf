@@ -28,14 +28,18 @@ final class ContentStream
     /**
      * Текстовая операция. Координаты в pt от origin (левый-нижний).
      */
-    public function text(string $fontName, float $sizePt, float $xPt, float $yPt, string $text): self
-    {
+    public function text(
+        string $fontName, float $sizePt, float $xPt, float $yPt, string $text,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
         $escapedText = $this->escapeString($text);
+        $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= sprintf("(%s) Tj\n", $escapedText);
         $this->body .= 'ET'."\n";
+        $this->closeTextColor($r);
 
         return $this;
     }
@@ -45,13 +49,17 @@ final class ContentStream
      * с Identity-H encoding). $hexString должен включать угловые скобки:
      *   `<00480065006C006C006F>` — encoded "Hello"
      */
-    public function textHexString(string $fontName, float $sizePt, float $xPt, float $yPt, string $hexString): self
-    {
+    public function textHexString(
+        string $fontName, float $sizePt, float $xPt, float $yPt, string $hexString,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
+        $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= sprintf("%s Tj\n", $hexString);
         $this->body .= 'ET'."\n";
+        $this->closeTextColor($r);
 
         return $this;
     }
@@ -71,8 +79,11 @@ final class ContentStream
      *
      * @param  list<string|int>  $tjOps
      */
-    public function textTjArray(string $fontName, float $sizePt, float $xPt, float $yPt, array $tjOps): self
-    {
+    public function textTjArray(
+        string $fontName, float $sizePt, float $xPt, float $yPt, array $tjOps,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
+        $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
@@ -86,8 +97,34 @@ final class ContentStream
         }
         $this->body .= "] TJ\n";
         $this->body .= 'ET'."\n";
+        $this->closeTextColor($r);
 
         return $this;
+    }
+
+    /**
+     * Wraps text-show operator с q + rg для colored text. Если $r=null —
+     * no-op (используется current graphics state color, обычно чёрный).
+     */
+    private function openTextColor(?float $r, ?float $g, ?float $b): void
+    {
+        if ($r === null) {
+            return;
+        }
+        $this->body .= "q\n";
+        $this->body .= sprintf("%s %s %s rg\n",
+            $this->formatNumber($r),
+            $this->formatNumber($g ?? 0),
+            $this->formatNumber($b ?? 0),
+        );
+    }
+
+    private function closeTextColor(?float $r): void
+    {
+        if ($r === null) {
+            return;
+        }
+        $this->body .= "Q\n";
     }
 
     /**

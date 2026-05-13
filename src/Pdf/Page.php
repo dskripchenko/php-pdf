@@ -87,10 +87,12 @@ final class Page
      * Show text using a PDF base-14 font. Encoding — WinAnsi (Latin-1).
      * Для Cyrillic / Unicode используй showEmbeddedText() с PdfFont.
      */
-    public function showText(string $text, float $x, float $y, StandardFont $font, float $sizePt): self
-    {
+    public function showText(
+        string $text, float $x, float $y, StandardFont $font, float $sizePt,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
         $resourceName = $this->registerStandardFont($font);
-        $this->stream->text($resourceName, $sizePt, $x, $y, $text);
+        $this->stream->text($resourceName, $sizePt, $x, $y, $text, $r, $g, $b);
 
         return $this;
     }
@@ -103,15 +105,16 @@ final class Page
      * Noto и большинство modern font'ов). Без kerning'а — fall back на
      * простой Tj operator.
      */
-    public function showEmbeddedText(string $text, float $x, float $y, PdfFont $font, float $sizePt): self
-    {
+    public function showEmbeddedText(
+        string $text, float $x, float $y, PdfFont $font, float $sizePt,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
         $resourceName = $this->registerEmbeddedFont($font);
         $tjOps = $font->encodeTextTjArray($text);
         if (count($tjOps) === 1) {
-            // Нет inter-glyph adjustment'ов — compact Tj.
-            $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0]);
+            $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0], $r, $g, $b);
         } else {
-            $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps);
+            $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps, $r, $g, $b);
         }
 
         return $this;

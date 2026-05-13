@@ -820,14 +820,19 @@ final class Engine
     /**
      * Renders text using engine's resolved font (bold/italic variant если
      * registered, иначе defaultFont, иначе fallbackStandard).
+     * Применяет style.color через rg-operator если задан.
      */
     private function showText(Page $page, string $text, float $x, float $baselineY, float $sizePt, RunStyle $style): void
     {
+        $r = $g = $b = null;
+        if ($style->color !== null) {
+            [$r, $g, $b] = $this->hexToRgb($style->color);
+        }
         $font = $this->resolveEmbeddedFont($style);
         if ($font !== null) {
-            $page->showEmbeddedText($text, $x, $baselineY, $font, $sizePt);
+            $page->showEmbeddedText($text, $x, $baselineY, $font, $sizePt, $r, $g, $b);
         } else {
-            $page->showText($text, $x, $baselineY, $this->fallbackStandard, $sizePt);
+            $page->showText($text, $x, $baselineY, $this->fallbackStandard, $sizePt, $r, $g, $b);
         }
     }
 
