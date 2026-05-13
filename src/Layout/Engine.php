@@ -600,7 +600,7 @@ final class Engine
      */
     private function renderQrBarcode(Barcode $bc, LayoutContext $ctx): void
     {
-        $enc = new \Dskripchenko\PhpPdf\Barcode\QrEncoder($bc->value, $bc->eccLevel);
+        $enc = new \Dskripchenko\PhpPdf\Barcode\QrEncoder($bc->value, $bc->eccLevel, $bc->qrMode);
         $matrix = $enc->modules();
         $matrixSize = $enc->size();
         $quietZone = 4; // ISO/IEC 18004 minimum.

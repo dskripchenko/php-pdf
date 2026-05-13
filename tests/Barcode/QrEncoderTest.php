@@ -26,8 +26,9 @@ final class QrEncoderTest extends TestCase
     #[Test]
     public function version_2_for_18_byte_input(): void
     {
-        // V1 max = 17 bytes, V2 max = 32 bytes.
-        $enc = new QrEncoder(str_repeat('A', 18));
+        // Lowercase forces byte mode (alphanumeric не допускает lowercase).
+        // V1 byte mode ECC L max = 17 bytes, V2 = 32 bytes.
+        $enc = new QrEncoder(str_repeat('a', 18));
         self::assertSame(2, $enc->version);
         self::assertSame(25, $enc->size());
     }
@@ -43,8 +44,8 @@ final class QrEncoderTest extends TestCase
     public function rejects_oversized_input(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        // V10 max = 271 bytes; passing 272 должен fail'нуть.
-        new QrEncoder(str_repeat('A', 300));
+        // V10 max byte mode ECC L = 271 bytes; lowercase forces byte mode.
+        new QrEncoder(str_repeat('a', 300));
     }
 
     #[Test]

@@ -30,11 +30,11 @@ final class QrEccLevelTest extends TestCase
     #[Test]
     public function level_h_picks_higher_version_for_same_data(): void
     {
-        // 'hello' (5 bytes) — fits V1 ECC L (cap 17), но V1 ECC H = 7 bytes;
-        // оба fit V1. Используем 10 bytes — V1 H cap=7, нужна V2.
-        $tenBytes = '0123456789';
-        $l = new QrEncoder($tenBytes, QrEccLevel::L);
-        $h = new QrEncoder($tenBytes, QrEccLevel::H);
+        // Lowercase forces byte mode. V1 ECC L byte cap = 17,
+        // V1 ECC H = 7. 12-byte input → V1 для L, V2+ для H.
+        $payload = 'hello world!';
+        $l = new QrEncoder($payload, QrEccLevel::L);
+        $h = new QrEncoder($payload, QrEccLevel::H);
 
         self::assertSame(1, $l->version);
         self::assertGreaterThanOrEqual(2, $h->version);

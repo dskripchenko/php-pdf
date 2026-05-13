@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 36-37: QR Code encoder.
+ * Phase 36-38: QR Code encoder.
  *
  * ISO/IEC 18004:2015.
  *
  * Supported:
- *  - Byte mode (ECI / Kanji / Alphanumeric / Numeric — Phase 38).
+ *  - Mode auto-detection:
+ *    - Numeric mode (0-9 only) — 3 chars / 10 bits.
+ *    - Alphanumeric (0-9, A-Z, space, $%*+-./:) — 2 chars / 11 bits.
+ *    - Byte mode (everything else) — 1 char / 8 bits.
+ *    - Kanji / ECI / structured-append — deferred.
  *  - Error correction levels L / M / Q / H:
  *    - V1..V4: все 4 levels.
  *    - V5..V10: только ECC L (V5+ ECC M/Q/H deferred — mixed-block layout).
@@ -100,6 +104,8 @@ final class QrEncoder
 
     public readonly QrEccLevel $eccLevel;
 
+    public readonly QrEncodingMode $mode;
+
     /**
      * Matrix: $modules[y][x] = bool.
      *
@@ -107,30 +113,55 @@ final class QrEncoder
      */
     private array $modules;
 
-    public function __construct(public readonly string $data, ?QrEccLevel $eccLevel = null)
-    {
+    public function __construct(
+        public readonly string $data,
+        ?QrEccLevel $eccLevel = null,
+        ?QrEncodingMode $mode = null,
+    ) {
         if ($data === '') {
             throw new \InvalidArgumentException('QR input must be non-empty');
         }
         $this->eccLevel = $eccLevel ?? QrEccLevel::L;
-        $byteLen = strlen($data);
-        $eccKey = $this->eccLevel->value;
+        // Phase 38: auto-detect mode unless explicitly specified.
+        $this->mode = $mode ?? QrEncodingMode::detect($data);
+        // Validate input matches chosen mode.
+        if ($mode !== null) {
+            $autoDetected = QrEncodingMode::detect($data);
+            if ($mode === QrEncodingMode::Numeric && $autoDetected !== QrEncodingMode::Numeric) {
+                throw new \InvalidArgumentException('Input contains non-digit characters; cannot use Numeric mode');
+            }
+            if ($mode === QrEncodingMode::Alphanumeric &&
+                $autoDetected !== QrEncodingMode::Numeric &&
+                $autoDetected !== QrEncodingMode::Alphanumeric) {
+                throw new \InvalidArgumentException('Input contains characters outside Alphanumeric charset');
+            }
+        }
 
-        // Pick smallest version supporting data в byte mode + chosen ECC level.
+        $eccKey = $this->eccLevel->value;
+        $charCount = strlen($data);
+
+        // Phase 38: capacity check теперь bit-based, не byte-based:
+        // total bits available = data_codewords * 8.
+        // bits needed = 4 (mode) + charCountBits + dataBitsFor(charCount).
         $version = null;
-        foreach (self::CAPACITY as $v => $perLevel) {
-            $cap = $perLevel[$eccKey] ?? null;
-            if ($cap !== null && $byteLen <= $cap) {
+        foreach (self::ECC_PARAMS as $v => $perLevel) {
+            if (! isset($perLevel[$eccKey])) {
+                continue;
+            }
+            $dataCodewords = $perLevel[$eccKey][0];
+            $capacityBits = $dataCodewords * 8;
+            $needed = 4 + $this->mode->charCountIndicatorBits($v) + $this->mode->dataBitsFor($charCount);
+            if ($needed <= $capacityBits) {
                 $version = $v;
                 break;
             }
         }
         if ($version === null) {
             throw new \InvalidArgumentException(sprintf(
-                'QR input too long (%d bytes) for ECC %s — max %d at this level',
-                $byteLen,
+                'QR input too long (%d chars in %s mode) for ECC %s',
+                $charCount,
+                $this->mode->name,
                 $eccKey,
-                self::maxCapacityForLevel($eccKey),
             ));
         }
 
@@ -193,15 +224,19 @@ final class QrEncoder
     private function encodeData(string $data, int $version): string
     {
         $bits = '';
-        // Mode indicator: byte mode = 0100.
-        $bits .= '0100';
-        // Character count indicator: 8 bits for V1-9, 16 bits for V10+ (byte mode).
-        $charCountBits = $version < 10 ? 8 : 16;
+        // Mode indicator — 4 bits.
+        $bits .= str_pad(decbin($this->mode->indicatorBits()), 4, '0', STR_PAD_LEFT);
+        // Character count indicator.
+        $charCountBits = $this->mode->charCountIndicatorBits($version);
         $bits .= str_pad(decbin(strlen($data)), $charCountBits, '0', STR_PAD_LEFT);
-        // Data bytes как 8-bit chunks.
-        for ($i = 0; $i < strlen($data); $i++) {
-            $bits .= str_pad(decbin(ord($data[$i])), 8, '0', STR_PAD_LEFT);
-        }
+
+        // Phase 38: data encoding по mode.
+        $bits .= match ($this->mode) {
+            QrEncodingMode::Numeric => self::encodeNumeric($data),
+            QrEncodingMode::Alphanumeric => self::encodeAlphanumeric($data),
+            QrEncodingMode::Byte => self::encodeByte($data),
+        };
+
         // Terminator: up to 4 zeros (or fewer if at capacity).
         [$dataCodewords] = self::ECC_PARAMS[$version][$this->eccLevel->value];
         $capacityBits = $dataCodewords * 8;
@@ -217,6 +252,55 @@ final class QrEncoder
         while (strlen($bits) < $capacityBits) {
             $bits .= $padBytes[$padIdx % 2];
             $padIdx++;
+        }
+
+        return $bits;
+    }
+
+    private static function encodeNumeric(string $data): string
+    {
+        $bits = '';
+        $len = strlen($data);
+        for ($i = 0; $i < $len; $i += 3) {
+            $chunk = substr($data, $i, 3);
+            $value = (int) $chunk;
+            $width = strlen($chunk) === 3 ? 10 : (strlen($chunk) === 2 ? 7 : 4);
+            $bits .= str_pad(decbin($value), $width, '0', STR_PAD_LEFT);
+        }
+
+        return $bits;
+    }
+
+    private static function encodeAlphanumeric(string $data): string
+    {
+        $charset = QrEncodingMode::ALPHANUMERIC_CHARSET;
+        $bits = '';
+        $len = strlen($data);
+        for ($i = 0; $i < $len; $i += 2) {
+            $v1 = strpos($charset, $data[$i]);
+            if ($v1 === false) {
+                throw new \InvalidArgumentException('Alphanumeric input contains illegal char: '.$data[$i]);
+            }
+            if ($i + 1 < $len) {
+                $v2 = strpos($charset, $data[$i + 1]);
+                if ($v2 === false) {
+                    throw new \InvalidArgumentException('Alphanumeric input contains illegal char: '.$data[$i + 1]);
+                }
+                $value = $v1 * 45 + $v2;
+                $bits .= str_pad(decbin($value), 11, '0', STR_PAD_LEFT);
+            } else {
+                $bits .= str_pad(decbin($v1), 6, '0', STR_PAD_LEFT);
+            }
+        }
+
+        return $bits;
+    }
+
+    private static function encodeByte(string $data): string
+    {
+        $bits = '';
+        for ($i = 0; $i < strlen($data); $i++) {
+            $bits .= str_pad(decbin(ord($data[$i])), 8, '0', STR_PAD_LEFT);
         }
 
         return $bits;
