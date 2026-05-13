@@ -225,6 +225,54 @@ final class TableRenderTest extends TestCase
     }
 
     #[Test]
+    public function column_span_widens_cell(): void
+    {
+        $t = new Table(
+            rows: [
+                new Row([$this->cell('A'), $this->cell('B'), $this->cell('C')]),
+                new Row([new Cell([$this->p('span all')], columnSpan: 3)]),
+            ],
+            columnWidthsPt: [60, 60, 60],
+        );
+        $bytes = (new Document(new Section([$t])))->toBytes(new Engine(defaultFont: $this->font()));
+        $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
+        file_put_contents($tmp, $bytes);
+        try {
+            $text = (string) shell_exec('pdftotext '.escapeshellarg($tmp).' - 2>&1');
+            self::assertStringContainsString('span all', $text);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    #[Test]
+    public function header_row_repeats_on_second_page(): void
+    {
+        $headerStyle = new CellStyle(backgroundColor: '4477aa');
+        $rows = [new Row(
+            cells: [new Cell([$this->p('HEADER')], style: $headerStyle)],
+            isHeader: true,
+        )];
+        for ($i = 0; $i < 80; $i++) {
+            $rows[] = new Row([$this->cell("Row $i")]);
+        }
+        $bytes = (new Document(new Section([new Table($rows)])))
+            ->toBytes(new Engine(defaultFont: $this->font()));
+
+        $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
+        file_put_contents($tmp, $bytes);
+        try {
+            // pdftotext per-page
+            $page1 = (string) shell_exec('pdftotext -f 1 -l 1 '.escapeshellarg($tmp).' - 2>&1');
+            $page2 = (string) shell_exec('pdftotext -f 2 -l 2 '.escapeshellarg($tmp).' - 2>&1');
+            self::assertStringContainsString('HEADER', $page1);
+            self::assertStringContainsString('HEADER', $page2);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    #[Test]
     public function multi_paragraph_cell_works(): void
     {
         $cell = new Cell([

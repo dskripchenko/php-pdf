@@ -12,6 +12,7 @@ use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Run;
+use Dskripchenko\PhpPdf\Element\Table;
 use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Section;
@@ -156,6 +157,23 @@ final class DocumentBuilder
      *   ->image('/path/to/photo.jpg', widthPt: 200, alignment: Alignment::Center)
      *   ->image($pdfImage, widthPt: 300, heightPt: 200)
      */
+    /**
+     * Block-level table. $content — Closure(TableBuilder) или готовый Table.
+     */
+    public function table(Closure|Table $content): self
+    {
+        if ($content instanceof Table) {
+            $this->body[] = $content;
+
+            return $this;
+        }
+        $b = new TableBuilder;
+        $content($b);
+        $this->body[] = $b->build();
+
+        return $this;
+    }
+
     public function image(
         string|PdfImage|Image $source,
         ?float $widthPt = null,

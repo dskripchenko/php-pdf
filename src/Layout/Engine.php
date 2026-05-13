@@ -447,9 +447,24 @@ final class Engine
         $colWidths = $this->computeColumnWidths($t, $tableWidth, $columnCount);
         $tableLeftX = $this->computeTableLeftX($t->style->alignment, $ctx, $tableWidth);
 
+        $headerRows = array_values(array_filter($t->rows, fn (Row $r): bool => $r->isHeader));
+
         foreach ($t->rows as $row) {
             $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
-            $this->ensureRoomFor($ctx, $rowHeight);
+
+            if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
+                $this->forcePageBreak($ctx);
+                // На новой странице — повторяем header rows (если current
+                // row сам не header).
+                if (! $row->isHeader) {
+                    foreach ($headerRows as $hr) {
+                        $hh = $this->measureRowHeight($t, $hr, $colWidths);
+                        $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx);
+                        $ctx->cursorY -= $hh;
+                    }
+                }
+            }
+
             $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx);
             $ctx->cursorY -= $rowHeight;
         }
@@ -511,7 +526,10 @@ final class Engine
         $maxHeight = 0;
         $colIdx = 0;
         foreach ($row->cells as $cell) {
-            $cellWidth = $colWidths[$colIdx] ?? $colWidths[0];
+            $cellWidth = 0;
+            for ($i = 0; $i < $cell->columnSpan && ($colIdx + $i) < count($colWidths); $i++) {
+                $cellWidth += $colWidths[$colIdx + $i];
+            }
             $colIdx += $cell->columnSpan;
             $cs = $this->effectiveCellStyle($t, $cell);
             $contentWidth = $cellWidth - $cs->paddingLeftPt - $cs->paddingRightPt;
