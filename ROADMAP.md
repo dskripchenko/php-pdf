@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 77 фаз закрыто (827 + 194 printable = 1021 тест).
+**Текущий статус:** v1.1-dev — 87 фаз закрыто (886 + 194 printable = 1080 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-79 closed (55 фаз):
+**v1.1 progress:** 25-89 closed (65 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -42,7 +42,16 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 72 Tagged PDF /Link, 73 SVG <style> CSS, 74 SVG <defs>/<use>,
  - 75 Math matrices (matrix/pmatrix/bmatrix/vmatrix),
  - 76 font fallback chain, 77 string encryption,
- - 78 Code 128 Set A, 79 line-height absolute precision.
+ - 78 Code 128 Set A, 79 line-height absolute precision,
+ - 80 Math big operators с limits, 81 SVG opacity attributes,
+ - 82 SVG linearGradient (PDF Pattern/Shading),
+ - 83 AcroForm submit/reset/push buttons,
+ - 84 /OpenAction + /PageMode + /PageLayout,
+ - 85 page transitions + auto-advance,
+ - 86 PDF/UA /Artifact для headers/footers/watermarks,
+ - 87 page labels (Roman/decimal/alpha numbering),
+ - 88 /ViewerPreferences dictionary,
+ - 89 Document /Lang language hint (PDF/UA requirement).
 
 ---
 
@@ -228,10 +237,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~AcroForm signature field placeholder~~ ✅ **Phase 56 closed** (b93c6c8).
 - AcroForm signature actual signing (PKCS#7 two-pass byte range).
 - ~~JavaScript validation / calculation / format / keystroke actions~~ ✅ **Phase 67 closed** (5c8e1b4).
+- ~~AcroForm submit / reset / push buttons~~ ✅ **Phase 83 closed** (ba8e13d).
 - Digital signatures (PKCS#7 signing of arbitrary fields).
 - ~~PDF/UA heading hierarchy (/H1-/H6)~~ ✅ **Phase 61 closed** (38b3c3b).
 - ~~PDF/UA alt-text для figures~~ ✅ **Phase 62 closed** (38ccc36).
 - ~~PDF/UA /Link struct elements~~ ✅ **Phase 72 closed** (bfa0246).
+- ~~PDF/UA /Artifact (header/footer/watermark)~~ ✅ **Phase 86 closed** (d35f7de).
+- ~~PDF/UA /Lang Catalog hint~~ ✅ **Phase 89 closed** (5d361af).
 - Full PDF/UA: reading-order /StructParents tree, role mapping.
 
 ### Content
@@ -243,10 +255,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~SVG path arcs (A command)~~ ✅ **Phase 63 closed** (bccf3b8). SVG path support теперь complete.
 - ~~SVG CSS <style> blocks (tag/class/id selectors)~~ ✅ **Phase 73 closed** (e030802).
 - ~~SVG <defs> + <use> element references~~ ✅ **Phase 74 closed** (2f32cc9).
-- SVG extensions: gradients (linearGradient/radialGradient).
+- ~~SVG opacity attributes~~ ✅ **Phase 81 closed** (21c8883).
+- ~~SVG linearGradient через PDF Pattern/Shading~~ ✅ **Phase 82 closed** (096ef07).
+- SVG extensions: radialGradient, multi-stop gradients (Type 3 stitching).
 - ~~Math equations (LaTeX-like sup/sub/frac/sqrt + Greek)~~ ✅ **Phase 69 closed** (f210de4).
 - ~~Math matrices (matrix/pmatrix/bmatrix/vmatrix)~~ ✅ **Phase 75 closed** (57676fd).
-- Math equations extensions: big operators с limits (\\sum_{i=1}^n), multi-line, nested fracs polishing.
+- ~~Math big operators с limits (\\sum_{i=1}^n)~~ ✅ **Phase 80 closed** (b625b92).
+- Math equations extensions: multi-line equations, nested fracs polishing.
 - ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
 - ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
 - ~~Multi-series charts (grouped bar + multi-line)~~ ✅ **Phase 51 closed** (468ebeb).
