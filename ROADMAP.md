@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 43 фазы закрыто (599 + 194 printable = 793 теста).
+**Текущий статус:** v1.1-dev — 47 фаз закрыто (630 + 194 printable = 824 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-45 closed:
+**v1.1 progress:** 25-49 closed (25 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -21,7 +21,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 37 QR ECC M/Q/H levels, 38 QR Numeric/Alphanumeric encoding modes,
  - 39 multi-column layout, 40 footnotes/endnotes,
  - 41 PDF encryption V2 R3 RC4-128, 42 AES-128 encryption V4 R4,
- - 43 AcroForm (text + checkbox), 44 BarChart, 45 LineChart + PieChart.
+ - 43 AcroForm (text + checkbox), 44 BarChart, 45 LineChart + PieChart,
+ - 46 AcroForm extensions (multiline, password, combo, list, radio),
+ - 47 PDF/A-1b compliance, 48 Tagged PDF (accessibility minimum),
+ - 49 embedded files / attachments.
 
 ---
 
@@ -202,12 +205,15 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - AES-256 (V5, PDF 2.0).
 - String encryption (currently /Identity для strings; streams encrypted).
 - ~~Form fields (interactive AcroForm) — text + checkbox~~ ✅ **Phase 43 closed** (aac0c20).
-- AcroForm extensions: multi-line text, radio groups, combo/list box,
-  signature fields, JavaScript validation/calculation.
-- JavaScript actions.
-- Embedded files / attachments.
-- Digital signatures (/Sig field type + PKCS#7 signing).
-- Tagged PDF (accessibility / PDF/UA — StructTreeRoot + marked content).
+- ~~AcroForm extensions: multi-line, password, combo, list, radio~~ ✅ **Phase 46 closed** (7862b41).
+- ~~Embedded files / attachments~~ ✅ **Phase 49 closed** (229bcd9).
+- ~~Tagged PDF (accessibility minimum)~~ ✅ **Phase 48 closed** (a9ddacf).
+- ~~PDF/A-1b compliance mode~~ ✅ **Phase 47 closed** (25884b1).
+- AcroForm signature fields (/FT /Sig + PKCS#7 signing).
+- JavaScript validation / calculation actions.
+- Digital signatures (PKCS#7).
+- Full PDF/UA: heading hierarchy (/H1-/H6), alt-text для figures,
+  reading-order /StructParents, role mapping.
 
 ### Content
 
@@ -298,6 +304,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 43 | AcroForm (text + checkbox) (v1.1) | 9 | aac0c20 |
 | 44 | BarChart primitive (v1.1) | 8 | 01f22f0 |
 | 45 | LineChart + PieChart (v1.1) | 10 | 9251cd0 |
+| 46 | AcroForm extensions (multiline/password/combo/list/radio) (v1.1) | 9 | 7862b41 |
+| 47 | PDF/A-1b compliance mode (v1.1) | 9 | 25884b1 |
+| 48 | Tagged PDF (accessibility minimum) (v1.1) | 5 | a9ddacf |
+| 49 | Embedded files / attachments (v1.1) | 8 | 229bcd9 |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
