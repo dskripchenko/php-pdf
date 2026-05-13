@@ -4,7 +4,13 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.22 — 21 фаза закрыта (435 + 193 printable = 628 тестов).
+**Текущий статус:** v1.0-rc1 — 22 фазы закрыты (435 + 193 printable = 628 тестов).
+Phase 22 (hyphenation) и Phase 23 (paragraph padding/bg) перенесены в v1.1.
+Phase 24 (MERGEFIELD) by-design placeholder.
+
+**v1.0 status:** Production-ready для типичных бизнес-документов. Critical
+блокеры (13-17) закрыты, Important (18-21) закрыты, остальное deferred
+к v1.1 как полировка edge-cases.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -114,27 +120,35 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - Inline `<span style="letter-spacing">` deferred к v1.1.
 - Tests: 4 в LetterSpacingTest.
 
-**Phase 22: Hyphenation + word-break**
-- Длинные слова без spaces сейчас overflow за right margin (greedy
-  line-break не разбивает один word).
-- Нужно: либо `&shy;` soft-hyphen support, либо word-break-all для
-  не-Latin (CJK), либо basic dictionary-based hyphenation.
+**Phase 22: Hyphenation + word-break** ⏸ DEFERRED → v1.1
+- Длинные слова без spaces overflow за right margin; greedy line-break
+  не разбивает один word.
+- Реализация требует dictionary-based hyphenation (TeX patterns или
+  PHP-NLP-Toolkit), что добавляет heavy dependency и сложность.
+- Для production текущий path рабочий: word-break-all для не-Latin (CJK)
+  не нужен в типичных бизнес-документах. Soft-hyphen `&shy;` support —
+  ~30 минут работы, но без dictionary-driven auto-hyphenation impact
+  ограничен.
+- Решение: переносим в v1.1. Workaround в шаблонах: `<wbr>` или ручные
+  `&shy;`.
 
-**Phase 23: Margin/padding precision**
-- ParagraphStyle сейчас имеет spaceBefore/After (~margin-top/bottom),
-  indentLeft/Right (~margin-left/right), indentFirstLine. Нет precise
-  padding (внутри Paragraph до текста).
-- Нужно: ParagraphStyle.paddingPt × 4 sides + background-color на
-  Paragraph (сейчас только на TableCell).
+**Phase 23: Margin/padding precision** ⏸ DEFERRED → v1.1
+- ParagraphStyle уже имеет: spaceBefore/After (margin-top/bottom),
+  indentLeft/Right (margin-left/right), indentFirstLine. Это покрывает
+  margin полностью.
+- НЕ покрыто: padding × 4 sides на Paragraph + background-color на
+  Paragraph (только TableCell сейчас имеет padding+bg).
+- Решение: текущие margin уже хватают для типичных бизнес-документов;
+  paragraph background — крайне редко используется (highlight через
+  Mark::background работает для inline). Переносим в v1.1.
 
-**Phase 24: MERGEFIELD value resolution**
-- Field::mergeField сейчас рендерит format-параметр (field name) как
-  placeholder. Реальная замена значений — задача printable's render
-  pipeline (`buildRenderData` уже это делает на pre-parse этапе через
-  `{{ var }}` substitution в Blade).
-- Decision: либо оставить placeholder behavior как есть (production
-  print уже отрабатывает на Blade-уровне), либо добавить runtime
-  values map в Engine. Открытый вопрос.
+**Phase 24: MERGEFIELD value resolution** ✅ BY DESIGN
+- Field::mergeField рендерит format-параметр (field name) как placeholder.
+- Реальная замена значений делается printable's render pipeline
+  (`buildRenderData` substitutions `{{ var }}` через Blade до парсинга).
+- Decision: оставлено как есть — production-pipeline уже работает
+  корректно. Если custom emitter хочет runtime mail-merge — можно
+  pre-substitute в Run.text до построения AST.
 
 ---
 
@@ -151,6 +165,15 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - Complex script shaping (Arabic ligatures, Indic combining marks).
 - Border priority resolution в collapse mode ("thicker wins" CSS spec
   правило vs current first-drawn-wins). Перенесено из v1.0 Phase 19.
+- **Hyphenation** (Phase 22): TeX-pattern или dictionary-based;
+  soft-hyphen `&shy;` support. Перенесено из v1.0.
+- **Paragraph padding + background** (Phase 23): сейчас только
+  TableCell имеет; Paragraph только margin (spaceBefore/After+indent).
+  Перенесено из v1.0.
+- Inline letter-spacing через `<span style="letter-spacing">` —
+  требует Mark::letterSpacing constant.
+- Line-height absolute (`line-height: 18pt`) точно вместо approx /11
+  multiplier conversion.
 
 ### Typography
 
@@ -225,8 +248,12 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 19 | border-spacing (priority deferred к v1.1) | 3 | 9c76b42 + d5fd4cc (printable) |
 | 20 | PDF metadata (/Info dict) | 5 | c6efcb7 |
 | 21 | line-height + letter-spacing | 4 | 067c17c + 280aaba (printable) |
+| 22 | Hyphenation — DEFERRED к v1.1 | — | — |
+| 23 | Paragraph padding/bg — DEFERRED к v1.1 | — | — |
+| 24 | MERGEFIELD — BY DESIGN (Blade-level pipeline) | — | — |
 
-**Итого:** 435 тестов в php-pdf, 193 теста в printable, 8 в Liberation package.
+**Итого v1.0:** 435 тестов в php-pdf, 193 теста в printable, 8 в
+Liberation package. Production-ready.
 
 ---
 
