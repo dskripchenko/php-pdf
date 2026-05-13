@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.14 — 13 фаз закрыты (402 теста, 902 assertions).
+**Текущий статус:** v0.15 — 14 фаз закрыты (407 тестов, 911 assertions).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -44,12 +44,15 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   FontProvider с Microsoft metric aliases (Arial → LiberationSans).
 - Tests: 10 в php-pdf, 8 в liberation package, 2 в printable.
 
-**Phase 14: PDF compression**
-- Content streams сейчас raw (uncompressed). Файлы в 2-4× больше mpdf
-  на equivalent контенте (e.g. 195KB vs 47KB на одном договоре).
-- Нужно: `/Filter /FlateDecode` для content streams + image streams
-  (где не DCTDecode); опциональный flag `compress` в Engine.
-- Цель: php-pdf output в пределах 1.5× от mpdf size.
+**Phase 14: PDF compression** ✅ DONE
+- ~~Content streams raw → файлы 2-4× больше mpdf.~~
+- ~~FlateDecode для content + font streams; opt-out flag.~~
+- Done (ba25389): Pdf\Document + Engine + PdfFont все принимают
+  `compressStreams: bool = true`. Content streams и font subset
+  FontFile2 streams сжимаются gzcompress(level 6) с `/Filter /FlateDecode`.
+- Real-world: 199KB → 93KB (47% reduction) на тестовом договоре;
+  vs mpdf 51KB → ratio 1.82× (target ≤1.5× близко).
+- Tests: 5 в CompressionTest; bulk-update 17 test files под opt-out.
 
 **Phase 15: Justify alignment**
 - `text-align: justify` сейчас деградирует к `Start` (см. Engine
@@ -201,8 +204,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 11 | CSS borders в таблицах | 8 | 344ccc4 |
 | 12 | border-collapse + double-line render | 5 + 2 | a9efb7d |
 | 13 | Custom font registration (FontProvider + Liberation bundle) | 10 + 8 + 2 | 4dc641c (php-pdf) + af2efea (fonts) + 4bc1cd9 (printable) |
+| 14 | PDF compression (FlateDecode content + font streams) | 5 | ba25389 |
 
-**Итого:** 402 теста в php-pdf, 191 теста в printable, 8 в Liberation package.
+**Итого:** 407 тестов в php-pdf, 191 теста в printable, 8 в Liberation package.
 
 ---
 
