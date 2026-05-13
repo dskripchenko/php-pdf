@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 87 фаз закрыто (886 + 194 printable = 1080 тестов).
+**Текущий статус:** v1.1-dev — 92 фазы закрыто (907 + 194 printable = 1101 тест).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-89 closed (65 фаз):
+**v1.1 progress:** 25-94 closed (70 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -51,7 +51,12 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 86 PDF/UA /Artifact для headers/footers/watermarks,
  - 87 page labels (Roman/decimal/alpha numbering),
  - 88 /ViewerPreferences dictionary,
- - 89 Document /Lang language hint (PDF/UA requirement).
+ - 89 Document /Lang language hint (PDF/UA requirement),
+ - 90 SVG multi-stop gradients (Type 3 stitching),
+ - 91 SVG radialGradient,
+ - 92 PDF/UA /StructParents tree (reading order),
+ - 93 PDF/UA /RoleMap custom role aliases,
+ - 94 Page rotation /Rotate.
 
 ---
 
@@ -244,7 +249,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~PDF/UA /Link struct elements~~ ✅ **Phase 72 closed** (bfa0246).
 - ~~PDF/UA /Artifact (header/footer/watermark)~~ ✅ **Phase 86 closed** (d35f7de).
 - ~~PDF/UA /Lang Catalog hint~~ ✅ **Phase 89 closed** (5d361af).
-- Full PDF/UA: reading-order /StructParents tree, role mapping.
+- ~~PDF/UA /StructParents tree (reading order)~~ ✅ **Phase 92 closed** (0e46faa).
+- ~~PDF/UA /RoleMap (custom role aliases)~~ ✅ **Phase 93 closed** (7bc4776).
+- PDF/UA complete для structural elements (P/H1-H6/Figure/Table/L/Link/Artifact +
+  /StructParents/Lang/RoleMap).
 
 ### Content
 
@@ -257,7 +265,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~SVG <defs> + <use> element references~~ ✅ **Phase 74 closed** (2f32cc9).
 - ~~SVG opacity attributes~~ ✅ **Phase 81 closed** (21c8883).
 - ~~SVG linearGradient через PDF Pattern/Shading~~ ✅ **Phase 82 closed** (096ef07).
-- SVG extensions: radialGradient, multi-stop gradients (Type 3 stitching).
+- ~~SVG multi-stop gradients (Type 3 stitching)~~ ✅ **Phase 90 closed** (a96d200).
+- ~~SVG radialGradient~~ ✅ **Phase 91 closed** (71b851d).
+- SVG complete: full path grammar + transforms + opacity + linear/radial gradients +
+  multi-stop + CSS styles + defs/use + text. (limitation: gradient transform attr).
 - ~~Math equations (LaTeX-like sup/sub/frac/sqrt + Greek)~~ ✅ **Phase 69 closed** (f210de4).
 - ~~Math matrices (matrix/pmatrix/bmatrix/vmatrix)~~ ✅ **Phase 75 closed** (57676fd).
 - ~~Math big operators с limits (\\sum_{i=1}^n)~~ ✅ **Phase 80 closed** (b625b92).
