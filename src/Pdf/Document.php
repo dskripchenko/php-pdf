@@ -103,6 +103,28 @@ final class Document
     private ?string $pageLayout = null;
 
     /**
+     * Phase 87: Page label ranges per ISO 32000-1 §12.4.2.
+     *
+     * @var list<array{startPage: int, style?: string, prefix?: string, firstNumber?: int}>
+     */
+    private array $pageLabelRanges = [];
+
+    /**
+     * Phase 87: Configure page label numbering style per page range.
+     * Styles: 'decimal' (1, 2, 3), 'upper-roman' (I, II, III),
+     * 'lower-roman' (i, ii, iii), 'upper-alpha' (A, B, C),
+     * 'lower-alpha' (a, b, c).
+     *
+     * @param  list<array{startPage: int, style?: string, prefix?: string, firstNumber?: int}>  $ranges
+     */
+    public function setPageLabels(array $ranges): self
+    {
+        $this->pageLabelRanges = $ranges;
+
+        return $this;
+    }
+
+    /**
      * Phase 84: Set open action — zoom + page on document open.
      */
     public function setOpenAction(string $mode = 'fit-page', int $pageIndex = 1, ?float $x = null, ?float $y = null, ?float $zoom = null): self
@@ -857,7 +879,35 @@ final class Document
             };
         }
 
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef >>");
+        // Phase 87: /PageLabels number tree.
+        $pageLabelsRef = '';
+        if ($this->pageLabelRanges !== []) {
+            $styleMap = [
+                'decimal' => 'D',
+                'upper-roman' => 'R',
+                'lower-roman' => 'r',
+                'upper-alpha' => 'A',
+                'lower-alpha' => 'a',
+            ];
+            $numsEntries = [];
+            foreach ($this->pageLabelRanges as $range) {
+                $parts = [];
+                if (isset($range['style']) && isset($styleMap[$range['style']])) {
+                    $parts[] = '/S /'.$styleMap[$range['style']];
+                }
+                if (isset($range['prefix']) && $range['prefix'] !== '') {
+                    $parts[] = '/P '.$this->pdfString($range['prefix']);
+                }
+                if (isset($range['firstNumber'])) {
+                    $parts[] = '/St '.$range['firstNumber'];
+                }
+                $dict = '<< '.implode(' ', $parts).' >>';
+                $numsEntries[] = $range['startPage'].' '.$dict;
+            }
+            $pageLabelsRef = ' /PageLabels << /Nums ['.implode(' ', $numsEntries).'] >>';
+        }
+
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef >>");
 
         $writer->setRoot($catalogId);
 
