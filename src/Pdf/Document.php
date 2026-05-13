@@ -70,6 +70,23 @@ final class Document
     /** @var list<int> Phase 43: form field object IDs (filled во время toBytes). */
     private array $collectedFormFieldIds = [];
 
+    /** Phase 47: PDF/A-1b configuration. */
+    private ?PdfAConfig $pdfA = null;
+
+    /**
+     * Phase 47: Enable PDF/A-1b compliance mode.
+     */
+    public function enablePdfA(PdfAConfig $config): self
+    {
+        if ($this->encryption !== null) {
+            throw new \LogicException('PDF/A-1b disallows encryption — call enablePdfA() перед encrypt() либо не вызывайте encrypt().');
+        }
+        $this->pdfA = $config;
+        $this->pdfVersion = '1.4';
+
+        return $this;
+    }
+
     /**
      * Phase 41-42: enable PDF encryption.
      *
@@ -82,6 +99,9 @@ final class Document
         int $permissions = Encryption::PERM_PRINT | Encryption::PERM_COPY | Encryption::PERM_PRINT_HIGH,
         EncryptionAlgorithm $algorithm = EncryptionAlgorithm::Rc4_128,
     ): self {
+        if ($this->pdfA !== null) {
+            throw new \LogicException('PDF/A-1b disallows encryption');
+        }
         $this->encryption = new Encryption($userPassword, $ownerPassword, $permissions, $algorithm);
         // PDF 1.6 required для AES-128.
         if ($algorithm === EncryptionAlgorithm::Aes_128 && version_compare($this->pdfVersion, '1.6', '<')) {
@@ -497,8 +517,44 @@ final class Document
             $acroFormRef = " /AcroForm $acroFormId 0 R";
         }
 
+        // Phase 47: PDF/A-1b — Metadata stream + OutputIntent + /Lang.
+        $pdfARef = '';
+        if ($this->pdfA !== null) {
+            $xmp = $this->pdfA->xmpMetadata();
+            // Metadata stream — НЕ filtered, НЕ encrypted.
+            $metadataId = $writer->addObject(sprintf(
+                "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
+                strlen($xmp),
+                $xmp,
+            ));
+            // ICC profile embedded — Flate-compressed stream с /N 3 (RGB).
+            $iccBytes = $this->pdfA->iccProfileBytes();
+            $iccCompressed = (string) gzcompress($iccBytes, 6);
+            $iccId = $writer->addObject(sprintf(
+                "<< /N 3 /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                strlen($iccCompressed),
+                $iccCompressed,
+            ));
+            $outputIntentBody = sprintf(
+                '<< /Type /OutputIntent /S /GTS_PDFA1 '
+                .'/OutputConditionIdentifier %s '
+                .'/Info %s '
+                .'/DestOutputProfile %d 0 R >>',
+                $this->pdfString($this->pdfA->iccProfileName),
+                $this->pdfString($this->pdfA->iccProfileName),
+                $iccId,
+            );
+            $outputIntentId = $writer->addObject($outputIntentBody);
+            $pdfARef = sprintf(
+                ' /Metadata %d 0 R /OutputIntents [%d 0 R] /Lang %s',
+                $metadataId,
+                $outputIntentId,
+                $this->pdfString($this->pdfA->lang),
+            );
+        }
+
         // 6. Catalog.
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef >>");
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef >>");
 
         $writer->setRoot($catalogId);
 
