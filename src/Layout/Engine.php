@@ -493,7 +493,13 @@ final class Engine
     {
         $ctx->cursorY -= $bc->spaceBeforePt;
 
-        // Encode по format'у.
+        if ($bc->format->is2D()) {
+            $this->renderQrBarcode($bc, $ctx);
+
+            return;
+        }
+
+        // Encode по format'у (linear barcodes only — QR обрабатывается выше).
         [$modules, $captionText] = match ($bc->format) {
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::Code128 => [
                 (new \Dskripchenko\PhpPdf\Barcode\Code128Encoder($bc->value))->modulesWithQuietZone(10),
@@ -509,6 +515,7 @@ final class Engine
 
                 return [$e->modulesWithQuietZone(9), $e->canonical];
             })(),
+            default => throw new \LogicException('Linear barcode dispatch reached unreachable format'),
         };
         $moduleCount = count($modules);
 
@@ -577,6 +584,92 @@ final class Engine
             } else {
                 $ctx->currentPage->showText(
                     $captionText, $captionX, $captionY,
+                    $this->fallbackStandard, $bc->textSizePt,
+                );
+            }
+        }
+
+        $ctx->cursorY -= $totalHeight;
+        $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 36: QR code 2D barcode. Modules — 2D bool matrix; рендерим
+     * как grid of black squares. Quiet zone (4 modules) добавляется
+     * вокруг матрицы.
+     */
+    private function renderQrBarcode(Barcode $bc, LayoutContext $ctx): void
+    {
+        $enc = new \Dskripchenko\PhpPdf\Barcode\QrEncoder($bc->value);
+        $matrix = $enc->modules();
+        $matrixSize = $enc->size();
+        $quietZone = 4; // ISO/IEC 18004 minimum.
+        $gridSize = $matrixSize + 2 * $quietZone;
+
+        // 2D — totalWidth = totalHeight. widthPt determines size; heightPt
+        // ignored для QR (preserved для caption layout).
+        $totalSizePt = $bc->widthPt ?? 80.0;
+        $totalSizePt = min($totalSizePt, $ctx->contentWidth);
+        $moduleSize = $totalSizePt / $gridSize;
+
+        $captionHeight = $bc->showText ? $bc->textSizePt + 2.0 : 0;
+        $totalHeight = $totalSizePt + $captionHeight;
+        $this->ensureRoomFor($ctx, $totalHeight);
+
+        $blockX = match ($bc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalSizePt) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalSizePt,
+            default => $ctx->leftX,
+        };
+
+        $yTop = $ctx->cursorY;
+        // QR top-left corner в PDF (origin = bottom-left): yTop minus
+        // (quietZone modules) for the actual matrix region.
+        // Draw matrix row by row; для каждой row collapse contiguous black
+        // modules в single horizontal fillRect для efficiency.
+        $matrixOffset = $quietZone * $moduleSize;
+        for ($row = 0; $row < $matrixSize; $row++) {
+            $rowYBottom = $yTop - $matrixOffset - ($row + 1) * $moduleSize;
+            $runStart = null;
+            for ($col = 0; $col < $matrixSize; $col++) {
+                if ($matrix[$row][$col]) {
+                    if ($runStart === null) {
+                        $runStart = $col;
+                    }
+                } elseif ($runStart !== null) {
+                    $w = ($col - $runStart) * $moduleSize;
+                    $ctx->currentPage->fillRect(
+                        $blockX + $matrixOffset + $runStart * $moduleSize,
+                        $rowYBottom, $w, $moduleSize, 0, 0, 0,
+                    );
+                    $runStart = null;
+                }
+            }
+            if ($runStart !== null) {
+                $w = ($matrixSize - $runStart) * $moduleSize;
+                $ctx->currentPage->fillRect(
+                    $blockX + $matrixOffset + $runStart * $moduleSize,
+                    $rowYBottom, $w, $moduleSize, 0, 0, 0,
+                );
+            }
+        }
+
+        // Optional caption (default false для QR — традиционно нет text).
+        if ($bc->showText) {
+            $captionY = $yTop - $totalSizePt - $bc->textSizePt - 1.0;
+            $captionWidth = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($bc->value)
+                : mb_strlen($bc->value, 'UTF-8') * $bc->textSizePt * 0.5;
+            $captionX = $blockX + ($totalSizePt - $captionWidth) / 2;
+
+            if ($this->defaultFont !== null) {
+                $ctx->currentPage->showEmbeddedText(
+                    $bc->value, $captionX, $captionY,
+                    $this->defaultFont, $bc->textSizePt,
+                );
+            } else {
+                $ctx->currentPage->showText(
+                    $bc->value, $captionX, $captionY,
                     $this->fallbackStandard, $bc->textSizePt,
                 );
             }

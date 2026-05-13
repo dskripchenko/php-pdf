@@ -22,4 +22,13 @@ enum BarcodeFormat: string
     case Code128 = 'code128';
     case Ean13 = 'ean13';
     case UpcA = 'upca';
+    case Qr = 'qr';
+
+    public function is2D(): bool
+    {
+        return match ($this) {
+            self::Qr => true,
+            default => false,
+        };
+    }
 }
