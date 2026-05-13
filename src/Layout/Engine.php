@@ -220,6 +220,12 @@ final class Engine
             foreach ($section->body as $block) {
                 $this->renderBlock($block, $context);
             }
+
+            // Phase 40: emit collected endnotes per section (если есть).
+            if ($context->footnotes !== []) {
+                $this->renderEndnotes($context);
+                $context->footnotes = [];
+            }
         }
 
         $this->currentSection = null;
@@ -767,6 +773,32 @@ final class Engine
         $ctx->cursorY -= $bc->spaceAfterPt;
     }
 
+    /**
+     * Phase 40: Renders collected footnotes as endnotes-style block:
+     *  - 0.5pt horizontal rule separator
+     *  - "N. content" lines numbered по порядку collection
+     *
+     * Rendered at end of section's body (после last block, перед switch
+     * на next section).
+     */
+    private function renderEndnotes(LayoutContext $ctx): void
+    {
+        $this->ensureRoomFor($ctx, 12.0);
+        $ctx->cursorY -= 6.0;
+        // Thin separator line.
+        $ctx->currentPage->fillRect(
+            $ctx->leftX, $ctx->cursorY, $ctx->contentWidth * 0.3, 0.5,
+            0.5, 0.5, 0.5,
+        );
+        $ctx->cursorY -= 8.0;
+
+        foreach ($ctx->footnotes as $idx => $content) {
+            $marker = ($idx + 1).'. ';
+            $p = new Paragraph([new Run($marker.$content)]);
+            $this->renderBlock($p, $ctx);
+        }
+    }
+
     private function renderImage(Image $img, LayoutContext $ctx): void
     {
         $ctx->cursorY -= $img->spaceBeforePt;
@@ -1043,6 +1075,15 @@ final class Engine
                     'height' => $imgH,
                     'link' => $currentLink,
                 ];
+            } elseif ($child instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
+                // Phase 40: collect footnote text + insert auto-numbered
+                // superscript marker (Run с superscript=true).
+                if ($ctx !== null) {
+                    $ctx->footnotes[] = $child->content;
+                    $marker = (string) count($ctx->footnotes);
+                    $markerStyle = $effectiveDefault->withSuperscript(true);
+                    $items[] = ['type' => 'word', 'text' => $marker, 'style' => $markerStyle, 'link' => $currentLink];
+                }
             }
         }
     }

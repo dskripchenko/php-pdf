@@ -41,5 +41,9 @@ final class LayoutContext
         public float $columnGapPt = 0,
         public float $columnOriginLeftX = 0,
         public float $columnOriginContentWidth = 0,
+        // Phase 40: collected footnotes/endnotes per section (rendered at
+        // end of section as endnotes block).
+        /** @var list<string> */
+        public array $footnotes = [],
     ) {}
 }
