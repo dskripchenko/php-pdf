@@ -68,14 +68,22 @@ final class Document
     private ?Encryption $encryption = null;
 
     /**
-     * Phase 41: enable RC4-128 encryption (V2 R3 standard security handler).
+     * Phase 41-42: enable PDF encryption.
+     *
+     * RC4-128 (V2 R3) — default, supported widely включая старые readers.
+     * AES-128 (V4 R4) — modern, deprecates RC4. Requires openssl ext.
      */
     public function encrypt(
         string $userPassword,
         ?string $ownerPassword = null,
         int $permissions = Encryption::PERM_PRINT | Encryption::PERM_COPY | Encryption::PERM_PRINT_HIGH,
+        EncryptionAlgorithm $algorithm = EncryptionAlgorithm::Rc4_128,
     ): self {
-        $this->encryption = new Encryption($userPassword, $ownerPassword, $permissions);
+        $this->encryption = new Encryption($userPassword, $ownerPassword, $permissions, $algorithm);
+        // PDF 1.6 required для AES-128.
+        if ($algorithm === EncryptionAlgorithm::Aes_128 && version_compare($this->pdfVersion, '1.6', '<')) {
+            $this->pdfVersion = '1.6';
+        }
 
         return $this;
     }
@@ -469,17 +477,30 @@ final class Document
             $writer->setInfo($infoId);
         }
 
-        // Phase 41: emit /Encrypt object и hook encryption в writer.
+        // Phase 41-42: emit /Encrypt object и hook encryption в writer.
         if ($this->encryption !== null) {
             $enc = $this->encryption;
             $oHex = bin2hex($enc->oValue);
             $uHex = bin2hex($enc->uValue);
-            $encryptBody = sprintf(
-                '<< /Filter /Standard /V 2 /R 3 /Length 128 /O <%s> /U <%s> /P %d >>',
-                $oHex,
-                $uHex,
-                $enc->permissions,
-            );
+            if ($enc->algorithm === EncryptionAlgorithm::Aes_128) {
+                // V4 R4 + Crypt Filter AESV2.
+                $encryptBody = sprintf(
+                    '<< /Filter /Standard /V 4 /R 4 /Length 128 '
+                    .'/CF << /StdCF << /CFM /AESV2 /Length 16 /AuthEvent /DocOpen >> >> '
+                    .'/StmF /StdCF /StrF /StdCF '
+                    .'/O <%s> /U <%s> /P %d >>',
+                    $oHex,
+                    $uHex,
+                    $enc->permissions,
+                );
+            } else {
+                $encryptBody = sprintf(
+                    '<< /Filter /Standard /V 2 /R 3 /Length 128 /O <%s> /U <%s> /P %d >>',
+                    $oHex,
+                    $uHex,
+                    $enc->permissions,
+                );
+            }
             $encryptId = $writer->addObject($encryptBody);
             $writer->setEncryption($enc, $encryptId);
         }

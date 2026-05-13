@@ -5,22 +5,20 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 41: PDF Standard Security Handler V2 R3 (RC4-128).
+ * Phase 41-42: PDF Standard Security Handler V2 R3 (RC4-128) и V4 R4 (AES-128).
  *
  * ISO 32000-1 §7.6, Algorithms 2-7.
  *
  * Supported:
- *  - V=2, R=3, Length=128 (RC4-128 stream + string encryption).
+ *  - RC4_128: V=2, R=3, Length=128 (RC4-128 stream cipher).
+ *  - AES_128: V=4, R=4, Length=128 + CFM AESV2 (AES-128-CBC).
  *  - User password (для opening); owner = user если не задан.
  *  - Permissions bits (printing, copying, modification, ...).
  *
  * Не реализовано:
- *  - V4/V5 (AES-128, AES-256).
+ *  - V5 (AES-256, PDF 1.7 Extension Level 8 / PDF 2.0).
  *  - Public-key encryption (/Filter /PubSec).
- *  - Crypt filters (StmF/StrF customization).
- *
- * Security note: RC4-128 deprecated в PDF 2.0; используется только для
- * legacy compatibility. Для serious protection используйте AES (deferred).
+ *  - String encryption (currently /Identity для strings).
  */
 final class Encryption
 {
@@ -58,11 +56,18 @@ final class Encryption
 
     public readonly string $fileId;
 
+    public readonly EncryptionAlgorithm $algorithm;
+
     public function __construct(
         string $userPassword,
         ?string $ownerPassword = null,
         int $permissions = self::PERM_PRINT | self::PERM_COPY | self::PERM_PRINT_HIGH,
+        EncryptionAlgorithm $algorithm = EncryptionAlgorithm::Rc4_128,
     ) {
+        $this->algorithm = $algorithm;
+        if ($algorithm === EncryptionAlgorithm::Aes_128 && ! self::aesAvailable()) {
+            throw new \RuntimeException('AES-128 encryption requires openssl extension with aes-128-cbc support');
+        }
         $owner = $ownerPassword ?? $userPassword;
         $userPadded = self::padPassword($userPassword);
         $ownerPadded = self::padPassword($owner);
@@ -90,21 +95,45 @@ final class Encryption
 
     /**
      * Encrypts data для PDF object N gen G (typically G=0).
-     * Standard Algorithm 1 — RC4 stream cipher с per-object key.
+     *
+     * RC4_128: Algorithm 1 — RC4 stream cipher с per-object key.
+     * AES_128: Algorithm 1.b — AES-128-CBC с per-object key + random IV,
+     *          IV prepended к ciphertext.
      */
     public function encryptObject(string $data, int $objNum, int $genNum = 0): string
     {
-        // Build per-object key: fileKey + obj_num (3 bytes LE) + gen_num (2 bytes LE).
-        $key = $this->fileKey
+        // Build per-object key base: fileKey + obj_num (3 bytes LE) + gen_num (2 bytes LE).
+        $base = $this->fileKey
             . chr($objNum & 0xFF)
             . chr(($objNum >> 8) & 0xFF)
             . chr(($objNum >> 16) & 0xFF)
             . chr($genNum & 0xFF)
             . chr(($genNum >> 8) & 0xFF);
 
-        $objKey = substr(md5($key, true), 0, min(16, strlen($this->fileKey) + 5));
+        if ($this->algorithm === EncryptionAlgorithm::Aes_128) {
+            // AES per-object key: salt "sAlT" appended перед MD5.
+            $key = substr(md5($base . "sAlT", true), 0, min(16, strlen($this->fileKey) + 5));
+            $iv = random_bytes(16);
+            $cipher = (string) openssl_encrypt(
+                $data,
+                'aes-128-cbc',
+                $key,
+                OPENSSL_RAW_DATA,
+                $iv,
+            );
+
+            return $iv . $cipher;
+        }
+
+        $objKey = substr(md5($base, true), 0, min(16, strlen($this->fileKey) + 5));
 
         return self::rc4($objKey, $data);
+    }
+
+    public static function aesAvailable(): bool
+    {
+        return function_exists('openssl_encrypt')
+            && in_array('aes-128-cbc', openssl_get_cipher_methods(), true);
     }
 
     /**
