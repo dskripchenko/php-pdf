@@ -103,6 +103,29 @@ final class Document
     private ?string $pageLayout = null;
 
     /**
+     * Phase 88: /ViewerPreferences entries.
+     *
+     * @var array<string, mixed>
+     */
+    private array $viewerPreferences = [];
+
+    /**
+     * Phase 88: Configure viewer preferences. Keys: hideToolbar,
+     * hideMenubar, hideWindowUI, fitWindow, centerWindow,
+     * displayDocTitle (bool); direction ('L2R'|'R2L'); printScaling
+     * ('None'|'AppDefault'); duplex ('Simplex'|'DuplexFlipShortEdge'|
+     * 'DuplexFlipLongEdge').
+     *
+     * @param  array<string, mixed>  $prefs
+     */
+    public function setViewerPreferences(array $prefs): self
+    {
+        $this->viewerPreferences = $prefs;
+
+        return $this;
+    }
+
+    /**
      * Phase 87: Page label ranges per ISO 32000-1 §12.4.2.
      *
      * @var list<array{startPage: int, style?: string, prefix?: string, firstNumber?: int}>
@@ -907,7 +930,35 @@ final class Document
             $pageLabelsRef = ' /PageLabels << /Nums ['.implode(' ', $numsEntries).'] >>';
         }
 
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef >>");
+        // Phase 88: /ViewerPreferences dict.
+        $viewerPrefsRef = '';
+        if ($this->viewerPreferences !== []) {
+            $entries = [];
+            $boolKeys = [
+                'hideToolbar' => 'HideToolbar', 'hideMenubar' => 'HideMenubar',
+                'hideWindowUI' => 'HideWindowUI', 'fitWindow' => 'FitWindow',
+                'centerWindow' => 'CenterWindow', 'displayDocTitle' => 'DisplayDocTitle',
+            ];
+            foreach ($boolKeys as $k => $name) {
+                if (isset($this->viewerPreferences[$k])) {
+                    $entries[] = "/$name ".($this->viewerPreferences[$k] ? 'true' : 'false');
+                }
+            }
+            if (isset($this->viewerPreferences['direction'])) {
+                $entries[] = '/Direction /'.$this->viewerPreferences['direction'];
+            }
+            if (isset($this->viewerPreferences['printScaling'])) {
+                $entries[] = '/PrintScaling /'.$this->viewerPreferences['printScaling'];
+            }
+            if (isset($this->viewerPreferences['duplex'])) {
+                $entries[] = '/Duplex /'.$this->viewerPreferences['duplex'];
+            }
+            if ($entries !== []) {
+                $viewerPrefsRef = ' /ViewerPreferences << '.implode(' ', $entries).' >>';
+            }
+        }
+
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef >>");
 
         $writer->setRoot($catalogId);
 
