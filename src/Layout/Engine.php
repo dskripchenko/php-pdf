@@ -126,6 +126,15 @@ final class Engine
          * (raw operators видны в bytes).
          */
         public readonly bool $compressStreams = true,
+        /**
+         * Phase 76: Font fallback chain — если main font (defaultFont или
+         * resolved variant) lacks glyph для some char в Run text, try
+         * next font в chain. All-or-nothing per Run (no per-char
+         * font switching — deferred).
+         *
+         * @var list<PdfFont>
+         */
+        public readonly array $fallbackFonts = [],
     ) {
         if ($fontProvider !== null) {
             $this->resolver = new PdfFontResolver($fontProvider);
@@ -141,7 +150,7 @@ final class Engine
      *  2. Иначе bold/italic ctor-фолбэк chain → defaultFont
      *  3. Иначе null (caller использует fallbackStandard base-14)
      */
-    private function resolveEmbeddedFont(RunStyle $style): ?PdfFont
+    private function resolveEmbeddedFont(RunStyle $style, ?string $text = null): ?PdfFont
     {
         if ($style->fontFamily !== null && $this->resolver !== null) {
             $resolved = $this->resolver->resolve(
@@ -150,22 +159,40 @@ final class Engine
                 $style->italic,
             );
             if ($resolved !== null) {
-                return $resolved;
+                return $this->applyFallbackChain($resolved, $text);
             }
-            // Family known but provider returned null → fall through к defaults.
         }
 
-        if ($style->bold && $style->italic) {
-            return $this->boldItalicFont ?? $this->boldFont ?? $this->italicFont ?? $this->defaultFont;
+        $primary = match (true) {
+            $style->bold && $style->italic => $this->boldItalicFont ?? $this->boldFont ?? $this->italicFont ?? $this->defaultFont,
+            $style->bold => $this->boldFont ?? $this->defaultFont,
+            $style->italic => $this->italicFont ?? $this->defaultFont,
+            default => $this->defaultFont,
+        };
+
+        return $this->applyFallbackChain($primary, $text);
+    }
+
+    /**
+     * Phase 76: Если primary font lacks glyph для some char в $text,
+     * try fallbackFonts chain. Returns first font supporting all chars,
+     * или primary (graceful degradation если ни один не подходит).
+     */
+    private function applyFallbackChain(?PdfFont $primary, ?string $text): ?PdfFont
+    {
+        if ($primary === null || $text === null || $text === '' || $this->fallbackFonts === []) {
+            return $primary;
         }
-        if ($style->bold) {
-            return $this->boldFont ?? $this->defaultFont;
+        if ($primary->supportsText($text)) {
+            return $primary;
         }
-        if ($style->italic) {
-            return $this->italicFont ?? $this->defaultFont;
+        foreach ($this->fallbackFonts as $fb) {
+            if ($fb->supportsText($text)) {
+                return $fb;
+            }
         }
 
-        return $this->defaultFont;
+        return $primary;
     }
 
     public function render(AstDocument $document): PdfDocument
@@ -2797,7 +2824,7 @@ final class Engine
             [$r, $g, $b] = $this->hexToRgb($style->color);
         }
         $tracking = $style->letterSpacingPt ?? 0;
-        $font = $this->resolveEmbeddedFont($style);
+        $font = $this->resolveEmbeddedFont($style, $text);
         if ($font !== null) {
             $page->showEmbeddedText($text, $x, $baselineY, $font, $sizePt, $r, $g, $b, $tracking);
         } else {
@@ -2813,7 +2840,7 @@ final class Engine
     {
         // Phase 33: SHY invisible → стрипим для width estimation.
         $text = self::stripSoftHyphens($text);
-        $font = $this->resolveEmbeddedFont($style);
+        $font = $this->resolveEmbeddedFont($style, $text);
         if ($font !== null) {
             $m = new TextMeasurer($font, $style->sizePt ?? $this->defaultFontSizePt);
 

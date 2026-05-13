@@ -141,6 +141,32 @@ final class PdfFont
     }
 
     /**
+     * Phase 76: Check whether all codepoints в $text есть в font cmap.
+     * ASCII control chars + space treated as supported. Used для Engine
+     * font fallback chain — main font lacks glyph → try next в chain.
+     */
+    public function supportsText(string $text): bool
+    {
+        if ($text === '') {
+            return true;
+        }
+        $len = mb_strlen($text, 'UTF-8');
+        for ($i = 0; $i < $len; $i++) {
+            $ch = mb_substr($text, $i, 1, 'UTF-8');
+            $cp = mb_ord($ch, 'UTF-8');
+            if ($cp === false || $cp <= 32) {
+                // Control/space — universally supported.
+                continue;
+            }
+            if ($this->ttf->glyphIdForChar($cp) === 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Decode UTF-8 в list (codepoint, glyphId) — низкоуровневый decoder.
      * НЕ применяет ligature substitution. Side-effect: НЕ накапливает в
      * usedGlyphs (это делает shapedGlyphs/encodeText).
