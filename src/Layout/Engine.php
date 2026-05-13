@@ -3443,6 +3443,14 @@ final class Engine
         }
         $ctx->cursorY -= $list->spaceBeforePt;
 
+        // Phase 66: tagged PDF — wrap list в /L struct.
+        $taggedPdf = $ctx->pdf->isTagged();
+        $listMcid = null;
+        if ($taggedPdf) {
+            $listMcid = $ctx->currentPage->nextMcid();
+            $ctx->currentPage->beginMarkedContent('L', $listMcid);
+        }
+
         $format = $list->effectiveFormat();
         $baseIndent = ($level + 1) * self::LIST_LEVEL_INDENT_PT;
 
@@ -3450,10 +3458,32 @@ final class Engine
             $number = $list->startAt + $i;
             $marker = $this->formatListMarker($number, $format);
 
+            // Phase 66: per-item /LI wrap.
+            $itemMcid = null;
+            if ($taggedPdf) {
+                $itemMcid = $ctx->currentPage->nextMcid();
+                $ctx->currentPage->beginMarkedContent('LI', $itemMcid);
+            }
+
+            // Suppress nested /P tags inside list items (item-level /LI
+            // subsumes paragraph wrapping per PDF/UA spec).
+            $savedSkip = $ctx->skipParagraphTag;
+            $ctx->skipParagraphTag = true;
             $this->renderListItem($item, $marker, $baseIndent, $ctx, $level);
+            $ctx->skipParagraphTag = $savedSkip;
+
+            if ($taggedPdf && $itemMcid !== null) {
+                $ctx->currentPage->endMarkedContent();
+                $ctx->pdf->addStructElement('LI', $itemMcid, $ctx->currentPage);
+            }
         }
 
         $ctx->cursorY -= $list->spaceAfterPt;
+
+        if ($taggedPdf && $listMcid !== null) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->pdf->addStructElement('L', $listMcid, $ctx->currentPage);
+        }
     }
 
     private function renderListItem(
