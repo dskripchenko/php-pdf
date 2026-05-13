@@ -112,6 +112,26 @@ final class Document
     /** Phase 89: BCP 47 language tag для /Lang в Catalog. */
     private ?string $lang = null;
 
+    /**
+     * Phase 93: Custom struct role aliases. Maps non-standard struct type
+     * names к standard PDF/UA roles.
+     *
+     * @var array<string, string>  custom → standard.
+     */
+    private array $structRoleMap = [];
+
+    /**
+     * Phase 93: Configure role map для custom struct types.
+     *
+     * @param  array<string, string>  $roleMap
+     */
+    public function setStructRoleMap(array $roleMap): self
+    {
+        $this->structRoleMap = $roleMap;
+
+        return $this;
+    }
+
     public function setLang(string $lang): self
     {
         $this->lang = $lang;
@@ -853,12 +873,23 @@ final class Document
                 '<< /Nums ['.implode(' ', $parentTreeNums).'] >>',
             );
 
+            // Phase 93: optional /RoleMap dict.
+            $roleMapRef = '';
+            if ($this->structRoleMap !== []) {
+                $entries = [];
+                foreach ($this->structRoleMap as $custom => $standard) {
+                    $entries[] = '/'.$custom.' /'.$standard;
+                }
+                $roleMapRef = ' /RoleMap << '.implode(' ', $entries).' >>';
+            }
+
             $writer->setObject($structRootId, sprintf(
                 '<< /Type /StructTreeRoot /K %s /ParentTree %d 0 R '
-                .'/ParentTreeNextKey %d >>',
+                .'/ParentTreeNextKey %d%s >>',
                 $kidsArray,
                 $parentTreeId,
                 count($this->pages),
+                $roleMapRef,
             ));
             $taggedRef = sprintf(
                 ' /MarkInfo << /Marked true >> /StructTreeRoot %d 0 R',
