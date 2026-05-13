@@ -1162,6 +1162,10 @@ final class Engine
         $rowBottomY = $rowTopY - $rowHeight;
         $collapse = $t->style->borderCollapse;
         $columnCount = count($colWidths);
+        // Phase 19: border-spacing — separate mode shrink'ет каждый cell
+        // на spacing/2 с каждой стороны. В collapse игнорируется.
+        $spacing = ! $collapse ? $t->style->borderSpacingPt : 0;
+        $gap = $spacing / 2;
 
         // 1. Backgrounds + content + borders в три pass'а (background ниже,
         //    borders сверху, content между).
@@ -1177,13 +1181,17 @@ final class Engine
             // Background fill (rounded если cornerRadius > 0).
             if ($cs->backgroundColor !== null) {
                 [$r, $g, $b] = $this->hexToRgb($cs->backgroundColor);
+                $drawX = $cellX + $gap;
+                $drawY = $rowBottomY + $gap;
+                $drawW = $cellWidth - 2 * $gap;
+                $drawH = $rowHeight - 2 * $gap;
                 if ($cs->cornerRadiusPt > 0) {
                     $ctx->currentPage->fillRoundedRect(
-                        $cellX, $rowBottomY, $cellWidth, $rowHeight,
+                        $drawX, $drawY, $drawW, $drawH,
                         $cs->cornerRadiusPt, $r, $g, $b,
                     );
                 } else {
-                    $ctx->currentPage->fillRect($cellX, $rowBottomY, $cellWidth, $rowHeight, $r, $g, $b);
+                    $ctx->currentPage->fillRect($drawX, $drawY, $drawW, $drawH, $r, $g, $b);
                 }
             }
 
@@ -1219,13 +1227,15 @@ final class Engine
             $borders = $cs->borders ?? $this->defaultBorderSet($t->style);
 
             if ($borders !== null) {
-                // Rounded corners: только когда radius > 0 AND borders uniform
-                // (все 4 стороны same style/width/color) AND не collapse mode.
+                $drawX = $cellX + $gap;
+                $drawY = $rowBottomY + $gap;
+                $drawW = $cellWidth - 2 * $gap;
+                $drawH = $rowHeight - 2 * $gap;
                 if ($cs->cornerRadiusPt > 0 && ! $collapse && $this->areBordersUniform($borders)) {
                     $b = $borders->top;
                     [$r, $g, $bb] = $this->hexToRgb($b->color);
                     $ctx->currentPage->strokeRoundedRect(
-                        $cellX, $rowBottomY, $cellWidth, $rowHeight,
+                        $drawX, $drawY, $drawW, $drawH,
                         $cs->cornerRadiusPt, $b->widthPt(), $r, $g, $bb,
                     );
                 } elseif ($collapse) {
@@ -1236,9 +1246,9 @@ final class Engine
                         bottom: $isLastRow ? $borders->bottom : null,
                         right: $isLastCol ? $borders->right : null,
                     );
-                    $this->drawCellBorders($ctx->currentPage, $cellX, $rowBottomY, $cellWidth, $rowHeight, $collapsed);
+                    $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $collapsed);
                 } else {
-                    $this->drawCellBorders($ctx->currentPage, $cellX, $rowBottomY, $cellWidth, $rowHeight, $borders);
+                    $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $borders);
                 }
             }
 

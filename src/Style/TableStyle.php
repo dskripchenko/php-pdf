@@ -34,6 +34,11 @@ final readonly class TableStyle
          * "Thicker wins" CSS rules не реализованы (first-drawn wins).
          */
         public bool $borderCollapse = false,
+        /**
+         * Border-spacing для separate mode (CSS border-spacing). Default 0.
+         * В collapse mode игнорируется.
+         */
+        public float $borderSpacingPt = 0,
     ) {}
 
     public function copy(
@@ -46,6 +51,7 @@ final readonly class TableStyle
         ?float $spaceBeforePt = null,
         ?float $spaceAfterPt = null,
         ?bool $borderCollapse = null,
+        ?float $borderSpacingPt = null,
     ): self {
         return new self(
             widthPt: $widthPt ?? $this->widthPt,
@@ -57,6 +63,7 @@ final readonly class TableStyle
             spaceBeforePt: $spaceBeforePt ?? $this->spaceBeforePt,
             spaceAfterPt: $spaceAfterPt ?? $this->spaceAfterPt,
             borderCollapse: $borderCollapse ?? $this->borderCollapse,
+            borderSpacingPt: $borderSpacingPt ?? $this->borderSpacingPt,
         );
     }
 }
