@@ -39,6 +39,9 @@ final readonly class Image implements BlockElement, InlineElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 0,
+        // Phase 62: PDF/UA alt-text для screen readers (emitted в /Alt
+        // entry struct element). null = no alt text.
+        public ?string $altText = null,
     ) {}
 
     public static function fromPath(
@@ -48,6 +51,7 @@ final readonly class Image implements BlockElement, InlineElement
         Alignment $alignment = Alignment::Start,
         float $spaceBeforePt = 0,
         float $spaceAfterPt = 0,
+        ?string $altText = null,
     ): self {
         return new self(
             source: PdfImage::fromPath($path),
@@ -56,6 +60,7 @@ final readonly class Image implements BlockElement, InlineElement
             alignment: $alignment,
             spaceBeforePt: $spaceBeforePt,
             spaceAfterPt: $spaceAfterPt,
+            altText: $altText,
         );
     }
 
@@ -66,6 +71,7 @@ final readonly class Image implements BlockElement, InlineElement
         Alignment $alignment = Alignment::Start,
         float $spaceBeforePt = 0,
         float $spaceAfterPt = 0,
+        ?string $altText = null,
     ): self {
         return new self(
             source: PdfImage::fromBytes($bytes),
@@ -74,6 +80,7 @@ final readonly class Image implements BlockElement, InlineElement
             alignment: $alignment,
             spaceBeforePt: $spaceBeforePt,
             spaceAfterPt: $spaceAfterPt,
+            altText: $altText,
         );
     }
 

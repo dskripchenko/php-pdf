@@ -100,8 +100,8 @@ final class Document
     }
 
     /**
-     * @var list<array{type: string, mcid: int, page: Page}>  Struct elements
-     *   collected при rendering — emitted в StructTreeRoot/K.
+     * @var list<array{type: string, mcid: int, page: Page, altText?: ?string}>
+     *   Struct elements collected при rendering — emitted в StructTreeRoot/K.
      */
     private array $structElements = [];
 
@@ -132,9 +132,11 @@ final class Document
     /**
      * @internal Engine использует для registration struct elements.
      */
-    public function addStructElement(string $type, int $mcid, Page $page): void
+    public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null): void
     {
-        $this->structElements[] = ['type' => $type, 'mcid' => $mcid, 'page' => $page];
+        $this->structElements[] = [
+            'type' => $type, 'mcid' => $mcid, 'page' => $page, 'altText' => $altText,
+        ];
     }
 
     /**
@@ -637,10 +639,14 @@ final class Document
                 if ($pageId === null) {
                     continue; // Page not registered — shouldn't happen.
                 }
+                $altPart = '';
+                if (! empty($elem['altText'])) {
+                    $altPart = ' /Alt '.$this->pdfString((string) $elem['altText']);
+                }
                 $body = sprintf(
                     '<< /Type /StructElem /S /%s /P %d 0 R '
-                    .'/Pg %d 0 R /K %d >>',
-                    $elem['type'], $structRootId, $pageId, $elem['mcid'],
+                    .'/Pg %d 0 R /K %d%s >>',
+                    $elem['type'], $structRootId, $pageId, $elem['mcid'], $altPart,
                 );
                 $childIds[] = $writer->addObject($body);
             }

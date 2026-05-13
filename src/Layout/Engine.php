@@ -1991,6 +1991,15 @@ final class Engine
     {
         $ctx->cursorY -= $img->spaceBeforePt;
 
+        // Phase 62: tagged PDF — wrap image в /Figure struct element с
+        // optional /Alt text.
+        $taggedPdf = $ctx->pdf->isTagged();
+        $mcid = null;
+        if ($taggedPdf) {
+            $mcid = $ctx->currentPage->nextMcid();
+            $ctx->currentPage->beginMarkedContent('Figure', $mcid);
+        }
+
         [$widthPt, $heightPt] = $img->effectiveSizePt();
 
         // Scale down если image больше content area по любой dimension.
@@ -2024,6 +2033,12 @@ final class Engine
 
         $ctx->cursorY -= $heightPt;
         $ctx->cursorY -= $img->spaceAfterPt;
+
+        // Phase 62: end Figure tag + register struct element с alt text.
+        if ($taggedPdf && $mcid !== null) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->pdf->addStructElement('Figure', $mcid, $ctx->currentPage, $img->altText);
+        }
     }
 
     private function renderParagraph(Paragraph $p, LayoutContext $ctx): void
