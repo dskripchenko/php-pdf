@@ -493,7 +493,19 @@ final class Document
                         $this->pdfNameString($ann['target']),
                     );
                 }
-                $annotIds[] = $writer->addObject($body);
+                $linkAnnotId = $writer->addObject($body);
+                $annotIds[] = $linkAnnotId;
+
+                // Phase 72: tagged PDF — register /Link struct element
+                // referencing this annotation through /OBJR.
+                if ($this->tagged) {
+                    $this->structElements[] = [
+                        'type' => 'Link',
+                        'mcid' => -1, // sentinel — uses /OBJR instead of /K MCID.
+                        'page' => $page,
+                        'objr' => $linkAnnotId,
+                    ];
+                }
             }
             // Phase 43+46+67: AcroForm widgets — emit widget annotations +
             // optional /AA JavaScript actions + collect field object IDs.
@@ -645,11 +657,21 @@ final class Document
                 if (! empty($elem['altText'])) {
                     $altPart = ' /Alt '.$this->pdfString((string) $elem['altText']);
                 }
-                $body = sprintf(
-                    '<< /Type /StructElem /S /%s /P %d 0 R '
-                    .'/Pg %d 0 R /K %d%s >>',
-                    $elem['type'], $structRootId, $pageId, $elem['mcid'], $altPart,
-                );
+                // Phase 72: /Link struct uses /OBJR reference к annotation
+                // (вместо /K integer MCID).
+                if (! empty($elem['objr'])) {
+                    $body = sprintf(
+                        '<< /Type /StructElem /S /%s /P %d 0 R '
+                        .'/Pg %d 0 R /K << /Type /OBJR /Obj %d 0 R >>%s >>',
+                        $elem['type'], $structRootId, $pageId, $elem['objr'], $altPart,
+                    );
+                } else {
+                    $body = sprintf(
+                        '<< /Type /StructElem /S /%s /P %d 0 R '
+                        .'/Pg %d 0 R /K %d%s >>',
+                        $elem['type'], $structRootId, $pageId, $elem['mcid'], $altPart,
+                    );
+                }
                 $childIds[] = $writer->addObject($body);
             }
             $kidsArray = '['.implode(' ', array_map(fn ($id) => "$id 0 R", $childIds)).']';
