@@ -339,6 +339,21 @@ final class Engine
 
         $ctx->cursorY -= $p->style->spaceBeforePt;
 
+        // Outline entry для heading paragraph'а (только в final pass —
+        // first pass знаниями не нужен).
+        if ($p->headingLevel !== null && $this->totalPagesHint !== null) {
+            $title = $this->extractPlainText($p->children);
+            if ($title !== '') {
+                $ctx->pdf->registerOutlineEntry(
+                    $p->headingLevel,
+                    $title,
+                    $ctx->currentPage,
+                    $ctx->leftX,
+                    $ctx->cursorY,
+                );
+            }
+        }
+
         $headingStyle = $this->headingStyle($p->headingLevel);
         $effectiveDefault = $p->defaultRunStyle->inheritFrom($headingStyle);
 
@@ -486,6 +501,33 @@ final class Engine
             Field::MERGEFIELD => $f->format() !== '' ? $f->format() : '?',
             default => '',
         };
+    }
+
+    /**
+     * Extracts plain text из inline children, рекурсивно проникая в
+     * Hyperlink/Bookmark wrappers. Используется для outline titles
+     * + аналогичных случаев когда нужно только содержимое без styling'а.
+     *
+     * @param  list<\Dskripchenko\PhpPdf\Element\InlineElement>  $children
+     */
+    private function extractPlainText(array $children): string
+    {
+        $text = '';
+        foreach ($children as $child) {
+            if ($child instanceof Run) {
+                $text .= $child->text;
+            } elseif ($child instanceof LineBreak) {
+                $text .= ' ';
+            } elseif ($child instanceof Hyperlink) {
+                $text .= $this->extractPlainText($child->children);
+            } elseif ($child instanceof Bookmark) {
+                $text .= $this->extractPlainText($child->children);
+            } elseif ($child instanceof Field) {
+                $text .= $this->resolveField($child, null);
+            }
+        }
+
+        return trim($text);
     }
 
     private function formatDateTime(string $format): string

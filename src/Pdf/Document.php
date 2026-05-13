@@ -42,6 +42,14 @@ final class Document
      */
     private array $namedDestinations = [];
 
+    /**
+     * Outline (bookmarks panel) entries в flat list. Tree-структура
+     * восстанавливается в toBytes() по level'у.
+     *
+     * @var list<array{level: int, title: string, page: Page, x: float, y: float}>
+     */
+    private array $outlineEntries = [];
+
     private string $pdfVersion = '1.7';
 
     public function __construct(
@@ -110,6 +118,26 @@ final class Document
     public function namedDestinations(): array
     {
         return $this->namedDestinations;
+    }
+
+    /**
+     * Регистрирует outline entry для bookmarks-panel viewer'а.
+     * $level (1..N) определяет вложенность: level 1 = top-level,
+     * level 2 = ребёнок последнего level-1, и т.д.
+     */
+    public function registerOutlineEntry(int $level, string $title, Page $page, float $x, float $y): self
+    {
+        $this->outlineEntries[] = compact('level', 'title', 'page', 'x', 'y');
+
+        return $this;
+    }
+
+    /**
+     * @return list<array{level: int, title: string, page: Page, x: float, y: float}>
+     */
+    public function outlineEntries(): array
+    {
+        return $this->outlineEntries;
     }
 
     /**
@@ -280,6 +308,13 @@ final class Document
             $namesRef = ' /Names '.$namesId.' 0 R';
         }
 
+        // Outline tree — bookmarks panel viewer.
+        $outlinesRef = '';
+        if ($this->outlineEntries !== []) {
+            $outlinesId = $this->emitOutlineTree($writer, $pageObjectIdMap);
+            $outlinesRef = ' /Outlines '.$outlinesId.' 0 R /PageMode /UseOutlines';
+        }
+
         // 5. Pages tree (after все pages созданы — знаем все IDs).
         $kidsRefs = implode(' ', array_map(fn ($id) => "$id 0 R", $pageIds));
         $writer->setObject($pagesId, sprintf(
@@ -288,7 +323,7 @@ final class Document
         ));
 
         // 6. Catalog.
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef >>");
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef >>");
 
         $writer->setRoot($catalogId);
 
@@ -307,6 +342,131 @@ final class Document
         }
 
         return $written;
+    }
+
+    /**
+     * Эмитит outline tree (bookmarks panel). Берёт flat $outlineEntries
+     * и строит nested структуру по level'у через stack:
+     *  - Level 1 → child of Outlines root
+     *  - Level N+1 → child of last level-N entry
+     *  - Skip-levels (1→3) treated as 1→2 (no virtual filler)
+     *
+     * @param  \SplObjectStorage<Page, int>  $pageObjectIdMap
+     */
+    private function emitOutlineTree(Writer $writer, \SplObjectStorage $pageObjectIdMap): int
+    {
+        $count = count($this->outlineEntries);
+
+        // Phase 1: reserve IDs.
+        $entryIds = [];
+        for ($i = 0; $i < $count; $i++) {
+            $entryIds[$i] = $writer->reserveObject();
+        }
+        $outlinesId = $writer->reserveObject();
+
+        // Phase 2: compute hierarchy.
+        // parents[i] = index of parent entry, or null если top-level.
+        // children[parentIdx] = list<childIdx>.
+        $parents = [];
+        $children = [];
+        $stack = []; // stack of [entryIdx, level]
+        foreach ($this->outlineEntries as $i => $entry) {
+            $level = $entry['level'];
+            while ($stack !== [] && end($stack)[1] >= $level) {
+                array_pop($stack);
+            }
+            $parentIdx = $stack === [] ? null : end($stack)[0];
+            $parents[$i] = $parentIdx;
+            if ($parentIdx === null) {
+                $children[-1] = $children[-1] ?? [];
+                $children[-1][] = $i;
+            } else {
+                $children[$parentIdx] = $children[$parentIdx] ?? [];
+                $children[$parentIdx][] = $i;
+            }
+            $stack[] = [$i, $level];
+        }
+        $topLevel = $children[-1] ?? [];
+
+        // Phase 3: emit each entry.
+        foreach ($this->outlineEntries as $i => $entry) {
+            $parentIdx = $parents[$i];
+            $parentRef = $parentIdx === null
+                ? $outlinesId.' 0 R'
+                : $entryIds[$parentIdx].' 0 R';
+
+            // Find siblings (same parent's children list).
+            $siblings = $parentIdx === null ? $topLevel : ($children[$parentIdx] ?? []);
+            $position = array_search($i, $siblings, strict: true);
+            $prevRef = ($position !== false && $position > 0)
+                ? $entryIds[$siblings[$position - 1]].' 0 R'
+                : null;
+            $nextRef = ($position !== false && $position < count($siblings) - 1)
+                ? $entryIds[$siblings[$position + 1]].' 0 R'
+                : null;
+
+            // First/Last child.
+            $myChildren = $children[$i] ?? [];
+            $firstChildRef = $myChildren !== [] ? $entryIds[$myChildren[0]].' 0 R' : null;
+            $lastChildRef = $myChildren !== [] ? $entryIds[$myChildren[count($myChildren) - 1]].' 0 R' : null;
+
+            // Count of descendants (positive — open by default).
+            $countDesc = $this->countDescendants($i, $children);
+
+            $pageObjId = $pageObjectIdMap[$entry['page']];
+            $dest = sprintf('[%d 0 R /XYZ %s %s 0]',
+                $pageObjId, $this->fmt($entry['x']), $this->fmt($entry['y']));
+
+            $parts = [
+                '/Title '.$this->pdfString($entry['title']),
+                '/Parent '.$parentRef,
+                '/Dest '.$dest,
+            ];
+            if ($prevRef !== null) {
+                $parts[] = '/Prev '.$prevRef;
+            }
+            if ($nextRef !== null) {
+                $parts[] = '/Next '.$nextRef;
+            }
+            if ($firstChildRef !== null) {
+                $parts[] = '/First '.$firstChildRef;
+                $parts[] = '/Last '.$lastChildRef;
+                $parts[] = '/Count '.$countDesc;
+            }
+            $writer->setObject($entryIds[$i], '<< '.implode(' ', $parts).' >>');
+        }
+
+        // Phase 4: emit Outlines root.
+        $topCount = count($topLevel);
+        $totalDesc = 0;
+        foreach ($topLevel as $idx) {
+            $totalDesc += 1 + $this->countDescendants($idx, $children);
+        }
+        $rootParts = ['/Type /Outlines'];
+        if ($topLevel !== []) {
+            $rootParts[] = '/First '.$entryIds[$topLevel[0]].' 0 R';
+            $rootParts[] = '/Last '.$entryIds[$topLevel[count($topLevel) - 1]].' 0 R';
+            $rootParts[] = '/Count '.$totalDesc;
+        }
+        $writer->setObject($outlinesId, '<< '.implode(' ', $rootParts).' >>');
+
+        return $outlinesId;
+    }
+
+    /**
+     * Recursive count of descendants для /Count field outline entry.
+     *
+     * @param  array<int, list<int>>  $children
+     */
+    private function countDescendants(int $idx, array $children): int
+    {
+        $myChildren = $children[$idx] ?? [];
+        $count = count($myChildren);
+        foreach ($myChildren as $childIdx) {
+            $count += $this->countDescendants($childIdx, $children);
+        }
+
+        return $count;
     }
 
     /**
