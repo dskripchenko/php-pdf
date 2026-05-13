@@ -2570,7 +2570,7 @@ final class Engine
             // Пустая line — advance cursorY на дефолтную height, attach bookmarks
             // к current top-Y.
             $sizePt = $defaultStyle->sizePt ?? $this->defaultFontSizePt;
-            $lineHeight = $sizePt * $this->effectiveLineHeightMult($p);
+            $lineHeight = $this->effectiveLineHeightPt($p, $sizePt);
             $this->ensureRoomFor($ctx, $lineHeight);
             $this->registerBookmarksAt($ctx, $bookmarks, $ctx->cursorY);
             $ctx->cursorY -= $lineHeight;
@@ -2600,7 +2600,7 @@ final class Engine
             // Line содержит только images — line-height = image-height.
             $maxSizePt = $defaultStyle->sizePt ?? $this->defaultFontSizePt;
         }
-        $textLineHeight = $maxSizePt * $this->effectiveLineHeightMult($p);
+        $textLineHeight = $this->effectiveLineHeightPt($p, $maxSizePt);
         $lineHeight = max($textLineHeight, $maxImageHeight + 2);
 
         $this->ensureRoomFor($ctx, $lineHeight);
@@ -2902,6 +2902,20 @@ final class Engine
     private function effectiveLineHeightMult(Paragraph $p): float
     {
         return $p->style->lineHeightMult ?? $this->defaultLineHeightMult;
+    }
+
+    /**
+     * Phase 79: effective line height в pt absolute.
+     * lineHeightPt explicit > lineHeightMult * fontSize > default.
+     */
+    private function effectiveLineHeightPt(Paragraph $p, float $fontSize): float
+    {
+        if ($p->style->lineHeightPt !== null) {
+            return $p->style->lineHeightPt;
+        }
+        $mult = $p->style->lineHeightMult ?? $this->defaultLineHeightMult;
+
+        return $fontSize * $mult;
     }
 
     /**
@@ -3500,10 +3514,9 @@ final class Engine
             $flushLine();
         }
 
-        $mult = $this->effectiveLineHeightMult($p);
         $total = $p->style->spaceBeforePt;
         foreach ($lineMaxSizes as $s) {
-            $total += $s * $mult;
+            $total += $this->effectiveLineHeightPt($p, $s);
         }
         $total += $p->style->spaceAfterPt;
 

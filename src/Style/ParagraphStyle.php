@@ -25,6 +25,9 @@ final readonly class ParagraphStyle
         public float $indentRightPt = 0,
         public float $indentFirstLinePt = 0,
         public ?float $lineHeightMult = null,  // null = font-default (1.2)
+        // Phase 79: absolute line-height в pt — точнее чем mult approximation.
+        // Если задан — overrides lineHeightMult.
+        public ?float $lineHeightPt = null,
         public bool $pageBreakBefore = false,
         public ?BorderSet $borders = null,
         // Phase 25: paragraph padding + background-color.
