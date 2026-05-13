@@ -9,10 +9,12 @@ use Dskripchenko\PhpPdf\Document;
 use Dskripchenko\PhpPdf\Element\BlockElement;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Image;
+use Dskripchenko\PhpPdf\Element\ListNode;
 use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Run;
 use Dskripchenko\PhpPdf\Element\Table;
+use Dskripchenko\PhpPdf\Style\ListFormat;
 use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Section;
@@ -157,6 +159,37 @@ final class DocumentBuilder
      *   ->image('/path/to/photo.jpg', widthPt: 200, alignment: Alignment::Center)
      *   ->image($pdfImage, widthPt: 300, heightPt: 200)
      */
+    /**
+     * Bullet list. $build — Closure(ListBuilder) или готовый ListNode.
+     */
+    public function bulletList(Closure|ListNode $build): self
+    {
+        return $this->listOfFormat(ListFormat::Bullet, $build);
+    }
+
+    /**
+     * Ordered list. $format — Decimal/LowerLetter/UpperLetter/LowerRoman/
+     * UpperRoman.
+     */
+    public function orderedList(Closure|ListNode $build, ListFormat $format = ListFormat::Decimal): self
+    {
+        return $this->listOfFormat($format, $build);
+    }
+
+    private function listOfFormat(ListFormat $format, Closure|ListNode $build): self
+    {
+        if ($build instanceof ListNode) {
+            $this->body[] = $build;
+
+            return $this;
+        }
+        $b = new ListBuilder($format);
+        $build($b);
+        $this->body[] = $b->build();
+
+        return $this;
+    }
+
     /**
      * Block-level table. $content — Closure(TableBuilder) или готовый Table.
      */

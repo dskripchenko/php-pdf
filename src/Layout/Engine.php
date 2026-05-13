@@ -10,11 +10,15 @@ use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\LineBreak;
+use Dskripchenko\PhpPdf\Element\ListItem;
+use Dskripchenko\PhpPdf\Element\ListNode;
 use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
 use Dskripchenko\PhpPdf\Element\Table;
+use Dskripchenko\PhpPdf\Style\ListFormat;
+use Dskripchenko\PhpPdf\Style\ParagraphStyle;
 use Dskripchenko\PhpPdf\Style\Border;
 use Dskripchenko\PhpPdf\Style\BorderSet;
 use Dskripchenko\PhpPdf\Style\CellStyle;
@@ -105,6 +109,7 @@ final class Engine
             $block instanceof HorizontalRule => $this->renderHorizontalRule($ctx),
             $block instanceof Image => $this->renderImage($block, $ctx),
             $block instanceof Table => $this->renderTable($block, $ctx),
+            $block instanceof ListNode => $this->renderListNode($block, $ctx, 0),
             default => null,
         };
     }
@@ -735,6 +740,7 @@ final class Engine
             $block instanceof Image => $this->measureImageHeight($block, $contentWidth),
             $block instanceof HorizontalRule => 12.0, // 6 + 0 + 6
             $block instanceof Table => $this->measureTableHeight($block, $contentWidth),
+            $block instanceof ListNode => $this->measureListNodeHeight($block, $contentWidth, 0),
             default => 0,
         };
     }
@@ -827,6 +833,28 @@ final class Engine
         return $h + $img->spaceBeforePt + $img->spaceAfterPt;
     }
 
+    private function measureListNodeHeight(ListNode $list, float $contentWidth, int $level): float
+    {
+        if ($list->isEmpty()) {
+            return 0;
+        }
+        $total = $list->spaceBeforePt;
+        $baseIndent = ($level + 1) * self::LIST_LEVEL_INDENT_PT;
+        $itemContentWidth = $contentWidth - $baseIndent;
+
+        foreach ($list->items as $item) {
+            foreach ($item->children as $child) {
+                $total += $this->measureBlockHeight($child, $itemContentWidth);
+            }
+            if ($item->nestedList !== null) {
+                $total += $this->measureListNodeHeight($item->nestedList, $contentWidth, $level + 1);
+            }
+        }
+        $total += $list->spaceAfterPt;
+
+        return $total;
+    }
+
     private function measureTableHeight(Table $t, float $contentWidth): float
     {
         if ($t->isEmpty()) {
@@ -843,6 +871,170 @@ final class Engine
         $total += $t->style->spaceAfterPt;
 
         return $total;
+    }
+
+    /**
+     * Indent per nesting level (pt).
+     */
+    private const float LIST_LEVEL_INDENT_PT = 18.0;
+
+    /**
+     * Renders bullet/ordered list через injection маркера в первую
+     * Paragraph каждого item'а + hanging-indent (через ParagraphStyle.
+     * indentLeftPt + indentFirstLinePt = -markerWidth).
+     *
+     * Nested ListNode (через ListItem.nestedList) рекурсивно рисуется
+     * с увеличенным $level.
+     */
+    private function renderListNode(ListNode $list, LayoutContext $ctx, int $level): void
+    {
+        if ($list->isEmpty()) {
+            return;
+        }
+        $ctx->cursorY -= $list->spaceBeforePt;
+
+        $format = $list->effectiveFormat();
+        $baseIndent = ($level + 1) * self::LIST_LEVEL_INDENT_PT;
+
+        foreach ($list->items as $i => $item) {
+            $number = $list->startAt + $i;
+            $marker = $this->formatListMarker($number, $format);
+
+            $this->renderListItem($item, $marker, $baseIndent, $ctx, $level);
+        }
+
+        $ctx->cursorY -= $list->spaceAfterPt;
+    }
+
+    private function renderListItem(
+        ListItem $item,
+        string $marker,
+        float $baseIndent,
+        LayoutContext $ctx,
+        int $level,
+    ): void {
+        $children = $item->children;
+
+        if ($children === []) {
+            // Пустой item — render только marker.
+            $children = [new Paragraph([new Run('')])];
+        }
+
+        $firstChild = $children[0];
+        if ($firstChild instanceof Paragraph) {
+            // Prepend marker to first paragraph's first child через injection
+            // нового Run'а. Hanging indent через indentLeftPt+indentFirstLinePt.
+            $newFirstChildren = [new Run($marker), ...$firstChild->children];
+            $newStyle = $firstChild->style->copy(
+                indentLeftPt: $baseIndent,
+                indentFirstLinePt: -self::LIST_LEVEL_INDENT_PT,
+            );
+            $modified = new Paragraph(
+                children: $newFirstChildren,
+                style: $newStyle,
+                headingLevel: $firstChild->headingLevel,
+                defaultRunStyle: $firstChild->defaultRunStyle,
+            );
+            $this->renderBlock($modified, $ctx);
+
+            // Subsequent children — same baseIndent, no marker, no first-
+            // line indent.
+            for ($i = 1; $i < count($children); $i++) {
+                $child = $children[$i];
+                if ($child instanceof Paragraph) {
+                    $childWithIndent = new Paragraph(
+                        children: $child->children,
+                        style: $child->style->copy(indentLeftPt: $baseIndent),
+                        headingLevel: $child->headingLevel,
+                        defaultRunStyle: $child->defaultRunStyle,
+                    );
+                    $this->renderBlock($childWithIndent, $ctx);
+                } else {
+                    // Non-paragraph (Image/Table/etc.) — render через sub-context
+                    // с indented leftX.
+                    $this->renderIndentedBlock($child, $baseIndent, $ctx);
+                }
+            }
+        } else {
+            // First child — не paragraph. Render marker как standalone paragraph
+            // + потом все children with indent.
+            $markerP = new Paragraph(
+                children: [new Run(trim($marker))],
+                style: new ParagraphStyle(indentLeftPt: $baseIndent - self::LIST_LEVEL_INDENT_PT),
+            );
+            $this->renderBlock($markerP, $ctx);
+            foreach ($children as $child) {
+                $this->renderIndentedBlock($child, $baseIndent, $ctx);
+            }
+        }
+
+        if ($item->nestedList !== null) {
+            $this->renderListNode($item->nestedList, $ctx, $level + 1);
+        }
+    }
+
+    /**
+     * Renders BlockElement (Image/Table/etc.) с increased leftX (sub-ctx).
+     */
+    private function renderIndentedBlock(BlockElement $block, float $indentPt, LayoutContext $ctx): void
+    {
+        $saved = [$ctx->leftX, $ctx->contentWidth];
+        $ctx->leftX += $indentPt;
+        $ctx->contentWidth -= $indentPt;
+        try {
+            $this->renderBlock($block, $ctx);
+        } finally {
+            [$ctx->leftX, $ctx->contentWidth] = $saved;
+        }
+    }
+
+    private function formatListMarker(int $n, ListFormat $f): string
+    {
+        return match ($f) {
+            ListFormat::Bullet => "\u{2022}  ",   // •
+            ListFormat::Decimal => $n.'. ',
+            ListFormat::LowerLetter => $this->toLetter($n, false).'. ',
+            ListFormat::UpperLetter => $this->toLetter($n, true).'. ',
+            ListFormat::LowerRoman => strtolower($this->toRoman($n)).'. ',
+            ListFormat::UpperRoman => $this->toRoman($n).'. ',
+        };
+    }
+
+    private function toLetter(int $n, bool $upper): string
+    {
+        if ($n < 1) {
+            return '';
+        }
+        $base = $upper ? 65 : 97;
+        $result = '';
+        while ($n > 0) {
+            $n--;
+            $result = chr($base + ($n % 26)).$result;
+            $n = (int) ($n / 26);
+        }
+
+        return $result;
+    }
+
+    private function toRoman(int $n): string
+    {
+        if ($n < 1) {
+            return '';
+        }
+        $map = [
+            ['M', 1000], ['CM', 900], ['D', 500], ['CD', 400],
+            ['C', 100], ['XC', 90], ['L', 50], ['XL', 40],
+            ['X', 10], ['IX', 9], ['V', 5], ['IV', 4], ['I', 1],
+        ];
+        $result = '';
+        foreach ($map as [$sym, $val]) {
+            while ($n >= $val) {
+                $result .= $sym;
+                $n -= $val;
+            }
+        }
+
+        return $result;
     }
 
     /**
