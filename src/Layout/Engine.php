@@ -20,6 +20,7 @@ use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\LineChart;
 use Dskripchenko\PhpPdf\Element\MultiLineChart;
 use Dskripchenko\PhpPdf\Element\PieChart;
+use Dskripchenko\PhpPdf\Element\SvgElement;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\LineBreak;
@@ -260,8 +261,33 @@ final class Engine
             $block instanceof PieChart => $this->renderPieChart($block, $ctx),
             $block instanceof GroupedBarChart => $this->renderGroupedBarChart($block, $ctx),
             $block instanceof MultiLineChart => $this->renderMultiLineChart($block, $ctx),
+            $block instanceof SvgElement => $this->renderSvgElement($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 52: SVG block — delegates SvgRenderer для translation
+     * SVG primitives → PDF native paths.
+     */
+    private function renderSvgElement(SvgElement $svg, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $svg->spaceBeforePt;
+        $w = min($svg->widthPt, $ctx->contentWidth);
+        $h = $svg->heightPt;
+        $this->ensureRoomFor($ctx, $h);
+
+        $blockX = match ($svg->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $w) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $w,
+            default => $ctx->leftX,
+        };
+        $blockY = $ctx->cursorY - $h;
+
+        \Dskripchenko\PhpPdf\Svg\SvgRenderer::render($svg->svgXml, $ctx->currentPage, $blockX, $blockY, $w, $h);
+
+        $ctx->cursorY -= $h;
+        $ctx->cursorY -= $svg->spaceAfterPt;
     }
 
     /**
