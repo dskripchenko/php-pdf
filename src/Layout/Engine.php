@@ -12,6 +12,7 @@ use Dskripchenko\PhpPdf\Element\Field;
 use Dskripchenko\PhpPdf\Font\FontProvider;
 use Dskripchenko\PhpPdf\Font\PdfFontResolver;
 use Dskripchenko\PhpPdf\Element\Barcode;
+use Dskripchenko\PhpPdf\Element\ColumnSet;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -236,12 +237,23 @@ final class Engine
             $block instanceof Table => $this->renderTable($block, $ctx),
             $block instanceof ListNode => $this->renderListNode($block, $ctx, 0),
             $block instanceof Barcode => $this->renderBarcode($block, $ctx),
+            $block instanceof ColumnSet => $this->renderColumnSet($block, $ctx),
             default => null,
         };
     }
 
     private function forcePageBreak(LayoutContext $ctx): void
     {
+        // Phase 39: внутри ColumnSet overflow → next column, не page break,
+        // пока не исчерпаны columns.
+        if ($ctx->columnCount > 1 && $ctx->currentColumn + 1 < $ctx->columnCount) {
+            $ctx->currentColumn++;
+            $this->applyColumnGeometry($ctx);
+            $ctx->cursorY = $ctx->topY;
+
+            return;
+        }
+
         // Phase 34: новая page внутри section должна сохранить её
         // PageSetup (paper, orientation, customDimensions), даже если
         // у document есть другая default orientation.
@@ -254,6 +266,82 @@ final class Engine
         $this->applyPerPageMargins($ctx);
         $ctx->cursorY = $ctx->topY;
         $this->renderHeaderFooter($ctx);
+
+        // Phase 39: после page break внутри ColumnSet — reset column 0
+        // и применить column geometry на новой page.
+        if ($ctx->columnCount > 1) {
+            $ctx->currentColumn = 0;
+            $this->applyColumnGeometry($ctx);
+        }
+    }
+
+    /**
+     * Phase 39: устанавливает leftX/contentWidth для текущей column
+     * (на основе columnOrigin + columnCount + columnGap + currentColumn).
+     */
+    private function applyColumnGeometry(LayoutContext $ctx): void
+    {
+        if ($ctx->columnCount <= 1) {
+            return;
+        }
+        $totalGap = $ctx->columnGapPt * ($ctx->columnCount - 1);
+        $columnWidth = ($ctx->columnOriginContentWidth - $totalGap) / $ctx->columnCount;
+        $ctx->leftX = $ctx->columnOriginLeftX
+            + $ctx->currentColumn * ($columnWidth + $ctx->columnGapPt);
+        $ctx->contentWidth = $columnWidth;
+    }
+
+    /**
+     * Phase 39: ColumnSet block — рендер body в N columns.
+     */
+    private function renderColumnSet(ColumnSet $cs, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $cs->spaceBeforePt;
+        if ($cs->columnCount <= 1) {
+            // Degenerate: 1 column — просто render body inline.
+            foreach ($cs->body as $block) {
+                $this->renderBlock($block, $ctx);
+            }
+            $ctx->cursorY -= $cs->spaceAfterPt;
+
+            return;
+        }
+
+        // Save outer state.
+        $savedLeftX = $ctx->leftX;
+        $savedContentWidth = $ctx->contentWidth;
+        $savedColumnCount = $ctx->columnCount;
+        $savedCurrentColumn = $ctx->currentColumn;
+        $savedColumnGap = $ctx->columnGapPt;
+        $savedOriginLeftX = $ctx->columnOriginLeftX;
+        $savedOriginContentWidth = $ctx->columnOriginContentWidth;
+        $startY = $ctx->cursorY;
+
+        $ctx->columnCount = $cs->columnCount;
+        $ctx->currentColumn = 0;
+        $ctx->columnGapPt = $cs->columnGapPt;
+        $ctx->columnOriginLeftX = $savedLeftX;
+        $ctx->columnOriginContentWidth = $savedContentWidth;
+        $this->applyColumnGeometry($ctx);
+
+        foreach ($cs->body as $block) {
+            $this->renderBlock($block, $ctx);
+        }
+
+        // Restore outer state. cursorY = bottom most позиция (для simplicity
+        // используем bottom of column 0 — рассматриваем как column-set
+        // занимает full vertical span).
+        $ctx->columnCount = $savedColumnCount;
+        $ctx->currentColumn = $savedCurrentColumn;
+        $ctx->columnGapPt = $savedColumnGap;
+        $ctx->columnOriginLeftX = $savedOriginLeftX;
+        $ctx->columnOriginContentWidth = $savedOriginContentWidth;
+        $ctx->leftX = $savedLeftX;
+        $ctx->contentWidth = $savedContentWidth;
+        // cursorY — на text inside-column'е. Если внутри columns был page
+        // break — наблюдается cursorY новой page'а. Используем как есть
+        // (последующий content начинается ниже последней column'ы).
+        $ctx->cursorY -= $cs->spaceAfterPt;
     }
 
     /**

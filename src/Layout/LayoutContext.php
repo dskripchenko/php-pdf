@@ -33,5 +33,13 @@ final class LayoutContext
         public float $bottomY,
         public float $topY,
         public PageSetup $pageSetup,
+        // Phase 39: multi-column state. columnCount == 1 → single-column
+        // (legacy behavior, no column flow). columnCount > 1 → forcePageBreak
+        // overflow → next column; last column → real page break.
+        public int $columnCount = 1,
+        public int $currentColumn = 0,
+        public float $columnGapPt = 0,
+        public float $columnOriginLeftX = 0,
+        public float $columnOriginContentWidth = 0,
     ) {}
 }
