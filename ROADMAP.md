@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 64 фазы закрыто (755 + 194 printable = 949 тестов).
+**Текущий статус:** v1.1-dev — 67 фаз закрыто (779 + 194 printable = 973 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-66 closed (42 фазы):
+**v1.1 progress:** 25-69 closed (45 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -35,7 +35,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 61 Heading element + PDF/UA H1-H6 tagging,
  - 62 Image alt-text для PDF/UA accessibility,
  - 63 SVG path arcs (A command), 64 chart grid lines,
- - 65 Tagged PDF /Table /TR /TD, 66 Tagged PDF /L /LI.
+ - 65 Tagged PDF /Table /TR /TD, 66 Tagged PDF /L /LI,
+ - 67 AcroForm JavaScript actions, 68 chart custom axis ranges (yMax),
+ - 69 MathExpression (LaTeX-like sup/sub/frac/sqrt + Greek).
 
 ---
 
@@ -228,7 +230,7 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~PDF/A-1b compliance mode~~ ✅ **Phase 47 closed** (25884b1).
 - ~~AcroForm signature field placeholder~~ ✅ **Phase 56 closed** (b93c6c8).
 - AcroForm signature actual signing (PKCS#7 two-pass byte range).
-- JavaScript validation / calculation actions.
+- ~~JavaScript validation / calculation / format / keystroke actions~~ ✅ **Phase 67 closed** (5c8e1b4).
 - Digital signatures (PKCS#7 signing of arbitrary fields).
 - Full PDF/UA: heading hierarchy (/H1-/H6), alt-text для figures,
   reading-order /StructParents, role mapping.
@@ -241,7 +243,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~SVG transforms (translate/scale/rotate/matrix)~~ ✅ **Phase 59 closed** (2ca5e04).
 - ~~SVG path arcs (A command)~~ ✅ **Phase 63 closed** (bccf3b8). SVG path support теперь complete.
 - SVG extensions: gradients, CSS styles (<style>), <defs>/<use>.
-- Math equations (LaTeX-like rendering).
+- ~~Math equations (LaTeX-like sup/sub/frac/sqrt + Greek)~~ ✅ **Phase 69 closed** (f210de4).
+- Math equations extensions: nested fracs, matrices, big operators с limits, multi-line.
 - ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
 - ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
 - ~~Multi-series charts (grouped bar + multi-line)~~ ✅ **Phase 51 closed** (468ebeb).
@@ -249,7 +252,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Donut + Scatter charts~~ ✅ **Phase 55 closed** (71312d9).
 - ~~Area chart (single + stacked)~~ ✅ **Phase 60 closed** (418dea8).
 - ~~Chart grid lines (Bar/Line/Area)~~ ✅ **Phase 64 closed** (8f70f07).
-- Chart extensions: smoothed splines, custom axis ranges, grid для остальных charts.
+- ~~Custom y-axis range (yMin/yMax)~~ ✅ **Phase 68 closed** (68f632b).
+- Chart extensions: smoothed splines, grid для остальных charts (GroupedBar/Stacked/Scatter).
 - Chart extensions: grid lines, custom axis ranges, axis titles, donut.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
@@ -353,6 +357,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 64 | Chart grid lines (Bar/Line/Area) (v1.1) | 4 | 8f70f07 |
 | 65 | Tagged PDF /Table /TR /TD (v1.1) | 6 | ae22478 |
 | 66 | Tagged PDF /L /LI (v1.1) | 5 | fdf8117 |
+| 67 | AcroForm JavaScript actions (v1.1) | 8 | 5c8e1b4 |
+| 68 | Chart custom axis ranges (yMax) (v1.1) | 5 | 68f632b |
+| 69 | MathExpression (LaTeX subset) (v1.1) | 11 | f210de4 |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
