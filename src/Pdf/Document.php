@@ -167,9 +167,12 @@ final class Document
             throw new \LogicException('PDF/A-1b disallows encryption');
         }
         $this->encryption = new Encryption($userPassword, $ownerPassword, $permissions, $algorithm);
-        // PDF 1.6 required для AES-128.
+        // PDF 1.6 required для AES-128; 1.7 для AES-256 V5.
         if ($algorithm === EncryptionAlgorithm::Aes_128 && version_compare($this->pdfVersion, '1.6', '<')) {
             $this->pdfVersion = '1.6';
+        }
+        if ($algorithm === EncryptionAlgorithm::Aes_256 && version_compare($this->pdfVersion, '1.7', '<')) {
+            $this->pdfVersion = '1.7';
         }
 
         return $this;
@@ -713,7 +716,19 @@ final class Document
             $enc = $this->encryption;
             $oHex = bin2hex($enc->oValue);
             $uHex = bin2hex($enc->uValue);
-            if ($enc->algorithm === EncryptionAlgorithm::Aes_128) {
+            if ($enc->algorithm === EncryptionAlgorithm::Aes_256) {
+                // V5 R5 + Crypt Filter AESV3.
+                $oeHex = bin2hex($enc->oeValue);
+                $ueHex = bin2hex($enc->ueValue);
+                $permsHex = bin2hex($enc->permsValue);
+                $encryptBody = sprintf(
+                    '<< /Filter /Standard /V 5 /R 5 /Length 256 '
+                    .'/CF << /StdCF << /CFM /AESV3 /Length 32 /AuthEvent /DocOpen >> >> '
+                    .'/StmF /StdCF /StrF /StdCF '
+                    .'/O <%s> /U <%s> /OE <%s> /UE <%s> /Perms <%s> /P %d >>',
+                    $oHex, $uHex, $oeHex, $ueHex, $permsHex, $enc->permissions,
+                );
+            } elseif ($enc->algorithm === EncryptionAlgorithm::Aes_128) {
                 // V4 R4 + Crypt Filter AESV2.
                 $encryptBody = sprintf(
                     '<< /Filter /Standard /V 4 /R 4 /Length 128 '

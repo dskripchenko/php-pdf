@@ -15,11 +15,15 @@ enum EncryptionAlgorithm: string
     /** ISO 32000-1 V=4 R=4 — AES-128-CBC через crypt filter AESV2. */
     case Aes_128 = 'aes-128';
 
+    /** Adobe Supplement to ISO 32000 V=5 R=5 — AES-256-CBC. */
+    case Aes_256 = 'aes-256';
+
     public function pdfVersion(): int
     {
         return match ($this) {
             self::Rc4_128 => 2,
             self::Aes_128 => 4,
+            self::Aes_256 => 5,
         };
     }
 
@@ -28,6 +32,7 @@ enum EncryptionAlgorithm: string
         return match ($this) {
             self::Rc4_128 => 3,
             self::Aes_128 => 4,
+            self::Aes_256 => 5,
         };
     }
 }

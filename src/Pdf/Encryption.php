@@ -5,20 +5,21 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 41-42: PDF Standard Security Handler V2 R3 (RC4-128) и V4 R4 (AES-128).
+ * Phase 41-42+50: PDF Standard Security Handler.
  *
- * ISO 32000-1 §7.6, Algorithms 2-7.
+ * ISO 32000-1 §7.6, Algorithms 2-7; Adobe Supplement to ISO 32000 §3.5.
  *
  * Supported:
  *  - RC4_128: V=2, R=3, Length=128 (RC4-128 stream cipher).
  *  - AES_128: V=4, R=4, Length=128 + CFM AESV2 (AES-128-CBC).
+ *  - AES_256: V=5, R=5, Length=256 + CFM AESV3 (AES-256-CBC).
  *  - User password (для opening); owner = user если не задан.
  *  - Permissions bits (printing, copying, modification, ...).
  *
  * Не реализовано:
- *  - V5 (AES-256, PDF 1.7 Extension Level 8 / PDF 2.0).
+ *  - V5 R6 (PDF 2.0 hash iteration 64 rounds).
  *  - Public-key encryption (/Filter /PubSec).
- *  - String encryption (currently /Identity для strings).
+ *  - String encryption (currently /Identity для strings — V1-V4).
  */
 final class Encryption
 {
@@ -58,6 +59,13 @@ final class Encryption
 
     public readonly EncryptionAlgorithm $algorithm;
 
+    /** Phase 50: AES-256 V5 R5 additional fields. */
+    public readonly string $oeValue;
+
+    public readonly string $ueValue;
+
+    public readonly string $permsValue;
+
     public function __construct(
         string $userPassword,
         ?string $ownerPassword = null,
@@ -68,6 +76,20 @@ final class Encryption
         if ($algorithm === EncryptionAlgorithm::Aes_128 && ! self::aesAvailable()) {
             throw new \RuntimeException('AES-128 encryption requires openssl extension with aes-128-cbc support');
         }
+        if ($algorithm === EncryptionAlgorithm::Aes_256 && ! self::aes256Available()) {
+            throw new \RuntimeException('AES-256 encryption requires openssl extension with aes-256-cbc support');
+        }
+
+        // V5 R5 path — completely different key/O/U derivation.
+        if ($algorithm === EncryptionAlgorithm::Aes_256) {
+            $this->initAes256($userPassword, $ownerPassword, $permissions);
+
+            return;
+        }
+        // Defaults для V5-only fields when using V2/V4.
+        $this->oeValue = '';
+        $this->ueValue = '';
+        $this->permsValue = '';
         $owner = $ownerPassword ?? $userPassword;
         $userPadded = self::padPassword($userPassword);
         $ownerPadded = self::padPassword($owner);
@@ -102,6 +124,21 @@ final class Encryption
      */
     public function encryptObject(string $data, int $objNum, int $genNum = 0): string
     {
+        // Phase 50: V5 R5 uses fileKey directly + random IV — no per-object
+        // derivation.
+        if ($this->algorithm === EncryptionAlgorithm::Aes_256) {
+            $iv = random_bytes(16);
+            $cipher = (string) openssl_encrypt(
+                $data,
+                'aes-256-cbc',
+                $this->fileKey,
+                OPENSSL_RAW_DATA,
+                $iv,
+            );
+
+            return $iv . $cipher;
+        }
+
         // Build per-object key base: fileKey + obj_num (3 bytes LE) + gen_num (2 bytes LE).
         $base = $this->fileKey
             . chr($objNum & 0xFF)
@@ -134,6 +171,102 @@ final class Encryption
     {
         return function_exists('openssl_encrypt')
             && in_array('aes-128-cbc', openssl_get_cipher_methods(), true);
+    }
+
+    public static function aes256Available(): bool
+    {
+        return function_exists('openssl_encrypt')
+            && in_array('aes-256-cbc', openssl_get_cipher_methods(), true)
+            && in_array('aes-256-ecb', openssl_get_cipher_methods(), true);
+    }
+
+    /**
+     * Phase 50: Initialize V5 R5 (Adobe Supplement) AES-256 encryption.
+     *
+     * Algorithm overview:
+     *  - User pw: pad? нет. UTF-8 bytes truncated к 127.
+     *  - Generate 8-byte user validation salt + 8-byte user key salt.
+     *  - userHash = SHA-256(pw + userValidationSalt). /U = userHash || saltA || saltB (48 bytes).
+     *  - userIntermediateKey = SHA-256(pw + userKeySalt). AES-256-CBC(userIntermediateKey, IV=0)
+     *    encrypts fileEncryptionKey → /UE.
+     *  - Similar для owner pw, но включает U в hash inputs.
+     *  - /Perms = AES-256-ECB(extendedPermBytes, fileEncryptionKey).
+     */
+    private function initAes256(string $userPassword, ?string $ownerPassword, int $permissions): void
+    {
+        $owner = $ownerPassword ?? $userPassword;
+        $userBytes = substr($userPassword, 0, 127);
+        $ownerBytes = substr($owner, 0, 127);
+
+        // Generate random salts + file encryption key.
+        $userValidationSalt = random_bytes(8);
+        $userKeySalt = random_bytes(8);
+        $ownerValidationSalt = random_bytes(8);
+        $ownerKeySalt = random_bytes(8);
+        $fileEncryptionKey = random_bytes(32);
+
+        // Permissions sign-extended.
+        $p = ($permissions | self::RESERVED_BITS) & 0xFFFFFFFF;
+        if ($p >= 0x80000000) {
+            $p -= 0x100000000;
+        }
+        // Reassign readonly via reflection-free path: this->permissions is
+        // readonly + uninitialized — direct assignment OK в ctor.
+        $this->permissions = $p;
+        $this->fileId = random_bytes(16);
+
+        // /U entry: hash(pw + valSalt) || valSalt || keySalt → 48 bytes.
+        $userHash = hash('sha256', $userBytes . $userValidationSalt, true);
+        $this->uValue = $userHash . $userValidationSalt . $userKeySalt;
+
+        // /O entry: hash(pw + valSalt + U[0..48]) || valSalt || keySalt.
+        // U в hash input — 48 bytes /U value computed above.
+        $ownerHash = hash('sha256', $ownerBytes . $ownerValidationSalt . $this->uValue, true);
+        $this->oValue = $ownerHash . $ownerValidationSalt . $ownerKeySalt;
+
+        // /UE: AES-256-CBC(key=SHA-256(pw + userKeySalt), IV=zeros, fileKey).
+        $userInterKey = hash('sha256', $userBytes . $userKeySalt, true);
+        $this->ueValue = self::aes256CbcNoPadding(
+            $userInterKey, str_repeat("\x00", 16), $fileEncryptionKey,
+        );
+
+        // /OE: similar с owner + U.
+        $ownerInterKey = hash('sha256', $ownerBytes . $ownerKeySalt . $this->uValue, true);
+        $this->oeValue = self::aes256CbcNoPadding(
+            $ownerInterKey, str_repeat("\x00", 16), $fileEncryptionKey,
+        );
+
+        // /Perms: AES-256-ECB(permsExtended, fileKey).
+        // Layout: 4 bytes signed perms (LE) + 0xFFFFFFFF + 'T' (encrypt meta) +
+        //         'adb' (magic) + 4 random bytes = 16 bytes.
+        $permsExtended = pack('V', $p < 0 ? $p + 0x100000000 : $p)
+            . "\xFF\xFF\xFF\xFF"
+            . 'T'
+            . 'adb'
+            . random_bytes(4);
+        $this->permsValue = (string) openssl_encrypt(
+            $permsExtended,
+            'aes-256-ecb',
+            $fileEncryptionKey,
+            OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+        );
+
+        $this->fileKey = $fileEncryptionKey;
+    }
+
+    /**
+     * AES-256-CBC без padding (key 32, iv 16, plaintext must be 16-byte
+     * multiple).
+     */
+    private static function aes256CbcNoPadding(string $key, string $iv, string $data): string
+    {
+        return (string) openssl_encrypt(
+            $data,
+            'aes-256-cbc',
+            $key,
+            OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+            $iv,
+        );
     }
 
     /**
