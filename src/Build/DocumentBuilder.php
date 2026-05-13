@@ -45,6 +45,12 @@ final class DocumentBuilder
     /** @var list<BlockElement> */
     private array $body = [];
 
+    /** @var list<BlockElement> */
+    private array $headerBlocks = [];
+
+    /** @var list<BlockElement> */
+    private array $footerBlocks = [];
+
     private PageSetup $pageSetup;
 
     public function __construct()
@@ -62,6 +68,24 @@ final class DocumentBuilder
     public function pageSetup(PageSetup $setup): self
     {
         $this->pageSetup = $setup;
+
+        return $this;
+    }
+
+    public function header(Closure $build): self
+    {
+        $b = new HeaderFooterBuilder;
+        $build($b);
+        $this->headerBlocks = $b->buildBlocks();
+
+        return $this;
+    }
+
+    public function footer(Closure $build): self
+    {
+        $b = new HeaderFooterBuilder;
+        $build($b);
+        $this->footerBlocks = $b->buildBlocks();
 
         return $this;
     }
@@ -247,6 +271,8 @@ final class DocumentBuilder
         return new Document(new Section(
             body: $this->body,
             pageSetup: $this->pageSetup,
+            headerBlocks: $this->headerBlocks,
+            footerBlocks: $this->footerBlocks,
         ));
     }
 

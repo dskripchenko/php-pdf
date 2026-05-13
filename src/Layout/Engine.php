@@ -8,6 +8,7 @@ use Dskripchenko\PhpPdf\Document as AstDocument;
 use Dskripchenko\PhpPdf\Element\BlockElement;
 use Dskripchenko\PhpPdf\Element\Bookmark;
 use Dskripchenko\PhpPdf\Element\Cell;
+use Dskripchenko\PhpPdf\Element\Field;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
@@ -70,6 +71,17 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  */
 final class Engine
 {
+    /**
+     * Total pages для NUMPAGES field resolution. Populated после first
+     * pass; null = inside first pass (use placeholder).
+     */
+    private ?int $totalPagesHint = null;
+
+    /**
+     * Текущая Section во время render'а — нужна для header/footer access.
+     */
+    private ?Section $currentSection = null;
+
     public function __construct(
         public readonly ?PdfFont $defaultFont = null,
         public readonly StandardFont $fallbackStandard = StandardFont::Helvetica,
@@ -79,7 +91,26 @@ final class Engine
 
     public function render(AstDocument $document): PdfDocument
     {
+        // Two-pass для NUMPAGES resolution:
+        //  - Pass 1: рендер с totalPagesHint=null, считаем pages
+        //  - Pass 2: рендер с known totalPagesHint, NUMPAGES → actual count
+        // Если в документе нет NUMPAGES (или нет вообще Field'ов) — двойной
+        // pass всё равно делается, но это дешёво (~2× memory peak короткое
+        // время). Optimization для skipping pass 1 — Phase L.
+        $this->totalPagesHint = null;
+        $firstPass = $this->renderOnce($document);
+        $this->totalPagesHint = $firstPass->pageCount();
+
+        $finalPass = $this->renderOnce($document);
+        $this->totalPagesHint = null;
+
+        return $finalPass;
+    }
+
+    private function renderOnce(AstDocument $document): PdfDocument
+    {
         $section = $document->section;
+        $this->currentSection = $section;
         $pageSetup = $section->pageSetup;
 
         $pdf = new PdfDocument($pageSetup->paperSize, $pageSetup->orientation);
@@ -96,9 +127,14 @@ final class Engine
             pageSetup: $pageSetup,
         );
 
+        // Render header/footer на first page.
+        $this->renderHeaderFooter($context);
+
         foreach ($section->body as $block) {
             $this->renderBlock($block, $context);
         }
+
+        $this->currentSection = null;
 
         return $pdf;
     }
@@ -120,6 +156,74 @@ final class Engine
     {
         $ctx->currentPage = $ctx->pdf->addPage();
         $ctx->cursorY = $ctx->topY;
+        $this->renderHeaderFooter($ctx);
+    }
+
+    /**
+     * Renders header в top-margin area и footer в bottom-margin area
+     * текущей page. Вызывается при каждом создании новой page.
+     *
+     * Header bounds: leftX..leftX+contentWidth × [pageHeight - topMargin
+     * .. pageHeight]. Cursor стартует прямо под top edge.
+     * Footer bounds: leftX..leftX+contentWidth × [0 .. bottomMargin].
+     * Cursor стартует sufficiently below content area.
+     */
+    private function renderHeaderFooter(LayoutContext $ctx): void
+    {
+        if ($this->currentSection === null) {
+            return;
+        }
+        $section = $this->currentSection;
+        $setup = $ctx->pageSetup;
+        [$pageWidth, $pageHeight] = $setup->dimensions();
+
+        if ($section->hasHeader()) {
+            $headerArea = new LayoutContext(
+                pdf: $ctx->pdf,
+                currentPage: $ctx->currentPage,
+                cursorY: $pageHeight - 8.0,    // 8pt от top edge
+                leftX: $setup->margins->leftPt,
+                contentWidth: $setup->contentWidthPt(),
+                bottomY: $pageHeight - $setup->margins->topPt + 4.0,
+                topY: $pageHeight - 8.0,
+                pageSetup: $setup,
+            );
+            foreach ($section->headerBlocks as $block) {
+                $this->renderBlock($block, $headerArea);
+            }
+        }
+
+        if ($section->hasFooter()) {
+            // Estimate footer height up-front (для bottom alignment).
+            $footerHeight = 0;
+            foreach ($section->footerBlocks as $block) {
+                $footerHeight += $this->measureBlockHeight($block, $setup->contentWidthPt());
+            }
+            $footerArea = new LayoutContext(
+                pdf: $ctx->pdf,
+                currentPage: $ctx->currentPage,
+                cursorY: $setup->margins->bottomPt - 4.0 + $footerHeight,
+                leftX: $setup->margins->leftPt,
+                contentWidth: $setup->contentWidthPt(),
+                bottomY: 4.0,
+                topY: $setup->margins->bottomPt - 4.0 + $footerHeight,
+                pageSetup: $setup,
+            );
+            foreach ($section->footerBlocks as $block) {
+                $this->renderBlock($block, $footerArea);
+            }
+        }
+    }
+
+    private function currentPageNumber(LayoutContext $ctx): int
+    {
+        foreach ($ctx->pdf->pages() as $i => $p) {
+            if ($p === $ctx->currentPage) {
+                return $i + 1;
+            }
+        }
+
+        return 0;
     }
 
     private function renderHorizontalRule(LayoutContext $ctx): void
@@ -197,8 +301,9 @@ final class Engine
         // Word | LineBreak | PageBreak | Bookmark (synthetic marker).
         // Word items могут иметь 'link' tag для Hyperlink wrap'а — нужно
         // для emit'а /Link annotation'а после line render'а.
+        // Field инстансы резолвятся в word'ы через resolveField($ctx).
         $items = [];
-        $this->tokenizeChildren($p->children, $effectiveDefault, $items, null);
+        $this->tokenizeChildren($p->children, $effectiveDefault, $items, null, $ctx);
 
         // Layout indents для first line (firstLineIndent применяется
         // только к первой line, остальные используют indentLeft).
@@ -271,13 +376,20 @@ final class Engine
      *
      * Hyperlink children получают 'link' tag для последующего annotation
      * emission'а. Bookmark вставляется как synthetic 'bookmark' item.
+     * Field резолвится в word item с конкретным текстом (PAGE → currentPage,
+     * NUMPAGES → totalPagesHint, DATE/TIME → now, MERGEFIELD → field name).
      *
      * @param  list<\Dskripchenko\PhpPdf\Element\InlineElement>  $children
      * @param  array<string, mixed>|null  $currentLink
      * @param  list<array<string, mixed>>  $items
      */
-    private function tokenizeChildren(array $children, RunStyle $effectiveDefault, array &$items, ?array $currentLink): void
-    {
+    private function tokenizeChildren(
+        array $children,
+        RunStyle $effectiveDefault,
+        array &$items,
+        ?array $currentLink,
+        ?LayoutContext $ctx = null,
+    ): void {
         foreach ($children as $child) {
             if ($child instanceof Run) {
                 $childStyle = $child->style->inheritFrom($effectiveDefault);
@@ -292,13 +404,60 @@ final class Engine
                 $link = $child->isInternal()
                     ? ['kind' => 'internal', 'target' => $child->anchor ?? '']
                     : ['kind' => 'uri', 'target' => $child->href ?? ''];
-                $this->tokenizeChildren($child->children, $effectiveDefault, $items, $link);
+                $this->tokenizeChildren($child->children, $effectiveDefault, $items, $link, $ctx);
             } elseif ($child instanceof Bookmark) {
                 $items[] = ['type' => 'bookmark', 'name' => $child->name];
-                $this->tokenizeChildren($child->children, $effectiveDefault, $items, $currentLink);
+                $this->tokenizeChildren($child->children, $effectiveDefault, $items, $currentLink, $ctx);
+            } elseif ($child instanceof Field) {
+                $resolved = $this->resolveField($child, $ctx);
+                $childStyle = $child->style->inheritFrom($effectiveDefault);
+                foreach ($this->splitWords($resolved) as $word) {
+                    $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle, 'link' => $currentLink];
+                }
+                if (str_ends_with($resolved, ' ')) {
+                    // Сохраняем trailing space (важно для "Page X of Y" layout'а).
+                    $items[] = ['type' => 'word', 'text' => '', 'style' => $childStyle, 'link' => $currentLink];
+                }
             }
-            // Field — Phase 8 (PAGE/NUMPAGES resolution).
         }
+    }
+
+    /**
+     * Резолвит Field в готовую strлinку для emission.
+     *
+     * PAGE     → currentPageNumber($ctx) (или 1 при measurement без ctx)
+     * NUMPAGES → totalPagesHint (или 99 placeholder при first pass)
+     * DATE     → текущая дата в указанном формате (DD.MM.YYYY default)
+     * TIME     → текущее время (HH:mm default)
+     * MERGEFIELD → format-параметр = name (placeholder text)
+     */
+    private function resolveField(Field $f, ?LayoutContext $ctx): string
+    {
+        return match ($f->kind()) {
+            Field::PAGE => (string) ($ctx !== null ? $this->currentPageNumber($ctx) : 1),
+            Field::NUMPAGES => (string) ($this->totalPagesHint ?? 99),
+            Field::DATE => $this->formatDateTime($f->format() ?: 'dd.MM.yyyy'),
+            Field::TIME => $this->formatDateTime($f->format() ?: 'HH:mm'),
+            Field::MERGEFIELD => $f->format() !== '' ? $f->format() : '?',
+            default => '',
+        };
+    }
+
+    private function formatDateTime(string $format): string
+    {
+        // Mini parser: dd/MM/yyyy/HH/mm/ss tokens → PHP date format.
+        // Order matters — long patterns first.
+        $map = [
+            'yyyy' => 'Y',
+            'MM' => 'm',
+            'dd' => 'd',
+            'HH' => 'H',
+            'mm' => 'i',
+            'ss' => 's',
+        ];
+        $phpFmt = strtr($format, $map);
+
+        return date($phpFmt);
     }
 
     /**
