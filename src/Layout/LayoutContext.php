@@ -45,5 +45,8 @@ final class LayoutContext
         // end of section as endnotes block).
         /** @var list<string> */
         public array $footnotes = [],
+        // Phase 61: suppress paragraph BDC/EMC wrapping (used когда heading
+        // sets own H1-H6 tagging вокруг paragraph render).
+        public bool $skipParagraphTag = false,
     ) {}
 }

@@ -18,6 +18,7 @@ use Dskripchenko\PhpPdf\Element\ColumnSet;
 use Dskripchenko\PhpPdf\Element\DonutChart;
 use Dskripchenko\PhpPdf\Element\FormField;
 use Dskripchenko\PhpPdf\Element\GroupedBarChart;
+use Dskripchenko\PhpPdf\Element\Heading;
 use Dskripchenko\PhpPdf\Element\ScatterChart;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\LineChart;
@@ -270,8 +271,66 @@ final class Engine
             $block instanceof ScatterChart => $this->renderScatterChart($block, $ctx),
             $block instanceof AreaChart => $this->renderAreaChart($block, $ctx),
             $block instanceof SvgElement => $this->renderSvgElement($block, $ctx),
+            $block instanceof Heading => $this->renderHeading($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 61: Heading — paragraph с auto-styled bold/larger font;
+     * в tagged PDF mode emits как /H1.../H6 struct element.
+     */
+    private function renderHeading(Heading $h, LayoutContext $ctx): void
+    {
+        $taggedPdf = $ctx->pdf->isTagged();
+        $mcid = null;
+        if ($taggedPdf) {
+            $mcid = $ctx->currentPage->nextMcid();
+            $ctx->currentPage->beginMarkedContent('H'.$h->level, $mcid);
+        }
+
+        $size = $h->defaultFontSizePt();
+        $paraStyle = $h->style
+            ?? new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
+                spaceBeforePt: 12.0,
+                spaceAfterPt: 6.0,
+            );
+
+        // Wrap children с bold + size.
+        $boldedChildren = [];
+        foreach ($h->children as $child) {
+            if ($child instanceof Run) {
+                $newStyle = $child->style->withBold(true)->withSizePt($size);
+                $boldedChildren[] = new Run($child->text, $newStyle);
+            } else {
+                $boldedChildren[] = $child;
+            }
+        }
+
+        $p = new Paragraph($boldedChildren, $paraStyle);
+        $this->renderParagraphNoTag($p, $ctx);
+
+        if ($taggedPdf && $mcid !== null) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->pdf->addStructElement('H'.$h->level, $mcid, $ctx->currentPage);
+        }
+    }
+
+    /**
+     * Phase 61: Internal helper — render Paragraph БЕЗ wrapping в tagged
+     * BDC/EMC (используется renderHeading что управляет tagging сам).
+     */
+    private function renderParagraphNoTag(Paragraph $p, LayoutContext $ctx): void
+    {
+        $wasTagged = $ctx->pdf->isTagged();
+        // Temporarily mask tagged mode чтобы renderParagraph не emit'нул /P.
+        // Self-tracked через property doesn't exist; use reflection-free
+        // approach: swap pdf'а field? Это инвазивно. Simpler: emit raw
+        // operators directly.
+        // Workaround — flag через context (mark current paragraph as already-tagged).
+        $ctx->skipParagraphTag = true;
+        $this->renderParagraph($p, $ctx);
+        $ctx->skipParagraphTag = false;
     }
 
     /**
@@ -1974,7 +2033,9 @@ final class Engine
         }
 
         // Phase 48: Tagged PDF — wrap paragraph content в BDC/EMC.
-        $taggedPdf = $ctx->pdf->isTagged();
+        // Phase 61: skipParagraphTag=true когда caller (e.g. Heading)
+        // управляет tagging сам.
+        $taggedPdf = $ctx->pdf->isTagged() && ! $ctx->skipParagraphTag;
         $mcid = null;
         if ($taggedPdf) {
             $mcid = $ctx->currentPage->nextMcid();
