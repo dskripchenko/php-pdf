@@ -53,6 +53,12 @@ final class DocumentBuilder
 
     private ?string $watermarkText = null;
 
+    /** @var list<BlockElement>|null */
+    private ?array $firstPageHeaderBlocks = null;
+
+    /** @var list<BlockElement>|null */
+    private ?array $firstPageFooterBlocks = null;
+
     private PageSetup $pageSetup;
 
     public function __construct()
@@ -99,6 +105,39 @@ final class DocumentBuilder
     public function watermark(?string $text): self
     {
         $this->watermarkText = $text;
+
+        return $this;
+    }
+
+    /**
+     * First-page header — override обычного header'а на странице 1.
+     * Передай empty Closure для пустого header'а на первой page.
+     */
+    public function firstPageHeader(Closure $build): self
+    {
+        $b = new HeaderFooterBuilder;
+        $build($b);
+        $this->firstPageHeaderBlocks = $b->buildBlocks();
+
+        return $this;
+    }
+
+    public function firstPageFooter(Closure $build): self
+    {
+        $b = new HeaderFooterBuilder;
+        $build($b);
+        $this->firstPageFooterBlocks = $b->buildBlocks();
+
+        return $this;
+    }
+
+    /**
+     * Convenience — отключить header/footer на first page (cover).
+     */
+    public function noHeaderFooterOnFirstPage(): self
+    {
+        $this->firstPageHeaderBlocks = [];
+        $this->firstPageFooterBlocks = [];
 
         return $this;
     }
@@ -287,6 +326,8 @@ final class DocumentBuilder
             headerBlocks: $this->headerBlocks,
             footerBlocks: $this->footerBlocks,
             watermarkText: $this->watermarkText,
+            firstPageHeaderBlocks: $this->firstPageHeaderBlocks,
+            firstPageFooterBlocks: $this->firstPageFooterBlocks,
         ));
     }
 

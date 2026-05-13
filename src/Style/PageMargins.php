@@ -16,6 +16,16 @@ final readonly class PageMargins
         public float $rightPt = 56.7,
         public float $bottomPt = 56.7,
         public float $leftPt = 56.7,
+        /**
+         * Mirrored margins для two-sided printing:
+         * на even pages left/right swap'ятся (outer/inner side).
+         */
+        public bool $mirrored = false,
+        /**
+         * Gutter — дополнительный margin на binding side. На odd pages
+         * добавляется к leftPt, на even pages (если mirrored) — к rightPt.
+         */
+        public float $gutterPt = 0,
     ) {}
 
     /**
@@ -38,5 +48,26 @@ final readonly class PageMargins
         $toPt = static fn (float $mm): float => $mm * 2.83464567;
 
         return new self($toPt($topMm), $toPt($rightMm), $toPt($bottomMm), $toPt($leftMm));
+    }
+
+    /**
+     * Returns effective left/right margins для given 1-based page number.
+     * Учитывает mirrored swap и gutter.
+     *
+     * @return array{0: float, 1: float}  [effectiveLeftPt, effectiveRightPt]
+     */
+    public function effectiveLeftRightFor(int $pageNumber): array
+    {
+        $isOdd = ($pageNumber % 2) === 1;
+        if (! $this->mirrored) {
+            // Single-sided: gutter всегда на left (inside binding).
+            return [$this->leftPt + $this->gutterPt, $this->rightPt];
+        }
+        // Mirrored: odd → binding слева (inside), even → справа.
+        if ($isOdd) {
+            return [$this->leftPt + $this->gutterPt, $this->rightPt];
+        }
+
+        return [$this->rightPt, $this->leftPt + $this->gutterPt];
     }
 }

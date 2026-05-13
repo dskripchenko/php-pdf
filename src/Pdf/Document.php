@@ -52,9 +52,13 @@ final class Document
 
     private string $pdfVersion = '1.7';
 
+    /**
+     * @param  array{0: float, 1: float}|null  $defaultCustomDimensionsPt
+     */
     public function __construct(
         public PaperSize $defaultPaperSize = PaperSize::A4,
         public Orientation $defaultOrientation = Orientation::Portrait,
+        public ?array $defaultCustomDimensionsPt = null,
     ) {}
 
     public static function new(
@@ -75,11 +79,18 @@ final class Document
      * Добавляет новую page. Если paperSize/orientation не переданы —
      * используется document-level default.
      */
-    public function addPage(?PaperSize $paperSize = null, ?Orientation $orientation = null): Page
-    {
+    /**
+     * @param  array{0: float, 1: float}|null  $customDimensionsPt
+     */
+    public function addPage(
+        ?PaperSize $paperSize = null,
+        ?Orientation $orientation = null,
+        ?array $customDimensionsPt = null,
+    ): Page {
         $page = new Page(
             $paperSize ?? $this->defaultPaperSize,
             $orientation ?? $this->defaultOrientation,
+            $customDimensionsPt ?? $this->defaultCustomDimensionsPt,
         );
         $this->pages[] = $page;
 

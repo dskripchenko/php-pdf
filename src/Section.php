@@ -23,12 +23,25 @@ final readonly class Section
      * @param  list<BlockElement>  $headerBlocks
      * @param  list<BlockElement>  $footerBlocks
      */
+    /**
+     * @param  list<BlockElement>  $body
+     * @param  list<BlockElement>  $headerBlocks
+     * @param  list<BlockElement>  $footerBlocks
+     * @param  list<BlockElement>|null  $firstPageHeaderBlocks  null = use $headerBlocks
+     * @param  list<BlockElement>|null  $firstPageFooterBlocks  null = use $footerBlocks
+     */
     public function __construct(
         public array $body = [],
         public PageSetup $pageSetup = new PageSetup,
         public array $headerBlocks = [],
         public array $footerBlocks = [],
         public ?string $watermarkText = null,
+        /**
+         * Different first-page header (cover page). null = same as headerBlocks.
+         * Empty list [] = blank header on first page.
+         */
+        public ?array $firstPageHeaderBlocks = null,
+        public ?array $firstPageFooterBlocks = null,
     ) {}
 
     public function hasHeader(): bool
@@ -44,5 +57,29 @@ final readonly class Section
     public function hasWatermark(): bool
     {
         return $this->watermarkText !== null && $this->watermarkText !== '';
+    }
+
+    /**
+     * @return list<BlockElement>
+     */
+    public function effectiveHeaderBlocksFor(int $pageNumber): array
+    {
+        if ($pageNumber === 1 && $this->firstPageHeaderBlocks !== null) {
+            return $this->firstPageHeaderBlocks;
+        }
+
+        return $this->headerBlocks;
+    }
+
+    /**
+     * @return list<BlockElement>
+     */
+    public function effectiveFooterBlocksFor(int $pageNumber): array
+    {
+        if ($pageNumber === 1 && $this->firstPageFooterBlocks !== null) {
+            return $this->firstPageFooterBlocks;
+        }
+
+        return $this->footerBlocks;
     }
 }

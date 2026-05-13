@@ -113,15 +113,19 @@ final class Engine
         $this->currentSection = $section;
         $pageSetup = $section->pageSetup;
 
-        $pdf = new PdfDocument($pageSetup->paperSize, $pageSetup->orientation);
+        $pdf = new PdfDocument(
+            $pageSetup->paperSize,
+            $pageSetup->orientation,
+            $pageSetup->customDimensionsPt,
+        );
         $page = $pdf->addPage();
 
         $context = new LayoutContext(
             pdf: $pdf,
             currentPage: $page,
             cursorY: $pageSetup->dimensions()[1] - $pageSetup->margins->topPt,
-            leftX: $pageSetup->margins->leftPt,
-            contentWidth: $pageSetup->contentWidthPt(),
+            leftX: $pageSetup->leftXForPage(1),
+            contentWidth: $pageSetup->contentWidthPtForPage(1),
             bottomY: $pageSetup->margins->bottomPt,
             topY: $pageSetup->dimensions()[1] - $pageSetup->margins->topPt,
             pageSetup: $pageSetup,
@@ -155,8 +159,21 @@ final class Engine
     private function forcePageBreak(LayoutContext $ctx): void
     {
         $ctx->currentPage = $ctx->pdf->addPage();
+        $this->applyPerPageMargins($ctx);
         $ctx->cursorY = $ctx->topY;
         $this->renderHeaderFooter($ctx);
+    }
+
+    /**
+     * Применяет mirrored/gutter margins для current page'а (вызывается
+     * после создания new page'а). cursorY/topY/bottomY не меняются —
+     * только leftX и contentWidth.
+     */
+    private function applyPerPageMargins(LayoutContext $ctx): void
+    {
+        $pageNum = $this->currentPageNumber($ctx);
+        $ctx->leftX = $ctx->pageSetup->leftXForPage($pageNum);
+        $ctx->contentWidth = $ctx->pageSetup->contentWidthPtForPage($pageNum);
     }
 
     /**
@@ -183,39 +200,45 @@ final class Engine
         $setup = $ctx->pageSetup;
         [$pageWidth, $pageHeight] = $setup->dimensions();
 
-        if ($section->hasHeader()) {
+        $pageNum = $this->currentPageNumber($ctx);
+        $effectiveLeftX = $setup->leftXForPage($pageNum);
+        $effectiveContentWidth = $setup->contentWidthPtForPage($pageNum);
+
+        $headerBlocks = $section->effectiveHeaderBlocksFor($pageNum);
+        if ($headerBlocks !== []) {
             $headerArea = new LayoutContext(
                 pdf: $ctx->pdf,
                 currentPage: $ctx->currentPage,
                 cursorY: $pageHeight - 8.0,    // 8pt от top edge
-                leftX: $setup->margins->leftPt,
-                contentWidth: $setup->contentWidthPt(),
+                leftX: $effectiveLeftX,
+                contentWidth: $effectiveContentWidth,
                 bottomY: $pageHeight - $setup->margins->topPt + 4.0,
                 topY: $pageHeight - 8.0,
                 pageSetup: $setup,
             );
-            foreach ($section->headerBlocks as $block) {
+            foreach ($headerBlocks as $block) {
                 $this->renderBlock($block, $headerArea);
             }
         }
 
-        if ($section->hasFooter()) {
+        $footerBlocks = $section->effectiveFooterBlocksFor($pageNum);
+        if ($footerBlocks !== []) {
             // Estimate footer height up-front (для bottom alignment).
             $footerHeight = 0;
-            foreach ($section->footerBlocks as $block) {
-                $footerHeight += $this->measureBlockHeight($block, $setup->contentWidthPt());
+            foreach ($footerBlocks as $block) {
+                $footerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
             }
             $footerArea = new LayoutContext(
                 pdf: $ctx->pdf,
                 currentPage: $ctx->currentPage,
                 cursorY: $setup->margins->bottomPt - 4.0 + $footerHeight,
-                leftX: $setup->margins->leftPt,
-                contentWidth: $setup->contentWidthPt(),
+                leftX: $effectiveLeftX,
+                contentWidth: $effectiveContentWidth,
                 bottomY: 4.0,
                 topY: $setup->margins->bottomPt - 4.0 + $footerHeight,
                 pageSetup: $setup,
             );
-            foreach ($section->footerBlocks as $block) {
+            foreach ($footerBlocks as $block) {
                 $this->renderBlock($block, $footerArea);
             }
         }
@@ -260,6 +283,10 @@ final class Engine
         }
     }
 
+    /**
+     * Physical 1-based index текущей page'и (для mirrored margins +
+     * first-page logic). НЕ учитывает firstPageNumber offset.
+     */
     private function currentPageNumber(LayoutContext $ctx): int
     {
         foreach ($ctx->pdf->pages() as $i => $p) {
@@ -269,6 +296,27 @@ final class Engine
         }
 
         return 0;
+    }
+
+    /**
+     * Displayed page number для Field PAGE — с учётом pageSetup.
+     * firstPageNumber offset.
+     */
+    private function displayedPageNumber(LayoutContext $ctx): int
+    {
+        $physical = $this->currentPageNumber($ctx);
+        if ($physical === 0) {
+            return 0;
+        }
+
+        return $physical + ($ctx->pageSetup->firstPageNumber - 1);
+    }
+
+    private function displayedTotalPages(LayoutContext $ctx): int
+    {
+        $count = $this->totalPagesHint ?? 1;
+
+        return $count + ($ctx->pageSetup->firstPageNumber - 1);
     }
 
     private function renderHorizontalRule(LayoutContext $ctx): void
@@ -494,8 +542,10 @@ final class Engine
     private function resolveField(Field $f, ?LayoutContext $ctx): string
     {
         return match ($f->kind()) {
-            Field::PAGE => (string) ($ctx !== null ? $this->currentPageNumber($ctx) : 1),
-            Field::NUMPAGES => (string) ($this->totalPagesHint ?? 99),
+            Field::PAGE => (string) ($ctx !== null ? $this->displayedPageNumber($ctx) : 1),
+            Field::NUMPAGES => (string) ($ctx !== null
+                ? $this->displayedTotalPages($ctx)
+                : ($this->totalPagesHint ?? 99)),
             Field::DATE => $this->formatDateTime($f->format() ?: 'dd.MM.yyyy'),
             Field::TIME => $this->formatDateTime($f->format() ?: 'HH:mm'),
             Field::MERGEFIELD => $f->format() !== '' ? $f->format() : '?',

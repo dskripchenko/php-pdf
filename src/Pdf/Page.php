@@ -49,20 +49,37 @@ final class Page
 
     private int $imageCounter = 0;
 
+    /**
+     * @param  array{0: float, 1: float}|null  $customDimensionsPt  [widthPt, heightPt]
+     *                                                              в portrait orientation; orientation swap applied automatically.
+     */
     public function __construct(
         public readonly PaperSize $paperSize,
         public readonly Orientation $orientation = Orientation::Portrait,
+        public readonly ?array $customDimensionsPt = null,
     ) {
         $this->stream = new ContentStream;
     }
 
     public function widthPt(): float
     {
+        if ($this->customDimensionsPt !== null) {
+            return $this->orientation === Orientation::Portrait
+                ? $this->customDimensionsPt[0]
+                : $this->customDimensionsPt[1];
+        }
+
         return $this->orientation->applyTo($this->paperSize)[0];
     }
 
     public function heightPt(): float
     {
+        if ($this->customDimensionsPt !== null) {
+            return $this->orientation === Orientation::Portrait
+                ? $this->customDimensionsPt[1]
+                : $this->customDimensionsPt[0];
+        }
+
         return $this->orientation->applyTo($this->paperSize)[1];
     }
 
