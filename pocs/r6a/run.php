@@ -41,7 +41,7 @@ for ($x = 0; $x < 100; $x++) {
 ob_start();
 imagepng($gd);
 $pngBytes = ob_get_clean();
-imagedestroy($gd);
+// imagedestroy() no-op since PHP 8.0
 
 // JPEG 80×60 — красный квадрат с белым центром.
 $gd = imagecreatetruecolor(80, 60);
@@ -52,7 +52,7 @@ imagefilledrectangle($gd, 20, 15, 59, 44, $white);
 ob_start();
 imagejpeg($gd, null, 85);
 $jpgBytes = ob_get_clean();
-imagedestroy($gd);
+// imagedestroy() no-op since PHP 8.0
 
 // 2. Parse через PdfImage.
 $pngImage = PdfImage::fromBytes($pngBytes);

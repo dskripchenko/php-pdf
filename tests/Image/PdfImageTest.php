@@ -25,7 +25,7 @@ final class PdfImageTest extends TestCase
         ob_start();
         imagejpeg($gd);
         $jpg = ob_get_clean();
-        imagedestroy($gd);
+        // imagedestroy() no-op since PHP 8.0
 
         $img = PdfImage::fromBytes($jpg);
         self::assertSame(10, $img->widthPx);
@@ -46,7 +46,7 @@ final class PdfImageTest extends TestCase
         ob_start();
         imagepng($gd);
         $png = ob_get_clean();
-        imagedestroy($gd);
+        // imagedestroy() no-op since PHP 8.0
 
         $img = PdfImage::fromBytes($png);
         self::assertSame(8, $img->widthPx);
@@ -71,7 +71,7 @@ final class PdfImageTest extends TestCase
         ob_start();
         imagejpeg($gd);
         $jpg = ob_get_clean();
-        imagedestroy($gd);
+        // imagedestroy() no-op since PHP 8.0
 
         $writer = new Writer;
         $img = PdfImage::fromBytes($jpg);
@@ -93,7 +93,7 @@ final class PdfImageTest extends TestCase
         ob_start();
         imagejpeg($gd);
         $jpg = ob_get_clean();
-        imagedestroy($gd);
+        // imagedestroy() no-op since PHP 8.0
 
         $writer = new Writer;
         $img = PdfImage::fromBytes($jpg);
