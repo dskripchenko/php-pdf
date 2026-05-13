@@ -77,6 +77,60 @@ final class Document
     private bool $tagged = false;
 
     /**
+     * Phase 84: Open action — applied when document is opened.
+     * Options:
+     *  - 'fit-page' — zoom to fit entire page.
+     *  - 'fit-width' — zoom to fit page width.
+     *  - 'actual-size' — 100%.
+     *  - 'xyz' (default) — explicit x/y/zoom or null = reader default.
+     *
+     * @var array<string, mixed>|null  Form: ['mode' => string, 'page' => int (1-based), ...].
+     */
+    private ?array $openAction = null;
+
+    /**
+     * Phase 84: Page display mode на open.
+     * Options: 'use-none' (default), 'use-outlines', 'use-thumbs',
+     *          'use-oc' (optional content), 'full-screen'.
+     */
+    private ?string $pageMode = null;
+
+    /**
+     * Phase 84: Page layout mode.
+     * Options: 'single-page' (default), 'one-column', 'two-column-left',
+     *          'two-column-right', 'two-page-left', 'two-page-right'.
+     */
+    private ?string $pageLayout = null;
+
+    /**
+     * Phase 84: Set open action — zoom + page on document open.
+     */
+    public function setOpenAction(string $mode = 'fit-page', int $pageIndex = 1, ?float $x = null, ?float $y = null, ?float $zoom = null): self
+    {
+        $this->openAction = [
+            'mode' => $mode,
+            'page' => $pageIndex,
+            'x' => $x, 'y' => $y, 'zoom' => $zoom,
+        ];
+
+        return $this;
+    }
+
+    public function setPageMode(string $mode): self
+    {
+        $this->pageMode = $mode;
+
+        return $this;
+    }
+
+    public function setPageLayout(string $layout): self
+    {
+        $this->pageLayout = $layout;
+
+        return $this;
+    }
+
+    /**
      * Phase 49: Embedded files (attachments).
      *
      * @var list<array{name: string, bytes: string, mimeType: ?string, description: ?string}>
@@ -736,7 +790,50 @@ final class Document
         }
 
         // 6. Catalog.
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef >>");
+        // Phase 84: optional /OpenAction, /PageMode, /PageLayout.
+        $openActionRef = '';
+        if ($this->openAction !== null) {
+            $pIdx = max(0, $this->openAction['page'] - 1);
+            $pageId = $pageIds[$pIdx] ?? $pageIds[0];
+            $mode = $this->openAction['mode'];
+            $action = match ($mode) {
+                'fit-page' => sprintf('[%d 0 R /Fit]', $pageId),
+                'fit-width' => sprintf('[%d 0 R /FitH null]', $pageId),
+                'actual-size' => sprintf('[%d 0 R /XYZ null null 1]', $pageId),
+                'xyz' => sprintf(
+                    '[%d 0 R /XYZ %s %s %s]',
+                    $pageId,
+                    $this->openAction['x'] !== null ? $this->fmt($this->openAction['x']) : 'null',
+                    $this->openAction['y'] !== null ? $this->fmt($this->openAction['y']) : 'null',
+                    $this->openAction['zoom'] !== null ? $this->fmt($this->openAction['zoom']) : 'null',
+                ),
+                default => sprintf('[%d 0 R /Fit]', $pageId),
+            };
+            $openActionRef = " /OpenAction $action";
+        }
+        $pageModeRef = '';
+        if ($this->pageMode !== null) {
+            $pageModeRef = ' /PageMode /'.match ($this->pageMode) {
+                'use-outlines' => 'UseOutlines',
+                'use-thumbs' => 'UseThumbs',
+                'use-oc' => 'UseOC',
+                'full-screen' => 'FullScreen',
+                default => 'UseNone',
+            };
+        }
+        $pageLayoutRef = '';
+        if ($this->pageLayout !== null) {
+            $pageLayoutRef = ' /PageLayout /'.match ($this->pageLayout) {
+                'one-column' => 'OneColumn',
+                'two-column-left' => 'TwoColumnLeft',
+                'two-column-right' => 'TwoColumnRight',
+                'two-page-left' => 'TwoPageLeft',
+                'two-page-right' => 'TwoPageRight',
+                default => 'SinglePage',
+            };
+        }
+
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef >>");
 
         $writer->setRoot($catalogId);
 
