@@ -13,6 +13,7 @@ use Dskripchenko\PhpPdf\Font\FontProvider;
 use Dskripchenko\PhpPdf\Font\PdfFontResolver;
 use Dskripchenko\PhpPdf\Element\Barcode;
 use Dskripchenko\PhpPdf\Element\BarChart;
+use Dskripchenko\PhpPdf\Element\AreaChart;
 use Dskripchenko\PhpPdf\Element\ColumnSet;
 use Dskripchenko\PhpPdf\Element\DonutChart;
 use Dskripchenko\PhpPdf\Element\FormField;
@@ -267,6 +268,7 @@ final class Engine
             $block instanceof MultiLineChart => $this->renderMultiLineChart($block, $ctx),
             $block instanceof DonutChart => $this->renderDonutChart($block, $ctx),
             $block instanceof ScatterChart => $this->renderScatterChart($block, $ctx),
+            $block instanceof AreaChart => $this->renderAreaChart($block, $ctx),
             $block instanceof SvgElement => $this->renderSvgElement($block, $ctx),
             default => null,
         };
@@ -353,6 +355,156 @@ final class Engine
 
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $dc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 60: Area chart — line с filled regions. Stacked mode сcrolls
+     * values from previous series.
+     */
+    private function renderAreaChart(AreaChart $ac, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $ac->spaceBeforePt;
+        $totalW = min($ac->widthPt, $ctx->contentWidth);
+        $totalH = $ac->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($ac->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        $titleStripH = $ac->title !== null ? $ac->titleSizePt + 4.0 : 0;
+        $labelStripH = $ac->axisLabelSizePt + 4.0;
+        $legendStripH = $ac->showLegend ? $ac->legendSizePt + 6.0 : 0;
+        $axisLabelPaddingLeft = 32.0;
+
+        $plotTop = $topY - $titleStripH - $legendStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        if ($ac->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $ac->titleSizePt))->widthPt($ac->title)
+                : mb_strlen($ac->title, 'UTF-8') * $ac->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $ac->title,
+                $blockX + ($totalW - $titleW) / 2, $topY - $ac->titleSizePt, $ac->titleSizePt);
+        }
+
+        $defaultColors = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0'];
+
+        $n = count($ac->xLabels);
+        $nSeries = count($ac->series);
+
+        // Compute max value (stacked → sum per x; otherwise → max per series).
+        $maxValue = 0.0;
+        if ($ac->stacked) {
+            for ($i = 0; $i < $n; $i++) {
+                $colSum = 0.0;
+                foreach ($ac->series as $s) {
+                    $colSum += max(0.0, $s['values'][$i]);
+                }
+                if ($colSum > $maxValue) {
+                    $maxValue = $colSum;
+                }
+            }
+        } else {
+            foreach ($ac->series as $s) {
+                foreach ($s['values'] as $v) {
+                    if ($v > $maxValue) {
+                        $maxValue = $v;
+                    }
+                }
+            }
+        }
+        if ($maxValue <= 0) {
+            $maxValue = 1.0;
+        }
+
+        // Legend at top.
+        if ($ac->showLegend) {
+            $legendY = $topY - $titleStripH - $ac->legendSizePt;
+            $legendX = $blockX + $axisLabelPaddingLeft;
+            foreach ($ac->series as $idx => $s) {
+                $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
+                [$r, $g, $b] = $this->hexToRgb($color);
+                $ctx->currentPage->fillRect($legendX, $legendY, $ac->legendSizePt, $ac->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $s['name'],
+                    $legendX + $ac->legendSizePt + 3, $legendY + 1, $ac->legendSizePt);
+                $legendX += $ac->legendSizePt + 3
+                    + ($this->defaultFont !== null
+                        ? (new TextMeasurer($this->defaultFont, $ac->legendSizePt))->widthPt($s['name'])
+                        : mb_strlen($s['name'], 'UTF-8') * $ac->legendSizePt * 0.5)
+                    + 14;
+            }
+        }
+
+        // Axes.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        $maxLabel = $this->formatChartNumber($maxValue);
+        $maxLabelW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $ac->axisLabelSizePt))->widthPt($maxLabel)
+            : mb_strlen($maxLabel, 'UTF-8') * $ac->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $maxLabel,
+            $plotLeft - $maxLabelW - 2, $plotTop - $ac->axisLabelSizePt * 0.5, $ac->axisLabelSizePt);
+
+        $stepX = $n > 1 ? $plotW / ($n - 1) : 0;
+
+        // X-axis labels.
+        foreach ($ac->xLabels as $i => $label) {
+            $x = $plotLeft + $i * $stepX;
+            $labelW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $ac->axisLabelSizePt))->widthPt($label)
+                : mb_strlen($label, 'UTF-8') * $ac->axisLabelSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $label,
+                $x - $labelW / 2, $plotBottom - $ac->axisLabelSizePt - 2, $ac->axisLabelSizePt);
+        }
+
+        // Build series y-tops; для stacked — cumulative bottoms.
+        $cumulativeBottoms = array_fill(0, $n, $plotBottom);
+        foreach ($ac->series as $idx => $s) {
+            $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
+            [$r, $g, $b] = $this->hexToRgb($color);
+
+            $topPoints = [];
+            for ($i = 0; $i < $n; $i++) {
+                $x = $plotLeft + $i * $stepX;
+                $value = $s['values'][$i];
+                if ($ac->stacked) {
+                    $y = $cumulativeBottoms[$i] + ($value / $maxValue) * $plotH;
+                } else {
+                    $y = $plotBottom + ($value / $maxValue) * $plotH;
+                }
+                $topPoints[] = [$x, $y];
+            }
+
+            // Build polygon: top points (left → right) + bottom (right → left).
+            $poly = $topPoints;
+            for ($i = $n - 1; $i >= 0; $i--) {
+                $x = $plotLeft + $i * $stepX;
+                $poly[] = [$x, $cumulativeBottoms[$i]];
+            }
+            $ctx->currentPage->fillPolygon($poly, $r, $g, $b);
+
+            // Stroke the top line чтобы reinforce border.
+            $ctx->currentPage->strokePolyline($topPoints, 1.0, $r * 0.7, $g * 0.7, $b * 0.7);
+
+            if ($ac->stacked) {
+                for ($i = 0; $i < $n; $i++) {
+                    $cumulativeBottoms[$i] = $topPoints[$i][1];
+                }
+            }
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $ac->spaceAfterPt;
     }
 
     /**
