@@ -41,6 +41,22 @@ final class ContentStream
     }
 
     /**
+     * Текст с pre-encoded hex glyph-ID string (для Type0 composite fonts
+     * с Identity-H encoding). $hexString должен включать угловые скобки:
+     *   `<00480065006C006C006F>` — encoded "Hello"
+     */
+    public function textHexString(string $fontName, float $sizePt, float $xPt, float $yPt, string $hexString): self
+    {
+        $this->body .= 'BT'."\n";
+        $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
+        $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
+        $this->body .= sprintf("%s Tj\n", $hexString);
+        $this->body .= 'ET'."\n";
+
+        return $this;
+    }
+
+    /**
      * Filled rectangle с цветом RGB (0..1).
      */
     public function fillRectangle(
