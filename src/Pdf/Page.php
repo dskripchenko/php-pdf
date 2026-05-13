@@ -72,14 +72,23 @@ final class Page
     }
 
     /**
-     * Show text using embedded TTF font (via PdfFont).
-     * Поддерживает Unicode (Cyrillic, Greek, и т.д.).
+     * Show text using embedded TTF font (via PdfFont). Поддерживает Unicode
+     * (Cyrillic, Greek, и т.д.).
+     *
+     * Auto-применяет kerning если font имеет GPOS table (Liberation,
+     * Noto и большинство modern font'ов). Без kerning'а — fall back на
+     * простой Tj operator.
      */
     public function showEmbeddedText(string $text, float $x, float $y, PdfFont $font, float $sizePt): self
     {
         $resourceName = $this->registerEmbeddedFont($font);
-        $hex = $font->encodeText($text);
-        $this->stream->textHexString($resourceName, $sizePt, $x, $y, $hex);
+        $tjOps = $font->encodeTextTjArray($text);
+        if (count($tjOps) === 1) {
+            // Нет inter-glyph adjustment'ов — compact Tj.
+            $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0]);
+        } else {
+            $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps);
+        }
 
         return $this;
     }

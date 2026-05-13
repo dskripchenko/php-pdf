@@ -57,6 +57,40 @@ final class ContentStream
     }
 
     /**
+     * Текст с kerning через PDF `TJ` operator (показывает glyphs с
+     * inter-glyph position adjustments).
+     *
+     * $tjOps — alternating list<string|int>:
+     *  - string '<NNNN...>' — hex glyph-ID run (shown через TJ)
+     *  - int N — position adjustment в 1000/em units (positive = move
+     *    next glyph LEFT, less space между chars; e.g. kerning AV)
+     *
+     * Example для kerning'нутого «AVA»:
+     *   $cs->textTjArray('F1', 12, 72, 720, ['<0036>', 74, '<00570036>']);
+     *   // → BT /F1 12 Tf 72 720 Td [<0036> 74 <00570036>] TJ ET
+     *
+     * @param  list<string|int>  $tjOps
+     */
+    public function textTjArray(string $fontName, float $sizePt, float $xPt, float $yPt, array $tjOps): self
+    {
+        $this->body .= 'BT'."\n";
+        $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
+        $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
+        $this->body .= '[';
+        foreach ($tjOps as $op) {
+            if (is_int($op)) {
+                $this->body .= ' '.$op.' ';
+            } else {
+                $this->body .= $op; // already-wrapped <hex>
+            }
+        }
+        $this->body .= "] TJ\n";
+        $this->body .= 'ET'."\n";
+
+        return $this;
+    }
+
+    /**
      * Filled rectangle с цветом RGB (0..1).
      */
     public function fillRectangle(

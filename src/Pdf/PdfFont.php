@@ -109,21 +109,26 @@ final class PdfFont
     }
 
     /**
-     * Кодирует UTF-8 текст в hex glyph-ID string для использования с
-     * Tj/TJ операторами при Identity-H encoding.
-     *
-     * Также накапливает usedGlyphs для построения ToUnicode CMap.
-     * Поэтому encodeText() должен вызываться ДО registerWith() — иначе
-     * ToUnicode CMap получится пустой.
+     * Внутренний raw-access на TtfFile (для TextMeasurer + LineBreaker,
+     * которые сами не должны парсить TTF).
      */
-    public function encodeText(string $utf8): string
+    public function ttf(): \Dskripchenko\PhpPdf\Font\Ttf\TtfFile
     {
-        $hex = '';
+        return $this->ttf;
+    }
+
+    /**
+     * Iterate UTF-8 bytes → sequence of (codepoint, glyphId) pairs.
+     * Side-effect: записывает в usedGlyphs (для последующего ToUnicode
+     * CMap build'а).
+     *
+     * @return iterable<array{cp: int, gid: int}>
+     */
+    public function utf8ToGlyphs(string $utf8): iterable
+    {
         $i = 0;
         $len = strlen($utf8);
         while ($i < $len) {
-            // Декод UTF-8 codepoint вручную (без mb_str_split — поддерживаем
-            // emoji/surrogate edge-cases на минимуме).
             $b1 = ord($utf8[$i]);
             if ($b1 < 0x80) {
                 $cp = $b1;
@@ -137,21 +142,104 @@ final class PdfFont
                     | (ord($utf8[$i + 2]) & 0x3F);
                 $i += 3;
             } else {
-                // 4-byte UTF-8 (supplementary plane); для POC просто кодируем
-                // как-есть с предположением что font не покрывает.
                 $cp = (($b1 & 0x07) << 18)
                     | ((ord($utf8[$i + 1]) & 0x3F) << 12)
                     | ((ord($utf8[$i + 2]) & 0x3F) << 6)
                     | (ord($utf8[$i + 3]) & 0x3F);
                 $i += 4;
             }
-
             $gid = $this->ttf->glyphIdForChar($cp);
             $this->usedGlyphs[$gid] = $cp;
+            yield ['cp' => $cp, 'gid' => $gid];
+        }
+    }
+
+    /**
+     * Kerning adjustment между (left, right) glyph'ами в PDF text-space units
+     * (1000/em), уже sign-flipped для готового использования в TJ operator
+     * и width-measurement subtraction.
+     *
+     * Convention:
+     *  - Возвращает POSITIVE для tighter pairs (less space, AV например)
+     *  - Возвращает NEGATIVE для loose pairs (more space — редко)
+     *  - 0 если pair не имеет kerning'а
+     *
+     * Для измерения width: total_pdf_units -= kerningPdfUnits(prev, cur).
+     * Для TJ operator: между runs insert int value = +kerningPdfUnits(prev, cur).
+     */
+    public function kerningPdfUnits(int $leftGid, int $rightGid): int
+    {
+        $kt = $this->ttf->kerningTable();
+        if ($kt === null) {
+            return 0;
+        }
+        $xAdvanceFu = $kt->lookup($leftGid, $rightGid);
+        if ($xAdvanceFu === 0) {
+            return 0;
+        }
+        // GPOS xAdvance negative → reduce advance → tighter pair.
+        // PDF TJ value positive → subtract from position → next glyph left.
+        // Convert: PDF_value = -GPOS_value * 1000/em.
+        return (int) round(-$xAdvanceFu * 1000 / $this->ttf->unitsPerEm());
+    }
+
+    /**
+     * Кодирует UTF-8 текст в hex glyph-ID string для simple Tj operator
+     * при Identity-H encoding. БЕЗ kerning'а — для kerning-aware версии
+     * см. encodeTextTjArray().
+     *
+     * Side-effect: usedGlyphs накапливается для ToUnicode CMap.
+     */
+    public function encodeText(string $utf8): string
+    {
+        $hex = '';
+        foreach ($this->utf8ToGlyphs($utf8) as ['gid' => $gid]) {
             $hex .= sprintf('%04X', $gid);
         }
 
         return '<'.$hex.'>';
+    }
+
+    /**
+     * Kerning-aware encoding для TJ operator. Возвращает array состоящий
+     * из чередующихся hex-string'ов и int adjustment'ов.
+     *
+     * Example «AVA»:
+     *   ['<0036>', 74, '<00570036>']
+     *   ──────  ──  ──────────
+     *   A run   AV  V+A run
+     *           kern
+     *
+     * Если у font'а нет kerning table'а ИЛИ ни одной из pair-ов нет
+     * kerning'а — array содержит один single hex-string (можно тогда
+     * использовать обычный Tj вместо TJ — but caller сам решает).
+     *
+     * Side-effect: usedGlyphs накапливается.
+     *
+     * @return list<string|int>
+     */
+    public function encodeTextTjArray(string $utf8): array
+    {
+        $result = [];
+        $currentRun = '';
+        $prevGid = null;
+        foreach ($this->utf8ToGlyphs($utf8) as ['gid' => $gid]) {
+            if ($prevGid !== null) {
+                $kern = $this->kerningPdfUnits($prevGid, $gid);
+                if ($kern !== 0) {
+                    $result[] = '<'.$currentRun.'>';
+                    $result[] = $kern;
+                    $currentRun = '';
+                }
+            }
+            $currentRun .= sprintf('%04X', $gid);
+            $prevGid = $gid;
+        }
+        if ($currentRun !== '') {
+            $result[] = '<'.$currentRun.'>';
+        }
+
+        return $result;
     }
 
     /**
@@ -161,6 +249,17 @@ final class PdfFont
     public function widthOfCharPdfUnits(int $unicodeCodepoint): int
     {
         $gid = $this->ttf->glyphIdForChar($unicodeCodepoint);
+        $fontUnits = $this->ttf->advanceWidth($gid);
+
+        return (int) round($fontUnits * 1000 / $this->ttf->unitsPerEm());
+    }
+
+    /**
+     * Width одного glyph'а в PDF text-space units (1000/em).
+     * Аналог widthOfCharPdfUnits, но принимает уже-разрешённый glyph ID.
+     */
+    public function widthOfGlyphPdfUnits(int $gid): int
+    {
         $fontUnits = $this->ttf->advanceWidth($gid);
 
         return (int) round($fontUnits * 1000 / $this->ttf->unitsPerEm());

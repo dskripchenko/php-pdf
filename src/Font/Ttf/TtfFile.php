@@ -133,6 +133,32 @@ final class TtfFile
     }
 
     /**
+     * Lazy-parsed kerning table из GPOS (cached). Null если GPOS отсутствует
+     * или не содержит pair-adjustment lookup'ов.
+     */
+    private ?KerningTable $kerningTable = null;
+
+    private bool $kerningParsed = false;
+
+    public function kerningTable(): ?KerningTable
+    {
+        if ($this->kerningParsed) {
+            return $this->kerningTable;
+        }
+        $this->kerningParsed = true;
+        $gposInfo = $this->tableInfo('GPOS');
+        if ($gposInfo === null) {
+            return null;
+        }
+        $table = (new GposReader)->read($this->bytes, $gposInfo);
+        if (! $table->isEmpty()) {
+            $this->kerningTable = $table;
+        }
+
+        return $this->kerningTable;
+    }
+
+    /**
      * Резолв Unicode codepoint → glyph ID. Возвращает 0 (.notdef) если char
      * не покрывается font'ом.
      */
