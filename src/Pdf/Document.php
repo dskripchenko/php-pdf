@@ -565,12 +565,20 @@ final class Document
                 $resourcesExtGState .= sprintf(' /%s %d 0 R', $name, $gsId);
             }
 
-            // Phase 82: Pattern objects (shading patterns) — emit Function +
-            // Shading + Pattern objects per pattern, add /Pattern entry в
-            // Page /Resources.
+            // Phase 82+90: Pattern objects — emit Function (Type 2 либо
+            // Type 3 stitching с sub-functions) + Shading + Pattern.
             $resourcesPattern = '';
             foreach ($page->patterns() as $name => $pattern) {
-                $funcId = $writer->addObject($pattern->shading->function->toDictBody());
+                $fn = $pattern->shading->function;
+                if ($fn instanceof \Dskripchenko\PhpPdf\Pdf\PdfStitchingFunction) {
+                    $subIds = [];
+                    foreach ($fn->subFunctions as $sub) {
+                        $subIds[] = $writer->addObject($sub->toDictBody());
+                    }
+                    $funcId = $writer->addObject($fn->toDictBody($subIds));
+                } else {
+                    $funcId = $writer->addObject($fn->toDictBody());
+                }
                 $shadingId = $writer->addObject($pattern->shading->toDictBody($funcId));
                 $patternId = $writer->addObject($pattern->toDictBody($shadingId));
                 $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $patternId);

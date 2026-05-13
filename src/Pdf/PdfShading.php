@@ -26,7 +26,7 @@ final readonly class PdfShading
     public function __construct(
         public int $shadingType,
         public array $coords,
-        public PdfFunction $function,
+        public PdfFunction|PdfStitchingFunction $function,
     ) {
         if ($shadingType !== self::TYPE_AXIAL && $shadingType !== self::TYPE_RADIAL) {
             throw new \InvalidArgumentException('PdfShading supports type 2 (axial) или 3 (radial)');

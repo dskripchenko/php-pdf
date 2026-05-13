@@ -891,19 +891,39 @@ final class SvgRenderer
         if (count($stops) < 2) {
             return null;
         }
-        // Map gradient (0..1) coordinates к rect bounds в PDF space.
         $x1 = $rectX + $gradient['x1'] * $rectW;
-        $y1 = $rectY + $rectH - $gradient['y1'] * $rectH; // flip y
+        $y1 = $rectY + $rectH - $gradient['y1'] * $rectH;
         $x2 = $rectX + $gradient['x2'] * $rectW;
         $y2 = $rectY + $rectH - $gradient['y2'] * $rectH;
 
-        // Use first и last stops для 2-stop linear (multi-stop deferred).
-        $first = $stops[0];
-        $last = $stops[count($stops) - 1];
-        $function = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
-            c0: $first['color'],
-            c1: $last['color'],
-        );
+        // Phase 82: 2 stops — single Type 2 function.
+        // Phase 90: >2 stops — Type 3 stitching of multiple Type 2 sub-functions.
+        if (count($stops) === 2) {
+            $function = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
+                c0: $stops[0]['color'],
+                c1: $stops[1]['color'],
+            );
+        } else {
+            $subFunctions = [];
+            $bounds = [];
+            $encode = [];
+            for ($i = 0; $i < count($stops) - 1; $i++) {
+                $subFunctions[] = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
+                    c0: $stops[$i]['color'],
+                    c1: $stops[$i + 1]['color'],
+                );
+                if ($i < count($stops) - 2) {
+                    $bounds[] = $stops[$i + 1]['offset'];
+                }
+                $encode[] = 0;
+                $encode[] = 1;
+            }
+            $function = new \Dskripchenko\PhpPdf\Pdf\PdfStitchingFunction(
+                subFunctions: $subFunctions,
+                bounds: $bounds,
+                encode: $encode,
+            );
+        }
         $shading = new \Dskripchenko\PhpPdf\Pdf\PdfShading(
             shadingType: \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL,
             coords: [$x1, $y1, $x2, $y2],
