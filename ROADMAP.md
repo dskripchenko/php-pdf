@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.21 — 20 фаз закрыты (431 + 193 printable = 624 теста).
+**Текущий статус:** v0.22 — 21 фаза закрыта (435 + 193 printable = 628 тестов).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -106,11 +106,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   AST Document.metadata array→propagates. PDF date format D:YYYYMMDDHHmmSS+TZ.
 - Tests: 5 в MetadataTest.
 
-**Phase 21: line-height + letter-spacing**
-- `line-height` сейчас только из ParagraphStyle.lineHeightMult (DSL).
-- Нужно: CSS-derived `line-height: 1.5` или `line-height: 18pt` →
-  Engine применяет.
-- `letter-spacing` (CSS tracking) → PDF `Tc` operator (character spacing).
+**Phase 21: line-height + letter-spacing** ✅ DONE
+- Done (067c17c + 280aaba): RunStyle.letterSpacingPt → Tc operator
+  через ContentStream/Page/Engine. CSS line-height: multiplier (1.5),
+  percent (150%), absolute (18pt → /11 approximation) → ParagraphStyle.
+  lineHeightMult. CSS letter-spacing → RunStyle.letterSpacingPt.
+- Inline `<span style="letter-spacing">` deferred к v1.1.
+- Tests: 4 в LetterSpacingTest.
 
 **Phase 22: Hyphenation + word-break**
 - Длинные слова без spaces сейчас overflow за right margin (greedy
@@ -222,8 +224,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 18 | border-radius (rounded corners) | 4 + 1 | 4f32049 + dcf41a2 (printable) |
 | 19 | border-spacing (priority deferred к v1.1) | 3 | 9c76b42 + d5fd4cc (printable) |
 | 20 | PDF metadata (/Info dict) | 5 | c6efcb7 |
+| 21 | line-height + letter-spacing | 4 | 067c17c + 280aaba (printable) |
 
-**Итого:** 431 тест в php-pdf, 193 теста в printable, 8 в Liberation package.
+**Итого:** 435 тестов в php-pdf, 193 теста в printable, 8 в Liberation package.
 
 ---
 
