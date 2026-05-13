@@ -184,8 +184,9 @@ final class Writer
     }
 
     /**
-     * Phase 41: Find stream blocks в object body и encrypt их contents
-     * через per-object RC4 key.
+     * Phase 41+77: encrypt streams + strings в object body.
+     * Streams: `stream\n<bytes>\nendstream` → RC4/AES per-object.
+     * Strings: literal `(...)` (Phase 77) → encrypted, then re-encoded.
      */
     private function encryptStreamsInBody(string $body, int $objId): string
     {
@@ -193,6 +194,11 @@ final class Writer
             return $body;
         }
         $enc = $this->encryption;
+
+        // Phase 77: encrypt literal strings первый (before streams чтобы
+        // не повредить regex с binary).
+        $body = $this->encryptLiteralStrings($body, $objId);
+
         // Encrypt stream content: `stream\n<bytes>\nendstream`.
         return preg_replace_callback(
             '@stream\n(.*?)\nendstream@s',
@@ -203,5 +209,65 @@ final class Writer
             },
             $body,
         ) ?? $body;
+    }
+
+    /**
+     * Phase 77: Encrypt literal PDF strings (...) → output as hex form
+     * <ENCRYPTED_HEX>. Walks body manually для correct paren-balance
+     * (literal strings allow nested () pairs balanced).
+     */
+    private function encryptLiteralStrings(string $body, int $objId): string
+    {
+        if ($this->encryption === null) {
+            return $body;
+        }
+        $enc = $this->encryption;
+        $out = '';
+        $len = strlen($body);
+        $i = 0;
+        while ($i < $len) {
+            $ch = $body[$i];
+            if ($ch === '(') {
+                // Find matching closing paren respecting nested + escaped.
+                $depth = 1;
+                $j = $i + 1;
+                $strStart = $j;
+                while ($j < $len && $depth > 0) {
+                    $cj = $body[$j];
+                    if ($cj === '\\' && $j + 1 < $len) {
+                        $j += 2;
+
+                        continue;
+                    }
+                    if ($cj === '(') {
+                        $depth++;
+                    } elseif ($cj === ')') {
+                        $depth--;
+                        if ($depth === 0) {
+                            break;
+                        }
+                    }
+                    $j++;
+                }
+                if ($depth !== 0) {
+                    // Malformed — keep as-is.
+                    $out .= substr($body, $i, $j - $i + 1);
+                    $i = $j + 1;
+
+                    continue;
+                }
+                $raw = substr($body, $strStart, $j - $strStart);
+                // Unescape PDF literal string escapes: \\, \(, \).
+                $decoded = strtr($raw, ['\\\\' => '\\', '\\(' => '(', '\\)' => ')']);
+                $encrypted = $enc->encryptObject($decoded, $objId);
+                $out .= '<'.bin2hex($encrypted).'>';
+                $i = $j + 1; // skip closing )
+            } else {
+                $out .= $ch;
+                $i++;
+            }
+        }
+
+        return $out;
     }
 }
