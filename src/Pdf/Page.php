@@ -51,6 +51,57 @@ final class Page
 
     private int $patternCounter = 0;
 
+    /** Phase 85: Page transition (slideshow effect) — emitted as /Trans dict. */
+    private ?array $transition = null;
+
+    /** Phase 85: Auto-advance duration в seconds (display time). */
+    private ?float $autoAdvanceDuration = null;
+
+    /**
+     * Phase 85: Set page transition effect.
+     *
+     * @param  string  $style  'Split'|'Blinds'|'Box'|'Wipe'|'Dissolve'|'Glitter'|'Fly'|'Push'|'Cover'|'Uncover'|'Fade'|'R'
+     * @param  float  $duration  transition duration в seconds (default 1).
+     * @param  string|null  $dimension  H|V (для Split/Blinds).
+     * @param  int|null  $direction  0|90|180|270|315 (для directional transitions).
+     */
+    public function setTransition(string $style, float $duration = 1.0, ?string $dimension = null, ?int $direction = null): self
+    {
+        $this->transition = [
+            'style' => $style,
+            'duration' => $duration,
+            'dimension' => $dimension,
+            'direction' => $direction,
+        ];
+
+        return $this;
+    }
+
+    public function setAutoAdvance(float $seconds): self
+    {
+        $this->autoAdvanceDuration = $seconds;
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     *
+     * @internal
+     */
+    public function transition(): ?array
+    {
+        return $this->transition;
+    }
+
+    /**
+     * @internal
+     */
+    public function autoAdvanceDuration(): ?float
+    {
+        return $this->autoAdvanceDuration;
+    }
+
     public function nextMcid(): int
     {
         return $this->mcidCounter++;

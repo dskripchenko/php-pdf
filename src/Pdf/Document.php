@@ -607,15 +607,39 @@ final class Document
                 ? ''
                 : ' /Annots ['.implode(' ', array_map(fn ($id) => "$id 0 R", $annotIds)).']';
 
+            // Phase 85: page transitions + auto-advance.
+            $transRef = '';
+            $trans = $page->transition();
+            if ($trans !== null) {
+                $extras = '';
+                if ($trans['dimension'] !== null) {
+                    $extras .= ' /Dm /'.$trans['dimension'];
+                }
+                if ($trans['direction'] !== null) {
+                    $extras .= ' /Di '.$trans['direction'];
+                }
+                $transRef = sprintf(
+                    ' /Trans << /Type /Trans /S /%s /D %s%s >>',
+                    $trans['style'], $this->fmt($trans['duration']), $extras,
+                );
+            }
+            $durRef = '';
+            $dur = $page->autoAdvanceDuration();
+            if ($dur !== null) {
+                $durRef = ' /Dur '.$this->fmt($dur);
+            }
+
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
-                .'/Contents %d 0 R /Resources %s%s >>',
+                .'/Contents %d 0 R /Resources %s%s%s%s >>',
                 $pagesId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
                 $contentId,
                 $resourcesDict,
                 $annotsRef,
+                $transRef,
+                $durRef,
             ));
         }
 
