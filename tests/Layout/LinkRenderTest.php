@@ -38,7 +38,7 @@ final class LinkRenderTest extends TestCase
                 new Run(' for details.'),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertStringContainsString('/Subtype /Link', $bytes);
         self::assertStringContainsString('/URI (https://example.com)', $bytes);
@@ -55,7 +55,7 @@ final class LinkRenderTest extends TestCase
                 Hyperlink::internal('chapter1', [new Run('See chapter 1')]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertStringContainsString('/Subtype /Link', $bytes);
         self::assertStringContainsString('/Dest (chapter1)', $bytes);
@@ -71,7 +71,7 @@ final class LinkRenderTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Bookmark('top', [new Run('Top')])]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // /XYZ <x> <y> 0 — destination format.
         self::assertMatchesRegularExpression('@\[\d+ 0 R /XYZ [\d.]+ [\d.]+ 0\]@', $bytes);
     }
@@ -88,7 +88,7 @@ final class LinkRenderTest extends TestCase
                 Hyperlink::external('https://c.test', [new Run('C')]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertSame(3, substr_count($bytes, '/URI ('));
         self::assertStringContainsString('https://a.test', $bytes);
@@ -104,7 +104,7 @@ final class LinkRenderTest extends TestCase
                 Hyperlink::external('https://x.test', [new Run('click here')]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertStringContainsString('/Annots [', $bytes);
         self::assertStringContainsString('/Subtype /Link', $bytes);
@@ -122,7 +122,7 @@ final class LinkRenderTest extends TestCase
                 new Run('after.'),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $tmp = tempnam(sys_get_temp_dir(), 'bm-');
         file_put_contents($tmp, $bytes);
@@ -146,7 +146,7 @@ final class LinkRenderTest extends TestCase
             new Paragraph([new Bookmark('alpha')]),
             new Paragraph([new Bookmark('mu')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $alphaPos = strpos($bytes, '(alpha)');
         $muPos = strpos($bytes, '(mu)');

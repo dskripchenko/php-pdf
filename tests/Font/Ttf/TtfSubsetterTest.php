@@ -130,8 +130,9 @@ final class TtfSubsetterTest extends TestCase
     public function full_embed_mode_keeps_original_size(): void
     {
         // subset=false должен пропустить subsetter и embed весь TTF.
+        // Phase 14: используем compressStreams=false чтобы measure raw size.
         $font = new \Dskripchenko\PhpPdf\Pdf\PdfFont($this->ttf, subset: false);
-        $doc = \Dskripchenko\PhpPdf\Pdf\Document::new();
+        $doc = \Dskripchenko\PhpPdf\Pdf\Document::new(compressStreams: false);
         $doc->addPage()->showEmbeddedText('Hi', 72, 720, $font, 14);
 
         $bytes = $doc->toBytes();

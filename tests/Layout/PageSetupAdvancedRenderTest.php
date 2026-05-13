@@ -38,7 +38,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
             body: [new Paragraph([new Run('Tiny page')])],
             pageSetup: new PageSetup(customDimensionsPt: [240, 320]),
         ));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertStringContainsString('/MediaBox [0 0 240 320]', $bytes);
     }
 
@@ -53,7 +53,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
             ],
             pageSetup: new PageSetup(firstPageNumber: 47),
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $tmp = tempnam(sys_get_temp_dir(), 'pn-');
         file_put_contents($tmp, $bytes);
@@ -78,7 +78,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
             ],
             pageSetup: new PageSetup(firstPageNumber: 100),
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'np-');
         file_put_contents($tmp, $bytes);
         try {
@@ -102,7 +102,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
             headerBlocks: [new Paragraph([new Run('REGULAR_HEADER')])],
             firstPageHeaderBlocks: [new Paragraph([new Run('COVER_HEADER')])],
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'fh-');
         file_put_contents($tmp, $bytes);
         try {
@@ -129,7 +129,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
             headerBlocks: [new Paragraph([new Run('REGULAR_HEADER')])],
             firstPageHeaderBlocks: [],  // empty list = blank header.
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'fh-');
         file_put_contents($tmp, $bytes);
         try {
@@ -157,7 +157,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
             ],
             pageSetup: $setup,
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         // Sanity: pdf still валиден.
         self::assertStringStartsWith('%PDF', $bytes);

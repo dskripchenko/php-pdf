@@ -222,8 +222,8 @@ final class DocumentBuilderTest extends TestCase
     {
         $fontPath = __DIR__.'/../../.cache/fonts/liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf';
         $engine = is_readable($fontPath)
-            ? new Engine(defaultFont: new PdfFont(TtfFile::fromFile($fontPath)))
-            : new Engine;
+            ? new Engine(compressStreams: false, defaultFont: new PdfFont(TtfFile::fromFile($fontPath)))
+            : new Engine(compressStreams: false);
 
         $bytes = DocumentBuilder::new()
             ->heading(1, 'Invoice #42')

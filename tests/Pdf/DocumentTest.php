@@ -16,7 +16,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function empty_document_emits_blank_page(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $pdf = $doc->toBytes();
         self::assertStringStartsWith('%PDF-1.7', $pdf);
         // PDF спека требует ≥ 1 page.
@@ -26,7 +26,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function single_text_page(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $page = $doc->addPage();
         $page->showText('Hello', 72, 720, StandardFont::TimesRoman, 12);
 
@@ -38,7 +38,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function multi_page_with_unique_count(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage();
         $doc->addPage();
         $doc->addPage();
@@ -51,7 +51,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function shared_standard_font_registered_once(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage()->showText('A', 72, 720, StandardFont::Helvetica, 12);
         $doc->addPage()->showText('B', 72, 720, StandardFont::Helvetica, 12);
         $doc->addPage()->showText('C', 72, 720, StandardFont::Helvetica, 12);
@@ -64,7 +64,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function different_fonts_get_separate_objects(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $page = $doc->addPage();
         $page->showText('A', 72, 720, StandardFont::TimesRoman, 12);
         $page->showText('B', 72, 700, StandardFont::Helvetica, 12);
@@ -77,7 +77,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function mixed_orientation_pages_have_different_mediabox(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage(PaperSize::A4, Orientation::Portrait);
         $doc->addPage(PaperSize::A4, Orientation::Landscape);
 
@@ -91,7 +91,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function fill_and_stroke_rectangles(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage()->fillRect(72, 700, 100, 50, 1, 0, 0)->strokeRect(72, 700, 100, 50, 1);
 
         $pdf = $doc->toBytes();
@@ -104,7 +104,7 @@ final class DocumentTest extends TestCase
     #[Test]
     public function to_file_writes_pdf(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage()->showText('Test', 72, 720, StandardFont::TimesRoman, 12);
 
         $tmp = tempnam(sys_get_temp_dir(), 'doc-test-');
@@ -121,7 +121,7 @@ final class DocumentTest extends TestCase
         if (! $this->commandExists('pdftotext')) {
             self::markTestSkipped('pdftotext not installed.');
         }
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $p = $doc->addPage();
         $p->showText('Lorem ipsum dolor', 72, 720, StandardFont::TimesRoman, 12);
         $p->showText('sit amet consectetur', 72, 700, StandardFont::Helvetica, 11);

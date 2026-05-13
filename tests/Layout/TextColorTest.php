@@ -33,7 +33,7 @@ final class TextColorTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('red text', (new RunStyle)->withColor('cc0000'))]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         // 0xcc/255 ≈ 0.8 → должно появиться 'q' + '0.8 0 0 rg' перед BT.
         self::assertMatchesRegularExpression('@q\n0\.8\s+0\s+0\s+rg\nBT@', $bytes);
@@ -45,7 +45,7 @@ final class TextColorTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('blue text', (new RunStyle)->withColor('0000ff'))]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertMatchesRegularExpression('@ET\nQ\n@', $bytes);
     }
 
@@ -58,8 +58,8 @@ final class TextColorTest extends TestCase
         $docColored = new Document(new Section([
             new Paragraph([new Run('color', (new RunStyle)->withColor('ff0000'))]),
         ]));
-        $bytesPlain = $docPlain->toBytes(new Engine(defaultFont: $this->font()));
-        $bytesColored = $docColored->toBytes(new Engine(defaultFont: $this->font()));
+        $bytesPlain = $docPlain->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+        $bytesColored = $docColored->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $qCountPlain = substr_count($bytesPlain, "q\n");
         $qCountColored = substr_count($bytesColored, "q\n");
@@ -78,7 +78,7 @@ final class TextColorTest extends TestCase
                 new Run('blue', (new RunStyle)->withColor('0000ff')),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 3 colored words × 1 rg each = at least 3 rg operators.
         self::assertGreaterThanOrEqual(3, substr_count($bytes, ' rg'));
         // Red rg: '1 0 0 rg'
@@ -99,7 +99,7 @@ final class TextColorTest extends TestCase
                 new Run(' end.'),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $tmp = tempnam(sys_get_temp_dir(), 'tc-');
         file_put_contents($tmp, $bytes);
@@ -120,7 +120,7 @@ final class TextColorTest extends TestCase
                 new Run('important', (new RunStyle)->withBold()->withColor('cc0000')),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertStringContainsString(' rg', $bytes);
     }
 
@@ -133,7 +133,7 @@ final class TextColorTest extends TestCase
                 defaultRunStyle: (new RunStyle)->withColor('884400'),
             ),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 0x88/255 ≈ 0.5333, 0x44/255 ≈ 0.2666
         self::assertMatchesRegularExpression('@0\.53\d+\s+0\.26\d+\s+0\s+rg@', $bytes);
     }

@@ -49,7 +49,7 @@ final class HeaderFooterTest extends TestCase
             body: [new Paragraph([new Run('Body content here')])],
             headerBlocks: [new Paragraph([new Run('HEADER MARKER')])],
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('HEADER MARKER', $text);
     }
@@ -61,7 +61,7 @@ final class HeaderFooterTest extends TestCase
             body: [new Paragraph([new Run('Body')])],
             footerBlocks: [new Paragraph([new Run('FOOTER MARKER')])],
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('FOOTER MARKER', $text);
     }
@@ -77,7 +77,7 @@ final class HeaderFooterTest extends TestCase
             body: $body,
             headerBlocks: [new Paragraph([new Run('TOP_OF_PAGE')])],
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount);
@@ -108,7 +108,7 @@ final class HeaderFooterTest extends TestCase
                 ),
             ],
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $page1 = $this->pdftotext($bytes, 1);
         $page2 = $this->pdftotext($bytes, 2);
@@ -120,7 +120,7 @@ final class HeaderFooterTest extends TestCase
     public function no_header_no_footer_works_without_them(): void
     {
         $doc = new Document(new Section([new Paragraph([new Run('Plain body')])]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('Plain body', $text);
     }

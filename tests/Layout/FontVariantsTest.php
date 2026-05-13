@@ -103,7 +103,7 @@ final class FontVariantsTest extends TestCase
                 new Run('would-be-bold', (new RunStyle)->withBold()),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $regular));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $regular));
 
         // Only one Type0 font subset embedded.
         $subType0Count = substr_count($bytes, '/Subtype /Type0');

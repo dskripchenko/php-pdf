@@ -59,8 +59,8 @@ final class BorderCollapseDoubleTest extends TestCase
         $docSep = new Document(new Section([$this->table(false)]));
         $docCol = new Document(new Section([$this->table(true)]));
 
-        $bytesSep = $docSep->toBytes(new Engine(defaultFont: $this->font()));
-        $bytesCol = $docCol->toBytes(new Engine(defaultFont: $this->font()));
+        $bytesSep = $docSep->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+        $bytesCol = $docCol->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $sCountSep = substr_count($bytesSep, "S\n");
         $sCountCol = substr_count($bytesCol, "S\n");
@@ -87,7 +87,7 @@ final class BorderCollapseDoubleTest extends TestCase
                 ]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         // Single border: 1 cell × 4 sides = 4 strokes.
         // Double:        1 cell × 4 sides × 2 lines per side = 8 strokes.
@@ -111,7 +111,7 @@ final class BorderCollapseDoubleTest extends TestCase
                 )]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertStringContainsString("\n2 w", $bytes);
     }
 
@@ -127,7 +127,7 @@ final class BorderCollapseDoubleTest extends TestCase
                 )]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 1 cell × 4 sides × 1 line = 4 strokes.
         self::assertSame(4, substr_count($bytes, "S\n"));
         self::assertStringContainsString("\n1 w", $bytes);
@@ -147,7 +147,7 @@ final class BorderCollapseDoubleTest extends TestCase
                 ),
             ),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertSame(4, substr_count($bytes, "S\n"));
     }
 }

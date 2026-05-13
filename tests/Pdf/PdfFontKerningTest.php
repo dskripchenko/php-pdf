@@ -98,7 +98,7 @@ final class PdfFontKerningTest extends TestCase
     #[Test]
     public function pdf_output_uses_tj_array_for_kerned_text(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage()->showEmbeddedText('AV', 72, 720, $this->font, 24);
         $pdf = $doc->toBytes();
         // TJ operator (uppercase) — для kerning. Tj (lowercase) — для simple.
@@ -108,7 +108,7 @@ final class PdfFontKerningTest extends TestCase
     #[Test]
     public function pdf_output_uses_simple_tj_for_unkerned_text(): void
     {
-        $doc = Document::new();
+        $doc = Document::new(compressStreams: false);
         $doc->addPage()->showEmbeddedText('B', 72, 720, $this->font, 24);
         $pdf = $doc->toBytes();
         // Только Tj (одна буква — точно нет kerning'а).

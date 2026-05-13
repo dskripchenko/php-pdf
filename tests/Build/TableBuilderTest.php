@@ -184,7 +184,7 @@ final class TableBuilderTest extends TestCase
                 ->row(fn(RowBuilder $r) => $r->cells(['A-100', 'Widget', '42']))
                 ->row(fn(RowBuilder $r) => $r->cells(['B-200', 'Gadget', '5']))
             )
-            ->toBytes();
+            ->toBytes(new \Dskripchenko\PhpPdf\Layout\Engine(compressStreams: false));
 
         self::assertStringStartsWith('%PDF', $bytes);
         self::assertStringContainsString(' re', $bytes);   // rect path

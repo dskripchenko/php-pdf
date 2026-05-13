@@ -38,7 +38,7 @@ final class EngineTest extends TestCase
     public function empty_document_renders_blank_page(): void
     {
         $doc = new Document(new Section);
-        $pdf = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $pdf = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         self::assertStringStartsWith('%PDF', $pdf);
         self::assertStringContainsString('/Count 1', $pdf);
@@ -50,7 +50,7 @@ final class EngineTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('Hello, world!')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         $tmp = tempnam(sys_get_temp_dir(), 'engine-');
         file_put_contents($tmp, $bytes);
@@ -69,7 +69,7 @@ final class EngineTest extends TestCase
             new Paragraph(children: [new Run('H1')], headingLevel: 1),
             new Paragraph([new Run('body')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         // H1 = 24pt — должно быть "24 Tf" в content stream.
         // Body = 11pt default.
@@ -85,7 +85,7 @@ final class EngineTest extends TestCase
             new PageBreak,
             new Paragraph([new Run('Page 2')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
         self::assertStringContainsString('/Count 2', $bytes);
     }
 
@@ -97,7 +97,7 @@ final class EngineTest extends TestCase
             new HorizontalRule,
             new Paragraph([new Run('Below')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
         // strokeRectangle → "RG" (stroke color) + "S\n" (stroke).
         self::assertStringContainsString(' RG', $bytes);
         self::assertStringContainsString("S\n", $bytes);
@@ -110,7 +110,7 @@ final class EngineTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run($longText)]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         // Многие "Tj" operators (по одному на line).
         $tjCount = substr_count($bytes, ' Tj');
@@ -128,7 +128,7 @@ final class EngineTest extends TestCase
             $paragraphs[] = new Paragraph([new Run("Paragraph $i with some text")]);
         }
         $doc = new Document(new Section($paragraphs));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         // Должно быть несколько page'ей.
         $pageCount = substr_count($bytes, '/Type /Page ');
@@ -144,7 +144,7 @@ final class EngineTest extends TestCase
                 style: new ParagraphStyle(alignment: Alignment::Center),
             ),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
         // Just ensures text shows. X-coord centering — visual check (Phase L test corpus).
         $tmp = tempnam(sys_get_temp_dir(), 'engine-');
         file_put_contents($tmp, $bytes);
@@ -163,7 +163,7 @@ final class EngineTest extends TestCase
             body: [new Paragraph([new Run('US Letter doc')])],
             pageSetup: new PageSetup(paperSize: \Dskripchenko\PhpPdf\Style\PaperSize::Letter),
         ));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
         // Letter = 612 × 792 pt.
         self::assertStringContainsString('/MediaBox [0 0 612 792]', $bytes);
     }
@@ -175,7 +175,7 @@ final class EngineTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('Latin only with base-14')]),
         ]));
-        $bytes = $doc->toBytes(new Engine);  // нет defaultFont
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));  // нет defaultFont
         self::assertStringContainsString('/BaseFont /Helvetica', $bytes);
     }
 
@@ -190,7 +190,7 @@ final class EngineTest extends TestCase
                 new Run('italic', (new RunStyle)->withItalic()),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         $tmp = tempnam(sys_get_temp_dir(), 'engine-');
         file_put_contents($tmp, $bytes);
@@ -210,7 +210,7 @@ final class EngineTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('Привет, мир!')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
         $tmp = tempnam(sys_get_temp_dir(), 'engine-');
         file_put_contents($tmp, $bytes);
@@ -236,7 +236,7 @@ final class EngineTest extends TestCase
                 style: new ParagraphStyle(spaceBeforePt: 24),
             ),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
         self::assertStringStartsWith('%PDF', $bytes);
     }
 }

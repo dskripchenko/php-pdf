@@ -26,7 +26,7 @@ final class ImageRenderTest extends TestCase
         $doc = new Document(new Section([
             Image::fromPath($this->jpegPath, widthPt: 100),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         self::assertStringStartsWith('%PDF', $bytes);
         self::assertStringContainsString('/Subtype /Image', $bytes);
@@ -42,7 +42,7 @@ final class ImageRenderTest extends TestCase
         $doc = new Document(new Section([
             Image::fromPath($this->pngPath, widthPt: 60),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         self::assertStringContainsString('/Subtype /Image', $bytes);
         self::assertStringContainsString('/Filter /FlateDecode', $bytes);
@@ -54,7 +54,7 @@ final class ImageRenderTest extends TestCase
         $doc = new Document(new Section([
             Image::fromPath($this->jpegPath, widthPt: 200, heightPt: 100),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
         // cm transform: 200 0 0 100 X Y cm
         self::assertStringContainsString('200 0 0 100 ', $bytes);
     }
@@ -68,7 +68,7 @@ final class ImageRenderTest extends TestCase
         $doc = new Document(new Section([
             Image::fromPath($this->jpegPath, widthPt: 200, alignment: Alignment::Center),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         // Можно проверить точное число — but PDF stream coordinates float-
         // formatted, поэтому ищем substring.
@@ -88,7 +88,7 @@ final class ImageRenderTest extends TestCase
         $blocks[] = Image::fromPath($this->jpegPath, widthPt: 400, heightPt: 700);
 
         $doc = new Document(new Section($blocks));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount, 'Large image should overflow to new page');
@@ -101,7 +101,7 @@ final class ImageRenderTest extends TestCase
         $doc = new Document(new Section([
             Image::fromPath($this->jpegPath, widthPt: 1000, heightPt: 750),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
         // 1000 не должно появиться как width в cm (after scaling).
         self::assertStringNotContainsString('1000 0 0 750', $bytes);
         // Но image XObject зарегистрирован.
@@ -117,7 +117,7 @@ final class ImageRenderTest extends TestCase
             new Image($img, widthPt: 50),
             new Image($img, widthPt: 100, alignment: Alignment::End),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
         // /Subtype /Image должен появиться ровно один раз.
         self::assertSame(1, substr_count($bytes, '/Subtype /Image'));
     }
@@ -131,7 +131,7 @@ final class ImageRenderTest extends TestCase
             Image::fromPath($this->jpegPath, widthPt: 100, spaceBeforePt: 20, spaceAfterPt: 20),
             new Paragraph([new Run('After')]),
         ]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertStringStartsWith('%PDF', $bytes);
     }
 }

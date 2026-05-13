@@ -34,7 +34,7 @@ final class WatermarkTest extends TestCase
             body: [new Paragraph([new Run('Content')])],
             watermarkText: 'DRAFT',
         ));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         // Tm operator должен присутствовать (rotated text).
         self::assertStringContainsString(' Tm', $bytes);
@@ -50,7 +50,7 @@ final class WatermarkTest extends TestCase
             $body[] = new Paragraph([new Run("Filler paragraph $i text content")]);
         }
         $doc = new Document(new Section(body: $body, watermarkText: 'CONFIDENTIAL'));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount);
@@ -62,7 +62,7 @@ final class WatermarkTest extends TestCase
     public function no_watermark_no_rotated_text(): void
     {
         $doc = new Document(new Section([new Paragraph([new Run('Hi')])]));
-        $bytes = $doc->toBytes(new Engine);
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertStringNotContainsString(' Tm', $bytes);
     }
 
@@ -91,7 +91,7 @@ final class WatermarkTest extends TestCase
         $bytes = DocumentBuilder::new()
             ->watermark('DRAFT')
             ->paragraph('Some body text content')
-            ->toBytes(new Engine(defaultFont: $this->font()));
+            ->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $tmp = tempnam(sys_get_temp_dir(), 'wm-');
         file_put_contents($tmp, $bytes);

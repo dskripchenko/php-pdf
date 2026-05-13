@@ -44,7 +44,7 @@ final class FieldResolutionTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('Page: '), Field::page()]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('Page: 1', $text);
     }
@@ -56,7 +56,7 @@ final class FieldResolutionTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('Total: '), Field::totalPages()]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('Total: 1', $text);
     }
@@ -67,7 +67,7 @@ final class FieldResolutionTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([Field::date('yyyy-MM-dd')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString(date('Y-m-d'), $text);
     }
@@ -78,7 +78,7 @@ final class FieldResolutionTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('Hello, '), Field::mergeField('CustomerName')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('CustomerName', $text);
     }
@@ -96,7 +96,7 @@ final class FieldResolutionTest extends TestCase
         $blocks[] = new Paragraph([new Run('END total: '), Field::totalPages()]);
 
         $doc = new Document(new Section($blocks));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         // NUMPAGES должен match'ить актуальное число pages.
         preg_match('/^\/Type \/Page /m', $bytes);

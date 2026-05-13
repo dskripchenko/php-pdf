@@ -51,7 +51,7 @@ final class TableRenderTest extends TestCase
                 new Row([$this->cell('Hello')]),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertStringStartsWith('%PDF', $bytes);
 
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
@@ -76,7 +76,7 @@ final class TableRenderTest extends TestCase
             $rows[] = new Row($cells);
         }
         $doc = new Document(new Section([new Table($rows)]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
@@ -97,7 +97,7 @@ final class TableRenderTest extends TestCase
         $doc = new Document(new Section([
             new Table([new Row([new Cell([$this->p('bg')], style: $bg)])]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 'f\n' — fill operator. RG-then-rg-then-re-then-f.
         self::assertStringContainsString(" rg\n", $bytes);
         self::assertStringContainsString(" re\n", $bytes);
@@ -113,7 +113,7 @@ final class TableRenderTest extends TestCase
         $doc = new Document(new Section([
             new Table([new Row([new Cell([$this->p('B')], style: $borderedStyle)])]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // strokeRect → ' RG' + 'S\n'.
         self::assertStringContainsString(' RG', $bytes);
         self::assertStringContainsString("S\n", $bytes);
@@ -132,7 +132,7 @@ final class TableRenderTest extends TestCase
                 style: $ts,
             ),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 4 cells × 4 borders = 16 stroke ops minimum.
         $sCount = substr_count($bytes, "S\n");
         self::assertGreaterThanOrEqual(16, $sCount);
@@ -145,7 +145,7 @@ final class TableRenderTest extends TestCase
         $doc = new Document(new Section([
             new Table(rows: [new Row([$this->cell('Centered')])], style: $ts),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
         try {
@@ -163,7 +163,7 @@ final class TableRenderTest extends TestCase
             rows: [new Row([$this->cell('A'), $this->cell('B'), $this->cell('C')])],
             columnWidthsPt: [60, 120, 180],
         );
-        $bytes = (new Document(new Section([$t])))->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = (new Document(new Section([$t])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
         try {
@@ -184,7 +184,7 @@ final class TableRenderTest extends TestCase
             $rows[] = new Row([$this->cell("Row $i col 1"), $this->cell("Row $i col 2")]);
         }
         $doc = new Document(new Section([new Table($rows)]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount, 'Long table should overflow');
     }
@@ -203,7 +203,7 @@ final class TableRenderTest extends TestCase
                 ],
             ),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
         try {
@@ -220,7 +220,7 @@ final class TableRenderTest extends TestCase
         $doc = new Document(new Section([
             new Table([new Row(cells: [$this->cell('X')], heightPt: 50)]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertStringStartsWith('%PDF', $bytes);
     }
 
@@ -234,7 +234,7 @@ final class TableRenderTest extends TestCase
             ],
             columnWidthsPt: [60, 60, 60],
         );
-        $bytes = (new Document(new Section([$t])))->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = (new Document(new Section([$t])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
         try {
@@ -257,7 +257,7 @@ final class TableRenderTest extends TestCase
             $rows[] = new Row([$this->cell("Row $i")]);
         }
         $bytes = (new Document(new Section([new Table($rows)])))
-            ->toBytes(new Engine(defaultFont: $this->font()));
+            ->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
@@ -280,7 +280,7 @@ final class TableRenderTest extends TestCase
             $this->p('Second paragraph'),
         ]);
         $doc = new Document(new Section([new Table([new Row([$cell])])]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $tmp = tempnam(sys_get_temp_dir(), 'tbl-');
         file_put_contents($tmp, $bytes);
         try {

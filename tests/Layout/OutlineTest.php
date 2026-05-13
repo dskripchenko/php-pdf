@@ -33,7 +33,7 @@ final class OutlineTest extends TestCase
         $doc = new AstDocument(new Section([
             new Paragraph(children: [new Run('Title One')], headingLevel: 1),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertStringContainsString('/Type /Outlines', $bytes);
         self::assertStringContainsString('/Title (Title One)', $bytes);
@@ -48,7 +48,7 @@ final class OutlineTest extends TestCase
             new Paragraph(children: [new Run('B')], headingLevel: 1),
             new Paragraph(children: [new Run('C')], headingLevel: 1),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertStringContainsString('/Title (A)', $bytes);
         self::assertStringContainsString('/Title (B)', $bytes);
@@ -69,7 +69,7 @@ final class OutlineTest extends TestCase
             new Paragraph(children: [new Run('Section 1.2')], headingLevel: 2),
             new Paragraph(children: [new Run('Chapter 2')], headingLevel: 1),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         // Chapter 1 должен иметь /First (children).
         self::assertMatchesRegularExpression(
@@ -84,7 +84,7 @@ final class OutlineTest extends TestCase
         $doc = new AstDocument(new Section([
             new Paragraph(children: [new Run('Heading')], headingLevel: 1),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         // /Dest [<pageId> 0 R /XYZ <x> <y> 0]
         self::assertMatchesRegularExpression(
@@ -99,7 +99,7 @@ final class OutlineTest extends TestCase
         $doc = new AstDocument(new Section([
             new Paragraph([new Run('Just body, no headings.')]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertStringNotContainsString('/Type /Outlines', $bytes);
         self::assertStringNotContainsString('/PageMode', $bytes);

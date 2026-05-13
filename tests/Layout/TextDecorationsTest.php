@@ -35,7 +35,7 @@ final class TextDecorationsTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('underline', (new RunStyle)->withUnderline())]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         // Stroke operator 'S' должен присутствовать (для underline line).
         self::assertStringContainsString("S\n", $bytes);
@@ -43,7 +43,7 @@ final class TextDecorationsTest extends TestCase
         $docRegular = new Document(new Section([
             new Paragraph([new Run('plain')]),
         ]));
-        $bytesRegular = $docRegular->toBytes(new Engine(defaultFont: $this->font()));
+        $bytesRegular = $docRegular->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertGreaterThan(
             substr_count($bytesRegular, "S\n"),
             substr_count($bytes, "S\n"),
@@ -57,7 +57,7 @@ final class TextDecorationsTest extends TestCase
         $doc = new Document(new Section([
             new Paragraph([new Run('strike', (new RunStyle)->withStrikethrough())]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertStringContainsString("S\n", $bytes);
     }
 
@@ -69,7 +69,7 @@ final class TextDecorationsTest extends TestCase
                 (new RunStyle)->withUnderline()->withStrikethrough()
             )]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // Two stroke ops per word — underline + strike.
         self::assertGreaterThanOrEqual(2, substr_count($bytes, "S\n"));
     }
@@ -82,7 +82,7 @@ final class TextDecorationsTest extends TestCase
                 (new RunStyle)->withUnderline()->withColor('cc0000')
             )]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 0xcc/255 ≈ 0.8 in RG (stroke color).
         self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+RG@', $bytes);
     }
@@ -96,8 +96,8 @@ final class TextDecorationsTest extends TestCase
         $docPlain = new Document(new Section([
             new Paragraph([new Run('P')]),
         ]));
-        $bytesDec = $docDecorated->toBytes(new Engine(defaultFont: $this->font()));
-        $bytesPlain = $docPlain->toBytes(new Engine(defaultFont: $this->font()));
+        $bytesDec = $docDecorated->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+        $bytesPlain = $docPlain->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
         self::assertGreaterThan(
             substr_count($bytesPlain, "S\n"),
@@ -114,7 +114,7 @@ final class TextDecorationsTest extends TestCase
                 (new RunStyle)->withUnderline()
             )]),
         ]));
-        $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         // 4 words → 4 underline strokes.
         $sCount = substr_count($bytes, "S\n");
         self::assertGreaterThanOrEqual(4, $sCount);

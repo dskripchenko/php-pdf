@@ -76,22 +76,33 @@ final class PdfFont
      * возвращает Type0 font dict object ID — этот ID используется
      * в page Resources /Font dict.
      */
-    public function registerWith(Writer $writer): int
+    public function registerWith(Writer $writer, bool $compressStreams = true): int
     {
         if ($this->fontObjectId !== null) {
             return $this->fontObjectId;
         }
 
-        // 1. Embed TTF binary как FontFile2 stream object.
+        // 1. Embed TTF binary как FontFile2 stream object. С FlateDecode
+        //    font subsets ~50-70% меньше (typical 30-70KB → 15-35KB).
         $fontBytes = $this->subset
             ? (new \Dskripchenko\PhpPdf\Font\Ttf\TtfSubsetter)->subset($this->ttf, array_keys($this->usedGlyphs))
             : $this->ttf->rawBytes();
-        $fontFileObjId = $writer->addObject(sprintf(
-            "<< /Length %d /Length1 %d >>\nstream\n%s\nendstream",
-            strlen($fontBytes),
-            strlen($fontBytes),
-            $fontBytes,
-        ));
+        if ($compressStreams) {
+            $compressed = (string) gzcompress($fontBytes, 6);
+            $fontFileObjId = $writer->addObject(sprintf(
+                "<< /Length %d /Length1 %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                strlen($compressed),
+                strlen($fontBytes),  // Length1 = un-compressed original size (PDF spec)
+                $compressed,
+            ));
+        } else {
+            $fontFileObjId = $writer->addObject(sprintf(
+                "<< /Length %d /Length1 %d >>\nstream\n%s\nendstream",
+                strlen($fontBytes),
+                strlen($fontBytes),
+                $fontBytes,
+            ));
+        }
 
         // 2. FontDescriptor.
         $descriptorBody = $this->buildFontDescriptor($fontFileObjId);

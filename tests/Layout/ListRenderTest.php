@@ -53,7 +53,7 @@ final class ListRenderTest extends TestCase
             $this->item('Second'),
             $this->item('Third'),
         ]);
-        $bytes = (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
 
         self::assertStringContainsString('First', $text);
@@ -71,7 +71,7 @@ final class ListRenderTest extends TestCase
             $this->item('beta'),
             $this->item('gamma'),
         ], format: ListFormat::Decimal);
-        $bytes = (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
 
         self::assertStringContainsString('1.', $text);
@@ -87,7 +87,7 @@ final class ListRenderTest extends TestCase
             $this->item('b'),
         ], format: ListFormat::Decimal, startAt: 5);
         $text = $this->pdftotext(
-            (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()))
+            (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()))
         );
 
         self::assertStringContainsString('5.', $text);
@@ -102,7 +102,7 @@ final class ListRenderTest extends TestCase
             $this->item('two'),
         ], format: ListFormat::UpperLetter);
         $text = $this->pdftotext(
-            (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()))
+            (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()))
         );
         self::assertStringContainsString('A.', $text);
         self::assertStringContainsString('B.', $text);
@@ -118,7 +118,7 @@ final class ListRenderTest extends TestCase
             $this->item('four'),
         ], format: ListFormat::LowerRoman);
         $text = $this->pdftotext(
-            (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()))
+            (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()))
         );
         self::assertStringContainsString('i.', $text);
         self::assertStringContainsString('ii.', $text);
@@ -138,7 +138,7 @@ final class ListRenderTest extends TestCase
             $this->item('Second top'),
         ]);
         $text = $this->pdftotext(
-            (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()))
+            (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()))
         );
         self::assertStringContainsString('Top', $text);
         self::assertStringContainsString('Sub A', $text);
@@ -153,7 +153,7 @@ final class ListRenderTest extends TestCase
             $items[] = $this->item("Item $i");
         }
         $l = new ListNode($items);
-        $bytes = (new Document(new Section([$l])))->toBytes(new Engine(defaultFont: $this->font()));
+        $bytes = (new Document(new Section([$l])))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         self::assertGreaterThan(1, substr_count($bytes, '/Type /Page '));
     }
 }

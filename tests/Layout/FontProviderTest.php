@@ -118,7 +118,7 @@ final class FontProviderTest extends TestCase
                 new Run(' Serif', (new RunStyle)->withFontFamily('LiberationSerif')),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(fontProvider: $this->provider()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, fontProvider: $this->provider()));
 
         // Two distinct Type0 subsets embedded — Sans + Serif.
         $count = substr_count($bytes, '/Subtype /Type0');
@@ -137,7 +137,7 @@ final class FontProviderTest extends TestCase
                 new Run('both', (new RunStyle)->withFontFamily('LiberationSans')->withBold()->withItalic()),
             ]),
         ]));
-        $bytes = $doc->toBytes(new Engine(fontProvider: $this->provider()));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, fontProvider: $this->provider()));
 
         // 4 разных variant'а LiberationSans should embedded.
         $count = substr_count($bytes, '/Subtype /Type0');

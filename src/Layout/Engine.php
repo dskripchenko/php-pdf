@@ -105,6 +105,12 @@ final class Engine
          * прежде чем падать на bold/italic/default chain. Phase 13.
          */
         public readonly ?FontProvider $fontProvider = null,
+        /**
+         * FlateDecode content streams в output PDF (~3-5× smaller для
+         * text-heavy). Default true. Set false для debug inspection
+         * (raw operators видны в bytes).
+         */
+        public readonly bool $compressStreams = true,
     ) {
         if ($fontProvider !== null) {
             $this->resolver = new PdfFontResolver($fontProvider);
@@ -175,6 +181,7 @@ final class Engine
             $pageSetup->paperSize,
             $pageSetup->orientation,
             $pageSetup->customDimensionsPt,
+            $this->compressStreams,
         );
         $page = $pdf->addPage();
 

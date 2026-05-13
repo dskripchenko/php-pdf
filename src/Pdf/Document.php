@@ -59,13 +59,24 @@ final class Document
         public PaperSize $defaultPaperSize = PaperSize::A4,
         public Orientation $defaultOrientation = Orientation::Portrait,
         public ?array $defaultCustomDimensionsPt = null,
+        /**
+         * Если true — content streams сжимаются через FlateDecode (~3-5×
+         * меньше для text-heavy документов). Default = true; set false
+         * для debug-просмотра raw streams.
+         */
+        public bool $compressStreams = true,
     ) {}
 
     public static function new(
         PaperSize $defaultPaperSize = PaperSize::A4,
         Orientation $defaultOrientation = Orientation::Portrait,
+        bool $compressStreams = true,
     ): self {
-        return new self($defaultPaperSize, $defaultOrientation);
+        return new self(
+            defaultPaperSize: $defaultPaperSize,
+            defaultOrientation: $defaultOrientation,
+            compressStreams: $compressStreams,
+        );
     }
 
     public function pdfVersion(string $version): self
@@ -192,7 +203,7 @@ final class Document
         foreach ($this->pages as $page) {
             foreach ($page->embeddedFonts() as $f) {
                 if (! isset($embeddedFontObjectIds[$f])) {
-                    $embeddedFontObjectIds[$f] = $f->registerWith($writer);
+                    $embeddedFontObjectIds[$f] = $f->registerWith($writer, $this->compressStreams);
                 }
             }
         }
@@ -224,11 +235,20 @@ final class Document
         // 4. Создаём Page objects + content streams + annotations.
         foreach ($this->pages as $i => $page) {
             $contentStreamBody = $page->buildContentStream();
-            $contentId = $writer->addObject(sprintf(
-                "<< /Length %d >>\nstream\n%sendstream",
-                strlen($contentStreamBody),
-                $contentStreamBody,
-            ));
+            if ($this->compressStreams && $contentStreamBody !== '') {
+                $compressed = (string) gzcompress($contentStreamBody, 6);
+                $contentId = $writer->addObject(sprintf(
+                    "<< /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                    strlen($compressed),
+                    $compressed,
+                ));
+            } else {
+                $contentId = $writer->addObject(sprintf(
+                    "<< /Length %d >>\nstream\n%sendstream",
+                    strlen($contentStreamBody),
+                    $contentStreamBody,
+                ));
+            }
 
             // Build Page /Resources dict для использованных fonts/images.
             $resourcesFont = '';
