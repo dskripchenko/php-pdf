@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.15 — 14 фаз закрыты (407 тестов, 911 assertions).
+**Текущий статус:** v0.16 — 15 фаз закрыты (413 тестов, 917 assertions).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -54,12 +54,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   vs mpdf 51KB → ratio 1.82× (target ≤1.5× близко).
 - Tests: 5 в CompressionTest; bulk-update 17 test files под opt-out.
 
-**Phase 15: Justify alignment**
-- `text-align: justify` сейчас деградирует к `Start` (см. Engine
-  emitLine `Both/Distribute → default Start`). Юридические документы
-  часто требуют justify.
-- Нужно: greedy line-breaker + per-line space distribution (Word-spacing
-  Tj adjustments или `Tw` operator).
+**Phase 15: Justify alignment** ✅ DONE
+- ~~text-align: justify деградировал к Start.~~
+- Done (8e45e75): emitLine принимает $isLastLine. Только overflow-driven
+  line emits с isLastLine=false → justify-stretch применяется. Br/
+  pagebreak/paragraph-end остаются flush-left (CSS spec).
+- 60% fill-ratio threshold — короткие lines не stretch'аются нелепо.
+- Tests: 6 в JustifyAlignmentTest.
 
 **Phase 16: Inline images (text wrap)**
 - Image AST элемент сейчас всегда block-level. `<img>` внутри
@@ -205,8 +206,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 12 | border-collapse + double-line render | 5 + 2 | a9efb7d |
 | 13 | Custom font registration (FontProvider + Liberation bundle) | 10 + 8 + 2 | 4dc641c (php-pdf) + af2efea (fonts) + 4bc1cd9 (printable) |
 | 14 | PDF compression (FlateDecode content + font streams) | 5 | ba25389 |
+| 15 | Justify alignment (word-spacing distribution) | 6 | 8e45e75 |
 
-**Итого:** 407 тестов в php-pdf, 191 теста в printable, 8 в Liberation package.
+**Итого:** 413 тестов в php-pdf, 191 теста в printable, 8 в Liberation package.
 
 ---
 
