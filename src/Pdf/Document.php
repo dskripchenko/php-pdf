@@ -262,14 +262,26 @@ final class Document
             }
         }
 
-        // Images.
+        // Images. Phase 29: dedup by content hash (not just instance).
+        // Same file loaded twice → одна XObject запись.
         /** @var \SplObjectStorage<\Dskripchenko\PhpPdf\Image\PdfImage, int> */
         $imageObjectIds = new \SplObjectStorage;
+        /** @var array<string, int> hash → existing object ID */
+        $imageHashMap = [];
         foreach ($this->pages as $page) {
             foreach ($page->images() as $img) {
-                if (! isset($imageObjectIds[$img])) {
-                    $imageObjectIds[$img] = $img->registerWith($writer);
+                if (isset($imageObjectIds[$img])) {
+                    continue;
                 }
+                $hash = md5($img->imageData);
+                if (isset($imageHashMap[$hash])) {
+                    $imageObjectIds[$img] = $imageHashMap[$hash];
+
+                    continue;
+                }
+                $id = $img->registerWith($writer);
+                $imageObjectIds[$img] = $id;
+                $imageHashMap[$hash] = $id;
             }
         }
 
