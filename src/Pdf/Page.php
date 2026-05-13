@@ -216,6 +216,42 @@ final class Page
     }
 
     /**
+     * Phase 81: separate fill/stroke opacity registration. Returns gs
+     * resource name либо null если оба opacity >= 1.
+     */
+    public function maybeRegisterFillStrokeOpacityGs(?float $fillOpacity, ?float $strokeOpacity): ?string
+    {
+        $fill = ($fillOpacity !== null && $fillOpacity < 1.0) ? max(0.0, $fillOpacity) : null;
+        $stroke = ($strokeOpacity !== null && $strokeOpacity < 1.0) ? max(0.0, $strokeOpacity) : null;
+        if ($fill === null && $stroke === null) {
+            return null;
+        }
+
+        return $this->registerExtGState(new PdfExtGState(fillOpacity: $fill, strokeOpacity: $stroke));
+    }
+
+    /**
+     * Phase 81: wrap arbitrary operations с ExtGState opacity through
+     * push/pop graphics state. Use case — apply opacity к multiple draw
+     * calls inside callable.
+     *
+     * @param  callable(): void  $draw
+     */
+    public function withOpacity(?float $fillOpacity, ?float $strokeOpacity, callable $draw): self
+    {
+        $gsName = $this->maybeRegisterFillStrokeOpacityGs($fillOpacity, $strokeOpacity);
+        if ($gsName !== null) {
+            $this->stream->pushGraphicsStateWithGs($gsName);
+        }
+        $draw();
+        if ($gsName !== null) {
+            $this->stream->popGraphicsState();
+        }
+
+        return $this;
+    }
+
+    /**
      * Filled rectangle (RGB 0..1).
      */
     public function fillRect(

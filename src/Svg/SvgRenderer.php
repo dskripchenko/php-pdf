@@ -35,6 +35,27 @@ final class SvgRenderer
     }
 
     /**
+     * Phase 81: parse opacity attribute (0..1 float).
+     * Returns 1.0 если null или out-of-range.
+     */
+    private static function parseOpacity(\SimpleXMLElement $el, string $attr, float $multiplier = 1.0): float
+    {
+        $val = $el[$attr] ?? null;
+        if ($val === null) {
+            return $multiplier;
+        }
+        $f = (float) (string) $val;
+        if ($f < 0) {
+            $f = 0;
+        }
+        if ($f > 1) {
+            $f = 1;
+        }
+
+        return $f * $multiplier;
+    }
+
+    /**
      * Parse fill/stroke value → [r, g, b, hasColor]. hasColor=false для 'none'.
      *
      * @return array{0: float, 1: float, 2: float, 3: bool}
@@ -763,17 +784,24 @@ final class SvgRenderer
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
+        // Phase 81: opacity.
+        $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
+        $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
+        $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
+
         $px = $tx($x);
         $pw = $w * $scaleX;
         $ph = $h * $scaleY;
-        $py = $ty($y + $h); // PDF y = bottom-left of rect.
+        $py = $ty($y + $h);
 
-        if ($hasFill) {
-            $page->fillRect($px, $py, $pw, $ph, $fr, $fg, $fb);
-        }
-        if ($hasStroke) {
-            $page->strokeRect($px, $py, $pw, $ph, $sw * $scaleX, $sr, $sg, $sb);
-        }
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $px, $py, $pw, $ph, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
+            if ($hasFill) {
+                $page->fillRect($px, $py, $pw, $ph, $fr, $fg, $fb);
+            }
+            if ($hasStroke) {
+                $page->strokeRect($px, $py, $pw, $ph, $sw * $scaleX, $sr, $sg, $sb);
+            }
+        });
     }
 
     /**
@@ -834,15 +862,21 @@ final class SvgRenderer
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
-        if ($hasFill) {
-            $page->fillPolygon($points, $fr, $fg, $fb);
-        }
-        if ($hasStroke) {
-            // Closed polyline для stroked ellipse.
-            $closed = $points;
-            $closed[] = $points[0];
-            $page->strokePolyline($closed, $sw * $scaleX, $sr, $sg, $sb);
-        }
+        // Phase 81: opacity.
+        $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
+        $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
+        $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
+
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $points, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
+            if ($hasFill) {
+                $page->fillPolygon($points, $fr, $fg, $fb);
+            }
+            if ($hasStroke) {
+                $closed = $points;
+                $closed[] = $points[0];
+                $page->strokePolyline($closed, $sw * $scaleX, $sr, $sg, $sb);
+            }
+        });
     }
 
     /**
@@ -860,16 +894,22 @@ final class SvgRenderer
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
-        if ($closed && $hasFill) {
-            $page->fillPolygon($points, $fr, $fg, $fb);
-        }
-        if ($hasStroke) {
-            $line = $points;
-            if ($closed) {
-                $line[] = $points[0];
+        $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
+        $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
+        $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
+
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $closed, $hasFill, $hasStroke, $points, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
+            if ($closed && $hasFill) {
+                $page->fillPolygon($points, $fr, $fg, $fb);
             }
-            $page->strokePolyline($line, $sw * $scaleX, $sr, $sg, $sb);
-        }
+            if ($hasStroke) {
+                $line = $points;
+                if ($closed) {
+                    $line[] = $points[0];
+                }
+                $page->strokePolyline($line, $sw * $scaleX, $sr, $sg, $sb);
+            }
+        });
     }
 
     /**
