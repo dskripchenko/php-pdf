@@ -714,10 +714,12 @@ final class Document
 
             // Phase 92: /StructParents key linking page к /ParentTree entry.
             $structParentsRef = $this->tagged ? " /StructParents $i" : '';
+            // Phase 94: page rotation /Rotate.
+            $rotateRef = $page->rotation() !== 0 ? ' /Rotate '.$page->rotation() : '';
 
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
-                .'/Contents %d 0 R /Resources %s%s%s%s%s >>',
+                .'/Contents %d 0 R /Resources %s%s%s%s%s%s >>',
                 $pagesId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
@@ -727,6 +729,7 @@ final class Document
                 $transRef,
                 $durRef,
                 $structParentsRef,
+                $rotateRef,
             ));
         }
 

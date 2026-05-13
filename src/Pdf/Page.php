@@ -54,6 +54,28 @@ final class Page
     /** Phase 85: Page transition (slideshow effect) — emitted as /Trans dict. */
     private ?array $transition = null;
 
+    /** Phase 94: Page rotation в degrees (0, 90, 180, 270). */
+    private int $rotation = 0;
+
+    /**
+     * Phase 94: Set page rotation. Multiple of 90.
+     */
+    public function setRotation(int $degrees): self
+    {
+        $normalized = (($degrees % 360) + 360) % 360;
+        if ($normalized % 90 !== 0) {
+            throw new \InvalidArgumentException('Page rotation must be multiple of 90');
+        }
+        $this->rotation = $normalized;
+
+        return $this;
+    }
+
+    public function rotation(): int
+    {
+        return $this->rotation;
+    }
+
     /** Phase 85: Auto-advance duration в seconds (display time). */
     private ?float $autoAdvanceDuration = null;
 
