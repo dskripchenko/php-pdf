@@ -903,8 +903,18 @@ final class Engine
             }
 
             $word = $item['text'] ?? '';
-            $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
-            $wordWidth = $this->measureWidth($word, $style);
+            $baseSizePt = $style->sizePt ?? $this->defaultFontSizePt;
+            // Phase 26: sup/sub render at 70% size with vertical baseline shift.
+            $sizePt = $baseSizePt;
+            $wordBaselineY = $baselineY;
+            if ($style->superscript) {
+                $sizePt = $baseSizePt * 0.7;
+                $wordBaselineY = $baselineY + $baseSizePt * 0.33;
+            } elseif ($style->subscript) {
+                $sizePt = $baseSizePt * 0.7;
+                $wordBaselineY = $baselineY - $baseSizePt * 0.15;
+            }
+            $wordWidth = $this->measureWidth($word, $style->withSizePt($sizePt));
 
             $wordLink = $item['link'] ?? null;
             if ($wordLink !== $linkRef) {
@@ -915,10 +925,10 @@ final class Engine
                 }
             }
 
-            $this->showText($ctx->currentPage, $word, $x, $baselineY, $sizePt, $style);
+            $this->showText($ctx->currentPage, $word, $x, $wordBaselineY, $sizePt, $style);
             // Underline / strikethrough — draw line below/through glyphs.
             if ($style->underline || $style->strikethrough) {
-                $this->drawTextDecorations($ctx->currentPage, $x, $baselineY, $wordWidth, $sizePt, $style);
+                $this->drawTextDecorations($ctx->currentPage, $x, $wordBaselineY, $wordWidth, $sizePt, $style);
             }
             $x += $wordWidth;
             if ($linkRef !== null) {
