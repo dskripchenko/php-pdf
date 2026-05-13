@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.20 — 19 фаз закрыты (426 + 193 printable = 619 тестов).
+**Текущий статус:** v0.21 — 20 фаз закрыты (431 + 193 printable = 624 теста).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -99,11 +99,12 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   v1.1: текущий first-drawn-wins работает для типичных случаев.
 - Tests: 3 в BorderSpacingTest.
 
-**Phase 20: PDF metadata (/Info dict)**
-- Сейчас Document не пишет `/Info` объект в PDF (Title/Author/Subject/
-  Producer/CreationDate отсутствуют).
-- Нужно: `Document.metadata(...)` API + emission в trailer reference.
-- Это влияет на SEO, archival, library catalogues.
+**Phase 20: PDF metadata (/Info dict)** ✅ DONE
+- Done (c6efcb7): Writer.setInfo + Trailer reference. Pdf\Document.
+  metadata(title, author, subject, keywords, creator, producer,
+  creationDate?) — все optional, chainable, auto Producer + CreationDate.
+  AST Document.metadata array→propagates. PDF date format D:YYYYMMDDHHmmSS+TZ.
+- Tests: 5 в MetadataTest.
 
 **Phase 21: line-height + letter-spacing**
 - `line-height` сейчас только из ParagraphStyle.lineHeightMult (DSL).
@@ -220,8 +221,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 17 | CSS <style>/classes (CssInliner integration) | +1 | 6921211 (printable) |
 | 18 | border-radius (rounded corners) | 4 + 1 | 4f32049 + dcf41a2 (printable) |
 | 19 | border-spacing (priority deferred к v1.1) | 3 | 9c76b42 + d5fd4cc (printable) |
+| 20 | PDF metadata (/Info dict) | 5 | c6efcb7 |
 
-**Итого:** 426 тестов в php-pdf, 193 теста в printable, 8 в Liberation package.
+**Итого:** 431 тест в php-pdf, 193 теста в printable, 8 в Liberation package.
 
 ---
 
