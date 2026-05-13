@@ -680,6 +680,11 @@ final class Engine
             }
         }
 
+        // Phase 71: grid lines.
+        if ($sc->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
+        }
+
         // Axes.
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
@@ -814,6 +819,11 @@ final class Engine
             $maxValue = 1.0;
         }
 
+        // Phase 71: grid lines.
+        if ($gbc->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
+        }
+
         // Axes.
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
@@ -930,6 +940,11 @@ final class Engine
             $maxTotal = 1.0;
         }
 
+        // Phase 71: grid lines.
+        if ($sbc->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
+        }
+
         // Axes.
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
@@ -1041,6 +1056,11 @@ final class Engine
                         : mb_strlen($s['name'], 'UTF-8') * $mlc->legendSizePt * 0.5)
                     + 14;
             }
+        }
+
+        // Phase 71: grid lines.
+        if ($mlc->showGridLines) {
+            $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
 
         // Axes.
