@@ -6,12 +6,20 @@ namespace Dskripchenko\PhpPdf\Layout;
 
 use Dskripchenko\PhpPdf\Document as AstDocument;
 use Dskripchenko\PhpPdf\Element\BlockElement;
+use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\LineBreak;
 use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
+use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
+use Dskripchenko\PhpPdf\Element\Table;
+use Dskripchenko\PhpPdf\Style\Border;
+use Dskripchenko\PhpPdf\Style\BorderSet;
+use Dskripchenko\PhpPdf\Style\CellStyle;
+use Dskripchenko\PhpPdf\Style\TableStyle;
+use Dskripchenko\PhpPdf\Style\VerticalAlignment;
 use Dskripchenko\PhpPdf\Pdf\Document as PdfDocument;
 use Dskripchenko\PhpPdf\Pdf\Page;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
@@ -96,6 +104,7 @@ final class Engine
             $block instanceof PageBreak => $this->forcePageBreak($ctx),
             $block instanceof HorizontalRule => $this->renderHorizontalRule($ctx),
             $block instanceof Image => $this->renderImage($block, $ctx),
+            $block instanceof Table => $this->renderTable($block, $ctx),
             default => null,
         };
     }
@@ -404,6 +413,418 @@ final class Engine
         $size = $headingSizes[$level] ?? $this->defaultFontSizePt;
 
         return new RunStyle(sizePt: $size, bold: true);
+    }
+
+    /**
+     * Renders Table: column-width distribution, row-by-row layout с
+     * pre-measurement каждого row (для row-height), drawing background
+     * + borders, vertical alignment of cell content.
+     *
+     * Phase 5b ограничения (исправит Phase 5c):
+     *  - columnSpan/rowSpan игнорируются (assumed 1)
+     *  - isHeader rows НЕ повторяются на следующих страницах
+     *  - row-split при page overflow — full row уходит на новую страницу
+     *
+     * Алгоритм:
+     *  1. Compute total table width + per-column widths
+     *  2. Position table inside content area по table.style.alignment
+     *  3. Для каждого row:
+     *     a. Pre-measure высоту каждой cell → row height = max
+     *     b. ensureRoomFor(row height) → page break если не помещается
+     *     c. Draw cell backgrounds, then content, then borders
+     *  4. spaceBefore/After
+     */
+    private function renderTable(Table $t, LayoutContext $ctx): void
+    {
+        if ($t->isEmpty()) {
+            return;
+        }
+
+        $ctx->cursorY -= $t->style->spaceBeforePt;
+
+        $columnCount = $t->columnCount();
+        $tableWidth = $this->computeTableWidth($t->style, $ctx->contentWidth);
+        $colWidths = $this->computeColumnWidths($t, $tableWidth, $columnCount);
+        $tableLeftX = $this->computeTableLeftX($t->style->alignment, $ctx, $tableWidth);
+
+        foreach ($t->rows as $row) {
+            $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
+            $this->ensureRoomFor($ctx, $rowHeight);
+            $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx);
+            $ctx->cursorY -= $rowHeight;
+        }
+
+        $ctx->cursorY -= $t->style->spaceAfterPt;
+    }
+
+    private function computeTableWidth(TableStyle $style, float $contentWidth): float
+    {
+        if ($style->widthPt !== null) {
+            return min($style->widthPt, $contentWidth);
+        }
+        if ($style->widthPercent !== null) {
+            return $contentWidth * $style->widthPercent / 100;
+        }
+
+        return $contentWidth;
+    }
+
+    /**
+     * @return list<float>
+     */
+    private function computeColumnWidths(Table $t, float $tableWidth, int $columnCount): array
+    {
+        if ($t->columnWidthsPt !== null && count($t->columnWidthsPt) === $columnCount) {
+            // Scale to fit tableWidth если sum differs.
+            $sum = array_sum($t->columnWidthsPt);
+            if ($sum > 0) {
+                $scale = $tableWidth / $sum;
+
+                return array_map(fn (float $w): float => $w * $scale, array_map(floatval(...), $t->columnWidthsPt));
+            }
+        }
+
+        // Equal distribution.
+        $perCol = $columnCount > 0 ? $tableWidth / $columnCount : 0;
+
+        return array_fill(0, $columnCount, $perCol);
+    }
+
+    private function computeTableLeftX(Alignment $align, LayoutContext $ctx, float $tableWidth): float
+    {
+        return match ($align) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $tableWidth) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $tableWidth,
+            default => $ctx->leftX,
+        };
+    }
+
+    /**
+     * @param  list<float>  $colWidths
+     */
+    private function measureRowHeight(Table $t, Row $row, array $colWidths): float
+    {
+        if ($row->heightPt !== null) {
+            return $row->heightPt;
+        }
+
+        $maxHeight = 0;
+        $colIdx = 0;
+        foreach ($row->cells as $cell) {
+            $cellWidth = $colWidths[$colIdx] ?? $colWidths[0];
+            $colIdx += $cell->columnSpan;
+            $cs = $this->effectiveCellStyle($t, $cell);
+            $contentWidth = $cellWidth - $cs->paddingLeftPt - $cs->paddingRightPt;
+            $contentHeight = $this->measureBlockListHeight($cell->children, $contentWidth);
+            $cellHeight = $contentHeight + $cs->paddingTopPt + $cs->paddingBottomPt;
+            if ($cellHeight > $maxHeight) {
+                $maxHeight = $cellHeight;
+            }
+        }
+
+        // Minimum row height: 1 line of default text + paddings.
+        return max($maxHeight, $this->defaultFontSizePt * $this->defaultLineHeightMult);
+    }
+
+    /**
+     * @param  list<float>  $colWidths
+     */
+    private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx): void
+    {
+        $rowTopY = $ctx->cursorY;
+        $rowBottomY = $rowTopY - $rowHeight;
+
+        // 1. Backgrounds + content + borders в три pass'а (background ниже,
+        //    borders сверху, content между).
+        $cellX = $tableLeftX;
+        $colIdx = 0;
+        foreach ($row->cells as $cell) {
+            $cellWidth = 0;
+            for ($i = 0; $i < $cell->columnSpan && ($colIdx + $i) < count($colWidths); $i++) {
+                $cellWidth += $colWidths[$colIdx + $i];
+            }
+            $cs = $this->effectiveCellStyle($t, $cell);
+
+            // Background fill.
+            if ($cs->backgroundColor !== null) {
+                [$r, $g, $b] = $this->hexToRgb($cs->backgroundColor);
+                $ctx->currentPage->fillRect($cellX, $rowBottomY, $cellWidth, $rowHeight, $r, $g, $b);
+            }
+
+            $cellX += $cellWidth;
+            $colIdx += $cell->columnSpan;
+        }
+
+        // Content.
+        $cellX = $tableLeftX;
+        $colIdx = 0;
+        foreach ($row->cells as $cell) {
+            $cellWidth = 0;
+            for ($i = 0; $i < $cell->columnSpan && ($colIdx + $i) < count($colWidths); $i++) {
+                $cellWidth += $colWidths[$colIdx + $i];
+            }
+            $cs = $this->effectiveCellStyle($t, $cell);
+
+            $this->renderCellContent($cell, $cs, $cellX, $rowTopY, $cellWidth, $rowHeight, $ctx);
+
+            $cellX += $cellWidth;
+            $colIdx += $cell->columnSpan;
+        }
+
+        // Borders на top.
+        $cellX = $tableLeftX;
+        $colIdx = 0;
+        foreach ($row->cells as $cell) {
+            $cellWidth = 0;
+            for ($i = 0; $i < $cell->columnSpan && ($colIdx + $i) < count($colWidths); $i++) {
+                $cellWidth += $colWidths[$colIdx + $i];
+            }
+            $cs = $this->effectiveCellStyle($t, $cell);
+            $borders = $cs->borders ?? $this->defaultBorderSet($t->style);
+
+            if ($borders !== null) {
+                $this->drawCellBorders($ctx->currentPage, $cellX, $rowBottomY, $cellWidth, $rowHeight, $borders);
+            }
+
+            $cellX += $cellWidth;
+            $colIdx += $cell->columnSpan;
+        }
+    }
+
+    private function renderCellContent(
+        Cell $cell,
+        CellStyle $cs,
+        float $cellX,
+        float $cellTopY,
+        float $cellWidth,
+        float $rowHeight,
+        LayoutContext $ctx,
+    ): void {
+        $contentWidth = $cellWidth - $cs->paddingLeftPt - $cs->paddingRightPt;
+        $contentHeight = $this->measureBlockListHeight($cell->children, $contentWidth);
+
+        // Vertical alignment.
+        $availableHeight = $rowHeight - $cs->paddingTopPt - $cs->paddingBottomPt;
+        $vOffset = match ($cs->verticalAlign) {
+            VerticalAlignment::Center => max(0, ($availableHeight - $contentHeight) / 2),
+            VerticalAlignment::Bottom => max(0, $availableHeight - $contentHeight),
+            default => 0,
+        };
+
+        $sub = new LayoutContext(
+            pdf: $ctx->pdf,
+            currentPage: $ctx->currentPage,
+            cursorY: $cellTopY - $cs->paddingTopPt - $vOffset,
+            leftX: $cellX + $cs->paddingLeftPt,
+            contentWidth: $contentWidth,
+            // Cell content не вызывает auto-page-break (Phase 5b).
+            bottomY: $cellTopY - $rowHeight - 10000,
+            topY: $cellTopY - $cs->paddingTopPt - $vOffset,
+            pageSetup: $ctx->pageSetup,
+        );
+
+        foreach ($cell->children as $block) {
+            $this->renderBlock($block, $sub);
+        }
+    }
+
+    private function effectiveCellStyle(Table $t, Cell $cell): CellStyle
+    {
+        // Cell-style имеет priority. defaultCellStyle применяется только
+        // если cell.style identical-equal к bare-default CellStyle (т.е.
+        // user не задал свой стиль). Это эвристика — Phase 5c сделает
+        // полноценный cascade через explicit merge.
+        if ($cell->style == new CellStyle) {
+            return $t->style->defaultCellStyle;
+        }
+
+        return $cell->style;
+    }
+
+    private function defaultBorderSet(TableStyle $ts): ?BorderSet
+    {
+        if ($ts->defaultCellBorder !== null) {
+            return BorderSet::all($ts->defaultCellBorder);
+        }
+
+        return null;
+    }
+
+    private function drawCellBorders(\Dskripchenko\PhpPdf\Pdf\Page $page, float $x, float $y, float $w, float $h, BorderSet $borders): void
+    {
+        if ($borders->top !== null) {
+            $this->drawHorizontalBorder($page, $x, $y + $h, $w, $borders->top);
+        }
+        if ($borders->bottom !== null) {
+            $this->drawHorizontalBorder($page, $x, $y, $w, $borders->bottom);
+        }
+        if ($borders->left !== null) {
+            $this->drawVerticalBorder($page, $x, $y, $h, $borders->left);
+        }
+        if ($borders->right !== null) {
+            $this->drawVerticalBorder($page, $x + $w, $y, $h, $borders->right);
+        }
+    }
+
+    private function drawHorizontalBorder(\Dskripchenko\PhpPdf\Pdf\Page $page, float $x, float $y, float $w, Border $b): void
+    {
+        [$r, $g, $bb] = $this->hexToRgb($b->color);
+        $page->strokeRect($x, $y, $w, 0, $b->widthPt(), $r, $g, $bb);
+    }
+
+    private function drawVerticalBorder(\Dskripchenko\PhpPdf\Pdf\Page $page, float $x, float $y, float $h, Border $b): void
+    {
+        [$r, $g, $bb] = $this->hexToRgb($b->color);
+        $page->strokeRect($x, $y, 0, $h, $b->widthPt(), $r, $g, $bb);
+    }
+
+    /**
+     * @return array{0: float, 1: float, 2: float}
+     */
+    private function hexToRgb(string $hex): array
+    {
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) === 3) {
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+        }
+        $r = ((int) hexdec(substr($hex, 0, 2))) / 255;
+        $g = ((int) hexdec(substr($hex, 2, 2))) / 255;
+        $b = ((int) hexdec(substr($hex, 4, 2))) / 255;
+
+        return [$r, $g, $b];
+    }
+
+    /**
+     * @param  list<BlockElement>  $blocks
+     */
+    private function measureBlockListHeight(array $blocks, float $contentWidth): float
+    {
+        $total = 0;
+        foreach ($blocks as $block) {
+            $total += $this->measureBlockHeight($block, $contentWidth);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Pure measurement — no side effects на pdf/page.
+     */
+    private function measureBlockHeight(BlockElement $block, float $contentWidth): float
+    {
+        return match (true) {
+            $block instanceof Paragraph => $this->measureParagraphHeight($block, $contentWidth),
+            $block instanceof Image => $this->measureImageHeight($block, $contentWidth),
+            $block instanceof HorizontalRule => 12.0, // 6 + 0 + 6
+            $block instanceof Table => $this->measureTableHeight($block, $contentWidth),
+            default => 0,
+        };
+    }
+
+    private function measureParagraphHeight(Paragraph $p, float $contentWidth): float
+    {
+        $headingStyle = $this->headingStyle($p->headingLevel);
+        $effectiveDefault = $p->defaultRunStyle->inheritFrom($headingStyle);
+
+        // Build items list (тот же подход что в renderParagraph).
+        /** @var list<array{type: string, text?: string, style?: RunStyle}> $items */
+        $items = [];
+        foreach ($p->children as $child) {
+            if ($child instanceof Run) {
+                $childStyle = $child->style->inheritFrom($effectiveDefault);
+                foreach ($this->splitWords($child->text) as $word) {
+                    $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle];
+                }
+            } elseif ($child instanceof LineBreak) {
+                $items[] = ['type' => 'br'];
+            }
+        }
+
+        $availableWidth = $contentWidth - $p->style->indentLeftPt - $p->style->indentRightPt;
+        $firstLineExtraIndent = $p->style->indentFirstLinePt;
+        $isFirstLine = true;
+        $effectiveAvail = $availableWidth - $firstLineExtraIndent;
+        $currentWidth = 0;
+        $hasContent = false;
+        $maxSizeInLine = 0;
+
+        $lineMaxSizes = [];
+        $flushLine = function () use (&$lineMaxSizes, &$maxSizeInLine, &$currentWidth, &$isFirstLine, &$hasContent, &$effectiveAvail, $availableWidth, $effectiveDefault) {
+            $lineMaxSizes[] = $maxSizeInLine > 0
+                ? $maxSizeInLine
+                : ($effectiveDefault->sizePt ?? $this->defaultFontSizePt);
+            $maxSizeInLine = 0;
+            $currentWidth = 0;
+            $isFirstLine = false;
+            $hasContent = false;
+            $effectiveAvail = $availableWidth;
+        };
+
+        foreach ($items as $item) {
+            if ($item['type'] === 'br') {
+                $flushLine();
+
+                continue;
+            }
+            $word = $item['text'] ?? '';
+            $style = $item['style'] ?? $effectiveDefault;
+            $wordWidth = $this->measureWidth($word, $style);
+            $sepWidth = $hasContent ? $this->measureWidth(' ', $style) : 0;
+            $size = $style->sizePt ?? $this->defaultFontSizePt;
+
+            if ($hasContent && $currentWidth + $sepWidth + $wordWidth > $effectiveAvail) {
+                $flushLine();
+                $currentWidth = $wordWidth;
+                $maxSizeInLine = $size;
+                $hasContent = true;
+            } else {
+                $currentWidth += $sepWidth + $wordWidth;
+                if ($size > $maxSizeInLine) {
+                    $maxSizeInLine = $size;
+                }
+                $hasContent = true;
+            }
+        }
+        if ($hasContent || $lineMaxSizes === []) {
+            $flushLine();
+        }
+
+        $mult = $this->effectiveLineHeightMult($p);
+        $total = $p->style->spaceBeforePt;
+        foreach ($lineMaxSizes as $s) {
+            $total += $s * $mult;
+        }
+        $total += $p->style->spaceAfterPt;
+
+        return $total;
+    }
+
+    private function measureImageHeight(Image $img, float $contentWidth): float
+    {
+        [$w, $h] = $img->effectiveSizePt();
+        if ($w > $contentWidth) {
+            $h *= $contentWidth / $w;
+        }
+
+        return $h + $img->spaceBeforePt + $img->spaceAfterPt;
+    }
+
+    private function measureTableHeight(Table $t, float $contentWidth): float
+    {
+        if ($t->isEmpty()) {
+            return 0;
+        }
+        $columnCount = $t->columnCount();
+        $tableWidth = $this->computeTableWidth($t->style, $contentWidth);
+        $colWidths = $this->computeColumnWidths($t, $tableWidth, $columnCount);
+
+        $total = $t->style->spaceBeforePt;
+        foreach ($t->rows as $row) {
+            $total += $this->measureRowHeight($t, $row, $colWidths);
+        }
+        $total += $t->style->spaceAfterPt;
+
+        return $total;
     }
 
     /**
