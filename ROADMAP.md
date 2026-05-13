@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 47 фаз закрыто (630 + 194 printable = 824 теста).
+**Текущий статус:** v1.1-dev — 50 фаз закрыто (661 + 194 printable = 855 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-49 closed (25 фаз):
+**v1.1 progress:** 25-52 closed (28 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -24,7 +24,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 43 AcroForm (text + checkbox), 44 BarChart, 45 LineChart + PieChart,
  - 46 AcroForm extensions (multiline, password, combo, list, radio),
  - 47 PDF/A-1b compliance, 48 Tagged PDF (accessibility minimum),
- - 49 embedded files / attachments.
+ - 49 embedded files / attachments,
+ - 50 AES-256 encryption V5 R5, 51 multi-series charts (grouped bar + multi-line),
+ - 52 SVG support (basic shapes + simple path).
 
 ---
 
@@ -202,7 +204,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - PDF/A-1b / PDF/A-2u compliance (для архивных требований).
 - ~~Encryption (password-protected PDFs) — RC4-128~~ ✅ **Phase 41 closed** (c3d7743).
 - ~~Encryption — AES-128 (V4 R4)~~ ✅ **Phase 42 closed** (2d18542).
-- AES-256 (V5, PDF 2.0).
+- ~~AES-256 (V5 R5, Adobe Supplement)~~ ✅ **Phase 50 closed** (2040bfd).
+- AES-256 V5 R6 (PDF 2.0 — 64-round hash iteration).
 - String encryption (currently /Identity для strings; streams encrypted).
 - ~~Form fields (interactive AcroForm) — text + checkbox~~ ✅ **Phase 43 closed** (aac0c20).
 - ~~AcroForm extensions: multi-line, password, combo, list, radio~~ ✅ **Phase 46 closed** (7862b41).
@@ -217,11 +220,14 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 ### Content
 
-- SVG support (parse + rasterize или native PDF paths).
+- ~~SVG support (basic shapes + simple path)~~ ✅ **Phase 52 closed** (60d362d).
+- SVG extensions: path curves (C/S/Q/T/A), transforms, gradients,
+  <text> element, CSS styles, <defs>/<use>.
 - Math equations (LaTeX-like rendering).
 - ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
 - ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
-- Multi-series charts (grouped/stacked bars, multi-line).
+- ~~Multi-series charts (grouped bar + multi-line)~~ ✅ **Phase 51 closed** (468ebeb).
+- Chart extensions: stacked bars, scatter, area, donut.
 - Chart extensions: grid lines, custom axis ranges, axis titles, donut.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
@@ -308,6 +314,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 47 | PDF/A-1b compliance mode (v1.1) | 9 | 25884b1 |
 | 48 | Tagged PDF (accessibility minimum) (v1.1) | 5 | a9ddacf |
 | 49 | Embedded files / attachments (v1.1) | 8 | 229bcd9 |
+| 50 | AES-256 encryption V5 R5 (v1.1) | 9 | 2040bfd |
+| 51 | Multi-series charts (GroupedBar + MultiLine) (v1.1) | 9 | 468ebeb |
+| 52 | SVG support (basic shapes + simple path) (v1.1) | 13 | 60d362d |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
