@@ -484,6 +484,10 @@ final class Engine
         if ($maxValue <= 0) {
             $maxValue = 1.0;
         }
+        // Phase 68: yMax override.
+        if ($ac->yMax !== null) {
+            $maxValue = $ac->yMax;
+        }
 
         // Legend at top.
         if ($ac->showLegend) {
@@ -1097,6 +1101,10 @@ final class Engine
         if ($maxValue <= 0) {
             $maxValue = 1.0;
         }
+        // Phase 68: yMax override.
+        if ($lc->yMax !== null) {
+            $maxValue = $lc->yMax;
+        }
 
         // Phase 64: grid lines.
         if ($lc->showGridLines) {
@@ -1288,6 +1296,10 @@ final class Engine
         }
         if ($maxValue <= 0) {
             $maxValue = 1.0;
+        }
+        // Phase 68: optional explicit y-axis range overrides auto-max.
+        if ($bc->yMax !== null) {
+            $maxValue = $bc->yMax;
         }
 
         // Phase 64: grid lines (если enabled) drawn перед bars/lines чтобы

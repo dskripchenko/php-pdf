@@ -35,6 +35,9 @@ final readonly class BarChart implements BlockElement
         public float $titleSizePt = 12.0,
         public string $defaultBarColor = '4287f5',
         public bool $showGridLines = false,
+        // Phase 68: optional fixed y-axis range. null = auto (max value).
+        public ?float $yMin = null,
+        public ?float $yMax = null,
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
