@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 60 фаз закрыто (733 + 194 printable = 927 тестов).
+**Текущий статус:** v1.1-dev — 64 фазы закрыто (755 + 194 printable = 949 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-62 closed (38 фаз):
+**v1.1 progress:** 25-66 closed (42 фазы):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -33,7 +33,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 58 SVG <text> element, 59 SVG transforms (translate/scale/rotate/matrix),
  - 60 Area chart (single + stacked),
  - 61 Heading element + PDF/UA H1-H6 tagging,
- - 62 Image alt-text для PDF/UA accessibility.
+ - 62 Image alt-text для PDF/UA accessibility,
+ - 63 SVG path arcs (A command), 64 chart grid lines,
+ - 65 Tagged PDF /Table /TR /TD, 66 Tagged PDF /L /LI.
 
 ---
 
@@ -220,6 +222,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Tagged PDF (accessibility minimum)~~ ✅ **Phase 48 closed** (a9ddacf).
 - ~~Heading element + PDF/UA H1-H6 tagging~~ ✅ **Phase 61 closed** (38b3c3b).
 - ~~Image alt-text для PDF/UA~~ ✅ **Phase 62 closed** (38ccc36).
+- ~~Tagged PDF /Table /TR /TD~~ ✅ **Phase 65 closed** (ae22478).
+- ~~Tagged PDF /L /LI~~ ✅ **Phase 66 closed** (fdf8117).
+- Tagged PDF /Link, reading order /StructParents tree, role mapping.
 - ~~PDF/A-1b compliance mode~~ ✅ **Phase 47 closed** (25884b1).
 - ~~AcroForm signature field placeholder~~ ✅ **Phase 56 closed** (b93c6c8).
 - AcroForm signature actual signing (PKCS#7 two-pass byte range).
@@ -234,7 +239,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~SVG path curves (C/S/Q/T)~~ ✅ **Phase 53 closed** (b20a979).
 - ~~SVG <text> element~~ ✅ **Phase 58 closed** (df9cd69).
 - ~~SVG transforms (translate/scale/rotate/matrix)~~ ✅ **Phase 59 closed** (2ca5e04).
-- SVG extensions: path arcs (A), gradients, CSS styles (<style>), <defs>/<use>.
+- ~~SVG path arcs (A command)~~ ✅ **Phase 63 closed** (bccf3b8). SVG path support теперь complete.
+- SVG extensions: gradients, CSS styles (<style>), <defs>/<use>.
 - Math equations (LaTeX-like rendering).
 - ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
 - ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
@@ -242,7 +248,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Stacked bar chart~~ ✅ **Phase 54 closed** (edb9046).
 - ~~Donut + Scatter charts~~ ✅ **Phase 55 closed** (71312d9).
 - ~~Area chart (single + stacked)~~ ✅ **Phase 60 closed** (418dea8).
-- Chart extensions: smoothed splines, grid lines, custom axis ranges.
+- ~~Chart grid lines (Bar/Line/Area)~~ ✅ **Phase 64 closed** (8f70f07).
+- Chart extensions: smoothed splines, custom axis ranges, grid для остальных charts.
 - Chart extensions: grid lines, custom axis ranges, axis titles, donut.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
@@ -342,6 +349,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 60 | Area chart (single + stacked) (v1.1) | 8 | 418dea8 |
 | 61 | Heading + PDF/UA H1-H6 tagging (v1.1) | 7 | 38b3c3b |
 | 62 | Image alt-text для PDF/UA (v1.1) | 5 | 38ccc36 |
+| 63 | SVG path arcs (A command) (v1.1) | 7 | bccf3b8 |
+| 64 | Chart grid lines (Bar/Line/Area) (v1.1) | 4 | 8f70f07 |
+| 65 | Tagged PDF /Table /TR /TD (v1.1) | 6 | ae22478 |
+| 66 | Tagged PDF /L /LI (v1.1) | 5 | fdf8117 |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
