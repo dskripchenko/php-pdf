@@ -159,6 +159,32 @@ final class TtfFile
     }
 
     /**
+     * Lazy-parsed ligature substitutions (cached) из GSUB. Null если
+     * GSUB отсутствует или не содержит 'liga' feature lookup'ов.
+     */
+    private ?LigatureSubstitutions $ligatures = null;
+
+    private bool $ligaturesParsed = false;
+
+    public function ligatures(): ?LigatureSubstitutions
+    {
+        if ($this->ligaturesParsed) {
+            return $this->ligatures;
+        }
+        $this->ligaturesParsed = true;
+        $gsubInfo = $this->tableInfo('GSUB');
+        if ($gsubInfo === null) {
+            return null;
+        }
+        $subs = (new GsubReader)->read($this->bytes, $gsubInfo);
+        if (! $subs->isEmpty()) {
+            $this->ligatures = $subs;
+        }
+
+        return $this->ligatures;
+    }
+
+    /**
      * Резолв Unicode codepoint → glyph ID. Возвращает 0 (.notdef) если char
      * не покрывается font'ом.
      */

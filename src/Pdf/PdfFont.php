@@ -43,10 +43,22 @@ use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
  */
 final class PdfFont
 {
-    /** @var array<int, int>  glyphId → unicodeCodepoint (для ToUnicode CMap) */
+    /**
+     * glyphId → list of source codepoints (для ToUnicode CMap построения).
+     * Для обычных glyph'ов — single-element list. Для ligature-glyph'ов —
+     * список codepoint'ов исходной sequence (e.g., glyph "fi" → ['f', 'i']).
+     *
+     * @var array<int, list<int>>
+     */
     private array $usedGlyphs = [];
 
     private ?int $fontObjectId = null;
+
+    /**
+     * @var bool  Применять ligature substitutions из GSUB ('liga' feature).
+     *            False — disable (для debug или fonts с проблемными liga).
+     */
+    private bool $ligaturesEnabled = true;
 
     /**
      * @param  bool  $subset  Если true — embed только used glyph'ы через
@@ -118,14 +130,15 @@ final class PdfFont
     }
 
     /**
-     * Iterate UTF-8 bytes → sequence of (codepoint, glyphId) pairs.
-     * Side-effect: записывает в usedGlyphs (для последующего ToUnicode
-     * CMap build'а).
+     * Decode UTF-8 в list (codepoint, glyphId) — низкоуровневый decoder.
+     * НЕ применяет ligature substitution. Side-effect: НЕ накапливает в
+     * usedGlyphs (это делает shapedGlyphs/encodeText).
      *
-     * @return iterable<array{cp: int, gid: int}>
+     * @return list<array{cp: int, gid: int}>
      */
-    public function utf8ToGlyphs(string $utf8): iterable
+    public function decodeUtf8(string $utf8): array
     {
+        $out = [];
         $i = 0;
         $len = strlen($utf8);
         while ($i < $len) {
@@ -148,10 +161,96 @@ final class PdfFont
                     | (ord($utf8[$i + 3]) & 0x3F);
                 $i += 4;
             }
-            $gid = $this->ttf->glyphIdForChar($cp);
-            $this->usedGlyphs[$gid] = $cp;
-            yield ['cp' => $cp, 'gid' => $gid];
+            $out[] = ['cp' => $cp, 'gid' => $this->ttf->glyphIdForChar($cp)];
         }
+
+        return $out;
+    }
+
+    /**
+     * High-level: UTF-8 → list of «shaped» glyph entries после GSUB liga
+     * substitution. Каждый entry = {gid, sourceCps} — sourceCps это
+     * codepoint'ы которые этот gid представляет (1 для regular glyph'ов,
+     * 2+ для ligature glyph'ов).
+     *
+     * Side-effect: записывает в usedGlyphs со всеми source codepoint'ами
+     * (для построения ToUnicode CMap с правильным copy-paste).
+     *
+     * @return list<array{gid: int, sourceCps: list<int>}>
+     */
+    public function shapedGlyphs(string $utf8): array
+    {
+        $decoded = $this->decodeUtf8($utf8);
+        $glyphIds = array_map(fn ($e) => $e['gid'], $decoded);
+        $codepoints = array_map(fn ($e) => $e['cp'], $decoded);
+
+        $ligatures = $this->ligaturesEnabled ? $this->ttf->ligatures() : null;
+
+        if ($ligatures === null) {
+            // No GSUB liga — straight mapping.
+            $out = [];
+            foreach ($decoded as $i => $entry) {
+                $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
+                $out[] = ['gid' => $entry['gid'], 'sourceCps' => [$entry['cp']]];
+            }
+
+            return $out;
+        }
+
+        $result = $ligatures->apply($glyphIds);
+        // Mapping: source-glyph-index ranges → result glyph + sources.
+        // ligatures->apply() возвращает {glyphs, sourceMap (ligatureGid → component-gids)}
+        // Мы нужно знать какие исходные CODEPOINTS соответствуют каждому
+        // ligature gid'у. Это требует matching от LigatureSubstitutions.
+
+        // Простой подход: re-run apply on (cp, gid) pairs sequentially,
+        // отслеживая source-cp positions.
+        $out = [];
+        $shaped = $result['glyphs'];
+        $sourceMap = $result['sourceMap']; // ligatureGid → list<componentGid>
+        $sourceIdx = 0;
+        foreach ($shaped as $shapedGid) {
+            if (isset($sourceMap[$shapedGid])) {
+                $componentCount = count($sourceMap[$shapedGid]);
+                $sourceCps = array_slice($codepoints, $sourceIdx, $componentCount);
+                $sourceIdx += $componentCount;
+            } else {
+                $sourceCps = [$codepoints[$sourceIdx]];
+                $sourceIdx++;
+            }
+            $this->usedGlyphs[$shapedGid] = $sourceCps;
+            $out[] = ['gid' => $shapedGid, 'sourceCps' => $sourceCps];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Backward-compat: iterate как было раньше. Использует decodeUtf8 без
+     * shaping. Side-effect: pollutes usedGlyphs single-cp entries.
+     *
+     * Используется только для legacy кода; новый код должен использовать
+     * shapedGlyphs().
+     *
+     * @return iterable<array{cp: int, gid: int}>
+     */
+    public function utf8ToGlyphs(string $utf8): iterable
+    {
+        foreach ($this->decodeUtf8($utf8) as $entry) {
+            $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
+            yield $entry;
+        }
+    }
+
+    /**
+     * Отключить ligature substitution. Полезно когда font имеет проблемные
+     * 'liga' rules или нужен exact-glyph layout.
+     */
+    public function disableLigatures(): self
+    {
+        $this->ligaturesEnabled = false;
+
+        return $this;
     }
 
     /**
@@ -185,16 +284,17 @@ final class PdfFont
 
     /**
      * Кодирует UTF-8 текст в hex glyph-ID string для simple Tj operator
-     * при Identity-H encoding. БЕЗ kerning'а — для kerning-aware версии
-     * см. encodeTextTjArray().
+     * при Identity-H encoding. Применяет ligature substitution через
+     * shapedGlyphs(). БЕЗ kerning'а — для kerning-aware версии см.
+     * encodeTextTjArray().
      *
      * Side-effect: usedGlyphs накапливается для ToUnicode CMap.
      */
     public function encodeText(string $utf8): string
     {
         $hex = '';
-        foreach ($this->utf8ToGlyphs($utf8) as ['gid' => $gid]) {
-            $hex .= sprintf('%04X', $gid);
+        foreach ($this->shapedGlyphs($utf8) as $shaped) {
+            $hex .= sprintf('%04X', $shaped['gid']);
         }
 
         return '<'.$hex.'>';
@@ -223,7 +323,8 @@ final class PdfFont
         $result = [];
         $currentRun = '';
         $prevGid = null;
-        foreach ($this->utf8ToGlyphs($utf8) as ['gid' => $gid]) {
+        foreach ($this->shapedGlyphs($utf8) as $shaped) {
+            $gid = $shaped['gid'];
             if ($prevGid !== null) {
                 $kern = $this->kerningPdfUnits($prevGid, $gid);
                 if ($kern !== 0) {
@@ -390,11 +491,16 @@ final class PdfFont
         $count = count($this->usedGlyphs);
         if ($count > 0) {
             $body .= "$count beginbfchar\n";
-            foreach ($this->usedGlyphs as $gid => $cp) {
-                $body .= sprintf("<%04X> <%s>\n",
-                    $gid,
-                    $this->codepointToUtf16BeHex($cp),
-                );
+            foreach ($this->usedGlyphs as $gid => $cps) {
+                // cps — list<int>: один codepoint для regular glyph,
+                // несколько для ligature glyph (e.g., fi → ['f','i']).
+                // PDF ToUnicode bfchar: <gid> <utf16-hex> где utf16-hex
+                // может быть multi-character для ligatures.
+                $utf16 = '';
+                foreach ($cps as $cp) {
+                    $utf16 .= $this->codepointToUtf16BeHex($cp);
+                }
+                $body .= sprintf("<%04X> <%s>\n", $gid, $utf16);
             }
             $body .= "endbfchar\n";
         }
