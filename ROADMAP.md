@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 50 фаз закрыто (661 + 194 printable = 855 тестов).
+**Текущий статус:** v1.1-dev — 55 фаз закрыто (696 + 194 printable = 890 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-52 closed (28 фаз):
+**v1.1 progress:** 25-57 closed (33 фазы):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -26,7 +26,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 47 PDF/A-1b compliance, 48 Tagged PDF (accessibility minimum),
  - 49 embedded files / attachments,
  - 50 AES-256 encryption V5 R5, 51 multi-series charts (grouped bar + multi-line),
- - 52 SVG support (basic shapes + simple path).
+ - 52 SVG support (basic shapes + simple path),
+ - 53 SVG path curves (C/S/Q/T + H/V + relative),
+ - 54 stacked bar chart, 55 donut + scatter charts,
+ - 56 AcroForm signature field placeholder, 57 Code 128 Set C.
 
 ---
 
@@ -212,29 +215,34 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Embedded files / attachments~~ ✅ **Phase 49 closed** (229bcd9).
 - ~~Tagged PDF (accessibility minimum)~~ ✅ **Phase 48 closed** (a9ddacf).
 - ~~PDF/A-1b compliance mode~~ ✅ **Phase 47 closed** (25884b1).
-- AcroForm signature fields (/FT /Sig + PKCS#7 signing).
+- ~~AcroForm signature field placeholder~~ ✅ **Phase 56 closed** (b93c6c8).
+- AcroForm signature actual signing (PKCS#7 two-pass byte range).
 - JavaScript validation / calculation actions.
-- Digital signatures (PKCS#7).
+- Digital signatures (PKCS#7 signing of arbitrary fields).
 - Full PDF/UA: heading hierarchy (/H1-/H6), alt-text для figures,
   reading-order /StructParents, role mapping.
 
 ### Content
 
 - ~~SVG support (basic shapes + simple path)~~ ✅ **Phase 52 closed** (60d362d).
-- SVG extensions: path curves (C/S/Q/T/A), transforms, gradients,
-  <text> element, CSS styles, <defs>/<use>.
+- ~~SVG path curves (C/S/Q/T)~~ ✅ **Phase 53 closed** (b20a979).
+- SVG extensions: path arcs (A), transforms (translate/rotate/scale),
+  gradients, <text> element, CSS styles, <defs>/<use>.
 - Math equations (LaTeX-like rendering).
 - ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
 - ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
 - ~~Multi-series charts (grouped bar + multi-line)~~ ✅ **Phase 51 closed** (468ebeb).
-- Chart extensions: stacked bars, scatter, area, donut.
+- ~~Stacked bar chart~~ ✅ **Phase 54 closed** (edb9046).
+- ~~Donut + Scatter charts~~ ✅ **Phase 55 closed** (71312d9).
+- Chart extensions: area, smoothed splines, grid lines, custom axis ranges.
 - Chart extensions: grid lines, custom axis ranges, axis titles, donut.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
 - ~~QR Code (Reed-Solomon ECC L V1-10 byte mode)~~ ✅ **Phase 36 closed** (b6521aa).
 - ~~QR ECC M/Q/H levels (V1-V4 full, V5+ deferred)~~ ✅ **Phase 37 closed** (12802e9).
 - ~~QR Numeric/Alphanumeric encoding modes~~ ✅ **Phase 38 closed** (8e5c680).
-- Barcode formats: Code 128 Set A/C, DataMatrix, PDF417, Aztec.
+- ~~Code 128 Set C (numeric compression)~~ ✅ **Phase 57 closed** (b93c6c8).
+- Barcode formats: Code 128 Set A, DataMatrix, PDF417, Aztec.
 - QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
   auto best-mask selection.
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
@@ -317,6 +325,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 50 | AES-256 encryption V5 R5 (v1.1) | 9 | 2040bfd |
 | 51 | Multi-series charts (GroupedBar + MultiLine) (v1.1) | 9 | 468ebeb |
 | 52 | SVG support (basic shapes + simple path) (v1.1) | 13 | 60d362d |
+| 53 | SVG path curves (C/S/Q/T + H/V + relative) (v1.1) | 11 | b20a979 |
+| 54 | Stacked bar chart (v1.1) | 7 | edb9046 |
+| 55 | Donut + Scatter charts (v1.1) | 10 | 71312d9 |
+| 56-57 | AcroForm signature placeholder + Code 128 Set C (v1.1) | 7 | b93c6c8 |
 
 **Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
