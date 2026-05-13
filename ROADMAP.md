@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 26 фаз закрыты (445 + 194 printable = 639 тестов).
+**Текущий статус:** v1.1-dev — 27 фаз закрыты (448 + 194 printable = 642 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -13,7 +13,8 @@ v1.1 в активной разработке.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 **v1.1 progress:** 25 (paragraph padding+bg), 26 (sup/sub sizing),
-27 (inline letter-spacing), 28 (border priority) closed.
+27 (inline letter-spacing), 28 (border priority), 29 (image content
+dedup) closed.
 
 ---
 
@@ -257,8 +258,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 26 | Sup/Sub visual sizing (v1.1) | 3 | b3426a5 |
 | 27 | Inline letter-spacing через span (v1.1) | +1 | 6209791 (printable) |
 | 28 | Border priority "thicker wins" (v1.1, Phase 19 deferred) | 3 | f680192 |
+| 29 | Image content dedup by hash (v1.1) | 3 | f47c1f9 |
 
-**Итого:** 445 тестов в php-pdf, 194 теста в printable, 8 в
+**Итого:** 448 тестов в php-pdf, 194 теста в printable, 8 в
 Liberation package.
 
 ---
