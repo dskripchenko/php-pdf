@@ -67,6 +67,98 @@ final class SvgRenderer
         return [0, 0, 0, true]; // unknown → black.
     }
 
+    /**
+     * Phase 73: Parse SVG <style> block content → CSS rules.
+     *
+     * Supports tag selectors (rect, circle), class (.foo), id (#bar).
+     * Selectors separated by `,` — applied к each independently.
+     *
+     * @return list<array{selector: string, type: string, name: string, declarations: array<string, string>}>
+     */
+    private static function parseCssRules(string $css): array
+    {
+        $rules = [];
+        $css = preg_replace('@/\*.*?\*/@s', '', $css) ?? $css; // strip comments
+        if (! preg_match_all('@([^{}]+)\{([^}]+)\}@', $css, $matches, PREG_SET_ORDER)) {
+            return [];
+        }
+        foreach ($matches as $m) {
+            $selectorList = $m[1];
+            $declarationsStr = trim($m[2]);
+            $declarations = [];
+            foreach (explode(';', $declarationsStr) as $decl) {
+                $decl = trim($decl);
+                if ($decl === '' || ! str_contains($decl, ':')) {
+                    continue;
+                }
+                [$k, $v] = explode(':', $decl, 2);
+                $declarations[trim($k)] = trim($v);
+            }
+            foreach (explode(',', $selectorList) as $sel) {
+                $sel = trim($sel);
+                if ($sel === '') {
+                    continue;
+                }
+                if (str_starts_with($sel, '.')) {
+                    $rules[] = ['selector' => $sel, 'type' => 'class', 'name' => substr($sel, 1), 'declarations' => $declarations];
+                } elseif (str_starts_with($sel, '#')) {
+                    $rules[] = ['selector' => $sel, 'type' => 'id', 'name' => substr($sel, 1), 'declarations' => $declarations];
+                } else {
+                    $rules[] = ['selector' => $sel, 'type' => 'tag', 'name' => $sel, 'declarations' => $declarations];
+                }
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Phase 73: Apply matching CSS rules к SimpleXMLElement (mutate attributes
+     * для attributes not yet set). Specificity: id > class > tag.
+     *
+     * @param  list<array<string, mixed>>  $rules
+     */
+    private static function applyCssRules(\SimpleXMLElement $el, array $rules): void
+    {
+        $tag = $el->getName();
+        $class = (string) ($el['class'] ?? '');
+        $id = (string) ($el['id'] ?? '');
+        $classes = preg_split('@\s+@', $class) ?: [];
+
+        // Tag selectors first (lowest specificity).
+        foreach ($rules as $rule) {
+            if ($rule['type'] === 'tag' && $rule['name'] === $tag) {
+                self::applyDeclarations($el, $rule['declarations']);
+            }
+        }
+        // Class selectors.
+        foreach ($rules as $rule) {
+            if ($rule['type'] === 'class' && in_array($rule['name'], $classes, true)) {
+                self::applyDeclarations($el, $rule['declarations']);
+            }
+        }
+        // Id selectors (highest specificity per spec, but inline attributes still win).
+        foreach ($rules as $rule) {
+            if ($rule['type'] === 'id' && $rule['name'] === $id) {
+                self::applyDeclarations($el, $rule['declarations']);
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $declarations
+     */
+    private static function applyDeclarations(\SimpleXMLElement $el, array $declarations): void
+    {
+        foreach ($declarations as $prop => $value) {
+            // Don't override inline-set attributes (specificity rule).
+            if (isset($el[$prop])) {
+                continue;
+            }
+            $el->addAttribute($prop, $value);
+        }
+    }
+
     public static function render(string $svgXml, Page $page, float $boxX, float $boxY, float $boxW, float $boxH): void
     {
         // Suppress libxml warnings.
@@ -105,7 +197,30 @@ final class SvgRenderer
             return $boxY + ($boxH - $svgY * $scaleY);
         };
 
+        // Phase 73: collect CSS rules from <style> elements + apply к all
+        // elements recursively before rendering.
+        $cssRules = [];
+        foreach ($xml->xpath('//style') ?: [] as $styleEl) {
+            $cssRules = array_merge($cssRules, self::parseCssRules((string) $styleEl));
+        }
+        if ($cssRules !== []) {
+            self::applyCssToTree($xml, $cssRules);
+        }
+
         self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY);
+    }
+
+    /**
+     * Phase 73: recursively apply CSS rules к all child elements.
+     *
+     * @param  list<array<string, mixed>>  $rules
+     */
+    private static function applyCssToTree(\SimpleXMLElement $el, array $rules): void
+    {
+        foreach ($el->children() as $child) {
+            self::applyCssRules($child, $rules);
+            self::applyCssToTree($child, $rules);
+        }
     }
 
     /**
