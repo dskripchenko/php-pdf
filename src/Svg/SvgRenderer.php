@@ -115,20 +115,423 @@ final class SvgRenderer
     private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY): void
     {
         foreach ($el->children() as $child) {
+            // Phase 59: apply element-level transform (если есть).
+            $elTx = $tx;
+            $elTy = $ty;
+            if (isset($child['transform'])) {
+                $matrix = self::parseTransform((string) $child['transform']);
+                if ($matrix !== null) {
+                    [$a, $b, $c, $d, $e, $f] = $matrix;
+                    $origTx = $tx;
+                    $origTy = $ty;
+                    $elTx = static fn (float $x, float $y = 0) => $origTx($a * $x + $c * $y + $e);
+                    $elTy = static fn (float $y, float $x = 0) => $origTy($b * $x + $d * $y + $f);
+                    // Pre-compose transformation: we need точные (x, y) inputs.
+                    // Since existing API uses tx(x) and ty(y) separately (no
+                    // cross-coupling), we instead apply transform inline в каждом
+                    // shape via wrapper closures that take (x, y) → (px, py).
+                    self::walkChildTransformed($child, $page, $tx, $ty, $matrix, $scaleX, $scaleY);
+
+                    continue;
+                }
+            }
             $tag = $child->getName();
             match ($tag) {
-                'rect' => self::renderRect($child, $page, $tx, $ty, $scaleX, $scaleY),
-                'line' => self::renderLine($child, $page, $tx, $ty, $scaleX),
-                'circle' => self::renderCircle($child, $page, $tx, $ty, $scaleX, $scaleY),
-                'ellipse' => self::renderEllipse($child, $page, $tx, $ty, $scaleX, $scaleY),
-                'polygon' => self::renderPolygon($child, $page, $tx, $ty, true, $scaleX),
-                'polyline' => self::renderPolygon($child, $page, $tx, $ty, false, $scaleX),
-                'path' => self::renderPath($child, $page, $tx, $ty, $scaleX),
-                'text' => self::renderText($child, $page, $tx, $ty, $scaleX),
-                'g' => self::walkElement($child, $page, $tx, $ty, $scaleX, $scaleY),
+                'rect' => self::renderRect($child, $page, $elTx, $elTy, $scaleX, $scaleY),
+                'line' => self::renderLine($child, $page, $elTx, $elTy, $scaleX),
+                'circle' => self::renderCircle($child, $page, $elTx, $elTy, $scaleX, $scaleY),
+                'ellipse' => self::renderEllipse($child, $page, $elTx, $elTy, $scaleX, $scaleY),
+                'polygon' => self::renderPolygon($child, $page, $elTx, $elTy, true, $scaleX),
+                'polyline' => self::renderPolygon($child, $page, $elTx, $elTy, false, $scaleX),
+                'path' => self::renderPath($child, $page, $elTx, $elTy, $scaleX),
+                'text' => self::renderText($child, $page, $elTx, $elTy, $scaleX),
+                'g' => self::walkElement($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 default => null,
             };
         }
+    }
+
+    /**
+     * Phase 59: apply transform matrix к element-level coords; coords
+     * далее pass через original tx/ty (PDF mapping).
+     *
+     * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $matrix  [a, b, c, d, e, f]
+     */
+    private static function walkChildTransformed(
+        \SimpleXMLElement $el,
+        Page $page,
+        callable $origTx,
+        callable $origTy,
+        array $matrix,
+        float $scaleX,
+        float $scaleY,
+    ): void {
+        [$a, $b, $c, $d, $e, $f] = $matrix;
+        // Composed transform: SVG coord (x, y) → transformed (a*x+c*y+e, b*x+d*y+f) → PDF.
+        // Single-arg signatures cannot represent cross-coupling, so we
+        // construct point-transforming closures для каждой method.
+        // Simplest: wrap tx/ty to accept transformed inputs precomputed
+        // by callers. Это требует callers compute (a*x + c*y + e, b*x + d*y + f)
+        // перед calling tx/ty.
+
+        // Effective scale для stroke-width = sqrt(|a*d - b*c|).
+        $effScale = $scaleX * sqrt(max(abs($a * $d - $b * $c), 1e-9));
+
+        $newTx = static function (float $x) use ($a, $c, $e, $origTx): float {
+            // y компонент injected later through cross-coupled wrappers.
+            // Fallback if used standalone: y = 0.
+            return $origTx($a * $x + $c * 0 + $e);
+        };
+        $newTy = static function (float $y) use ($b, $d, $f, $origTy): float {
+            return $origTy($b * 0 + $d * $y + $f);
+        };
+
+        // Properly transform requires cross-axis coupling. Use combined
+        // wrapper that accepts both x and y as a pair: emit точки direct.
+        $px = static function (float $x, float $y) use ($a, $c, $e, $origTx): float {
+            return $origTx($a * $x + $c * $y + $e);
+        };
+        $py = static function (float $x, float $y) use ($b, $d, $f, $origTy): float {
+            return $origTy($b * $x + $d * $y + $f);
+        };
+
+        $tag = $el->getName();
+        match ($tag) {
+            'rect' => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY),
+            'line' => self::renderLineXY($el, $page, $px, $py, $effScale),
+            'circle' => self::renderEllipseXY($el, $page, $px, $py, $effScale, true),
+            'ellipse' => self::renderEllipseXY($el, $page, $px, $py, $effScale, false),
+            'polygon' => self::renderPolygonXY($el, $page, $px, $py, true, $effScale),
+            'polyline' => self::renderPolygonXY($el, $page, $px, $py, false, $effScale),
+            'path' => self::renderPathXY($el, $page, $px, $py, $effScale),
+            'text' => self::renderTextXY($el, $page, $px, $py, $effScale),
+            'g' => self::walkElementXY($el, $page, $px, $py, $effScale, $scaleY),
+            default => null,
+        };
+    }
+
+    /**
+     * Phase 59: walks children с (px, py) cross-coupled point transformers.
+     *
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function walkElementXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX, float $scaleY): void
+    {
+        foreach ($el->children() as $child) {
+            $tag = $child->getName();
+            match ($tag) {
+                'rect' => self::renderRectXY($child, $page, $px, $py, $scaleX, $scaleY),
+                'line' => self::renderLineXY($child, $page, $px, $py, $scaleX),
+                'circle' => self::renderEllipseXY($child, $page, $px, $py, $scaleX, true),
+                'ellipse' => self::renderEllipseXY($child, $page, $px, $py, $scaleX, false),
+                'polygon' => self::renderPolygonXY($child, $page, $px, $py, true, $scaleX),
+                'polyline' => self::renderPolygonXY($child, $page, $px, $py, false, $scaleX),
+                'path' => self::renderPathXY($child, $page, $px, $py, $scaleX),
+                'text' => self::renderTextXY($child, $page, $px, $py, $scaleX),
+                'g' => self::walkElementXY($child, $page, $px, $py, $scaleX, $scaleY),
+                default => null,
+            };
+        }
+    }
+
+    /**
+     * Parse SVG transform attribute → 2×3 matrix [a, b, c, d, e, f].
+     * Multiple transforms composed left-to-right per spec.
+     *
+     * Supported: translate(tx, ty?) | scale(sx, sy?) | rotate(deg, cx?, cy?) | matrix(a, b, c, d, e, f).
+     *
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}|null
+     */
+    private static function parseTransform(string $attr): ?array
+    {
+        // Identity matrix.
+        $M = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+        if (! preg_match_all('@(\w+)\s*\(([^)]*)\)@', $attr, $matches, PREG_SET_ORDER)) {
+            return null;
+        }
+        foreach ($matches as $m) {
+            $op = strtolower($m[1]);
+            $argsRaw = preg_split('@[\s,]+@', trim($m[2])) ?: [];
+            $args = array_map('floatval', array_values(array_filter($argsRaw, fn ($s) => $s !== '')));
+            $T = self::transformMatrix($op, $args);
+            if ($T === null) {
+                continue;
+            }
+            $M = self::multiplyMatrix($M, $T);
+        }
+
+        return $M;
+    }
+
+    /**
+     * @param  list<float>  $args
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}|null
+     */
+    private static function transformMatrix(string $op, array $args): ?array
+    {
+        return match ($op) {
+            'translate' => [1, 0, 0, 1, $args[0] ?? 0, $args[1] ?? 0],
+            'scale' => [$args[0] ?? 1, 0, 0, $args[1] ?? ($args[0] ?? 1), 0, 0],
+            'rotate' => self::rotateMatrix(
+                deg2rad($args[0] ?? 0),
+                $args[1] ?? 0,
+                $args[2] ?? 0,
+            ),
+            'matrix' => count($args) >= 6
+                ? [$args[0], $args[1], $args[2], $args[3], $args[4], $args[5]]
+                : null,
+            default => null,
+        };
+    }
+
+    /**
+     * Rotation about (cx, cy) — Translate(cx, cy) · Rotate(θ) · Translate(-cx, -cy).
+     *
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}
+     */
+    private static function rotateMatrix(float $theta, float $cx, float $cy): array
+    {
+        $cos = cos($theta);
+        $sin = sin($theta);
+        if ($cx === 0.0 && $cy === 0.0) {
+            return [$cos, $sin, -$sin, $cos, 0.0, 0.0];
+        }
+        // Composed: T(cx,cy) · R · T(-cx,-cy).
+        $tx = $cx - $cos * $cx + $sin * $cy;
+        $ty = $cy - $sin * $cx - $cos * $cy;
+
+        return [$cos, $sin, -$sin, $cos, $tx, $ty];
+    }
+
+    /**
+     * Multiply 2×3 matrices A · B.
+     *
+     * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $A
+     * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $B
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}
+     */
+    private static function multiplyMatrix(array $A, array $B): array
+    {
+        return [
+            $A[0] * $B[0] + $A[2] * $B[1],
+            $A[1] * $B[0] + $A[3] * $B[1],
+            $A[0] * $B[2] + $A[2] * $B[3],
+            $A[1] * $B[2] + $A[3] * $B[3],
+            $A[0] * $B[4] + $A[2] * $B[5] + $A[4],
+            $A[1] * $B[4] + $A[3] * $B[5] + $A[5],
+        ];
+    }
+
+    // ── Transformed render methods (XY variants accept point transformers) ───
+
+    /**
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function renderRectXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX, float $scaleY): void
+    {
+        // Transformed rectangle → polygon (4 corners сохраняют rotation).
+        $x = (float) ($el['x'] ?? 0);
+        $y = (float) ($el['y'] ?? 0);
+        $w = (float) ($el['width'] ?? 0);
+        $h = (float) ($el['height'] ?? 0);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
+        $sw = (float) ($el['stroke-width'] ?? 1);
+
+        $corners = [
+            [$px($x, $y), $py($x, $y)],
+            [$px($x + $w, $y), $py($x + $w, $y)],
+            [$px($x + $w, $y + $h), $py($x + $w, $y + $h)],
+            [$px($x, $y + $h), $py($x, $y + $h)],
+        ];
+        if ($hasFill) {
+            $page->fillPolygon($corners, $fr, $fg, $fb);
+        }
+        if ($hasStroke) {
+            $line = $corners;
+            $line[] = $corners[0];
+            $page->strokePolyline($line, $sw * $scaleX, $sr, $sg, $sb);
+        }
+    }
+
+    /**
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function renderLineXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX): void
+    {
+        $x1 = (float) ($el['x1'] ?? 0);
+        $y1 = (float) ($el['y1'] ?? 0);
+        $x2 = (float) ($el['x2'] ?? 0);
+        $y2 = (float) ($el['y2'] ?? 0);
+        [$sr, $sg, $sb] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : '#000');
+        $sw = (float) ($el['stroke-width'] ?? 1);
+        $page->strokeLine($px($x1, $y1), $py($x1, $y1), $px($x2, $y2), $py($x2, $y2), $sw * $scaleX, $sr, $sg, $sb);
+    }
+
+    /**
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function renderEllipseXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX, bool $isCircle): void
+    {
+        $cx = (float) ($el['cx'] ?? 0);
+        $cy = (float) ($el['cy'] ?? 0);
+        if ($isCircle) {
+            $rx = $ry = (float) ($el['r'] ?? 0);
+        } else {
+            $rx = (float) ($el['rx'] ?? 0);
+            $ry = (float) ($el['ry'] ?? 0);
+        }
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
+        $sw = (float) ($el['stroke-width'] ?? 1);
+
+        $segments = 36;
+        $points = [];
+        for ($i = 0; $i < $segments; $i++) {
+            $angle = 2 * M_PI * $i / $segments;
+            $sx = $cx + cos($angle) * $rx;
+            $sy = $cy + sin($angle) * $ry;
+            $points[] = [$px($sx, $sy), $py($sx, $sy)];
+        }
+        if ($hasFill) {
+            $page->fillPolygon($points, $fr, $fg, $fb);
+        }
+        if ($hasStroke) {
+            $closed = $points;
+            $closed[] = $points[0];
+            $page->strokePolyline($closed, $sw * $scaleX, $sr, $sg, $sb);
+        }
+    }
+
+    /**
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function renderPolygonXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, bool $closed, float $scaleX): void
+    {
+        $pointsAttr = (string) ($el['points'] ?? '');
+        $tokens = preg_split('@[\s,]+@', trim($pointsAttr));
+        if ($tokens === false) {
+            return;
+        }
+        $tokens = array_values(array_filter($tokens, fn ($t) => $t !== ''));
+        $pts = [];
+        for ($i = 0; $i + 1 < count($tokens); $i += 2) {
+            $sx = (float) $tokens[$i];
+            $sy = (float) $tokens[$i + 1];
+            $pts[] = [$px($sx, $sy), $py($sx, $sy)];
+        }
+        if ($pts === []) {
+            return;
+        }
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : ($closed ? '#000' : null));
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
+        $sw = (float) ($el['stroke-width'] ?? 1);
+
+        if ($closed && $hasFill) {
+            $page->fillPolygon($pts, $fr, $fg, $fb);
+        }
+        if ($hasStroke) {
+            $line = $pts;
+            if ($closed) {
+                $line[] = $pts[0];
+            }
+            $page->strokePolyline($line, $sw * $scaleX, $sr, $sg, $sb);
+        }
+    }
+
+    /**
+     * Phase 59: transformed path. Parses path с same rules как renderPath,
+     * но coords transformed via $px/$py закрытий.
+     *
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function renderPathXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX): void
+    {
+        $d = (string) ($el['d'] ?? '');
+        if ($d === '') {
+            return;
+        }
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
+        $sw = (float) ($el['stroke-width'] ?? 1);
+
+        // Wrap point transformers как (svg-x → pdf-x) / (svg-y → pdf-y)
+        // closures that we'd normally pass к parsePathD. parsePathD expects
+        // single-arg tx/ty, поэтому передаём через identity closures и
+        // post-transform каждый emitted command:
+        $idTx = static fn (float $x): float => $x;
+        $idTy = static fn (float $y): float => $y;
+        $rawCommands = self::parsePathD($d, $idTx, $idTy);
+
+        // Transform raw SVG-space commands к PDF coords.
+        $commands = [];
+        foreach ($rawCommands as $cmd) {
+            if ($cmd === 'Z') {
+                $commands[] = 'Z';
+
+                continue;
+            }
+            $type = $cmd[0];
+            if ($type === 'M' || $type === 'L') {
+                $commands[] = [$type, $px($cmd[1], $cmd[2]), $py($cmd[1], $cmd[2])];
+            } elseif ($type === 'C') {
+                $commands[] = [
+                    'C',
+                    $px($cmd[1], $cmd[2]), $py($cmd[1], $cmd[2]),
+                    $px($cmd[3], $cmd[4]), $py($cmd[3], $cmd[4]),
+                    $px($cmd[5], $cmd[6]), $py($cmd[5], $cmd[6]),
+                ];
+            }
+        }
+
+        if ($hasFill && $hasStroke) {
+            $mode = 'fillstroke';
+        } elseif ($hasFill) {
+            $mode = 'fill';
+        } elseif ($hasStroke) {
+            $mode = 'stroke';
+        } else {
+            return;
+        }
+        $page->emitPath(
+            $commands,
+            $mode,
+            $hasFill ? ['r' => $fr, 'g' => $fg, 'b' => $fb] : null,
+            $hasStroke ? ['r' => $sr, 'g' => $sg, 'b' => $sb] : null,
+            $sw * $scaleX,
+        );
+    }
+
+    /**
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function renderTextXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX): void
+    {
+        $x = (float) ($el['x'] ?? 0);
+        $y = (float) ($el['y'] ?? 0);
+        $fontSize = (float) ($el['font-size'] ?? 16);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
+        if (! $hasFill) {
+            return;
+        }
+        $text = trim((string) $el);
+        if ($text === '') {
+            return;
+        }
+        $page->showText(
+            $text, $px($x, $y), $py($x, $y),
+            \Dskripchenko\PhpPdf\Pdf\StandardFont::Helvetica,
+            $fontSize * $scaleX,
+            $fr, $fg, $fb,
+        );
     }
 
     /**
