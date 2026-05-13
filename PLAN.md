@@ -1,182 +1,182 @@
-# Implementation plan — dskripchenko/php-pdf
+# План реализации — dskripchenko/php-pdf
 
-> Status: **planning / research**. This document captures scope decisions,
-> known problem areas, research questions, and a realistic phasing
-> proposal. Nothing here is final until validated by POCs.
+> Статус: **планирование / research**. Документ фиксирует scope-решения,
+> известные проблемные области, research-вопросы и реалистичный
+> phasing. Ничего здесь не является финальным до валидации через POC'и.
 
-## Contents
+## Содержание
 
-1. [Why a custom library](#why-a-custom-library)
-2. [Why the comparison to php-docx is misleading](#why-the-comparison-to-php-docx-is-misleading)
-3. [Honest scope assessment](#honest-scope-assessment)
-4. [Strategic options](#strategic-options)
-5. [Proposed minimal scope (v0.1)](#proposed-minimal-scope-v01)
-6. [Architecture sketch](#architecture-sketch)
-7. [Research areas (deep dive)](#research-areas-deep-dive)
-8. [Phase plan](#phase-plan)
-9. [Open questions to resolve before Phase 1](#open-questions-to-resolve-before-phase-1)
-10. [References](#references)
+1. [Зачем своя библиотека](#зачем-своя-библиотека)
+2. [Почему сравнение с php-docx обманчиво](#почему-сравнение-с-php-docx-обманчиво)
+3. [Честная оценка scope'а](#честная-оценка-scopeа)
+4. [Стратегические варианты](#стратегические-варианты)
+5. [Предлагаемый минимальный scope (v0.1)](#предлагаемый-минимальный-scope-v01)
+6. [Эскиз архитектуры](#эскиз-архитектуры)
+7. [Research-области (deep dive)](#research-области-deep-dive)
+8. [План по фазам](#план-по-фазам)
+9. [Open questions до Phase 1](#open-questions-до-phase-1)
+10. [Источники](#источники)
 
 ---
 
-## Why a custom library
+## Зачем своя библиотека
 
-`mpdf/mpdf` is the de-facto PHP HTML→PDF engine but it is licensed
-under **GPL-2.0-only** (strong copyleft). For our deployments the
-practical constraints are:
+`mpdf/mpdf` — де-факто PHP HTML→PDF движок, но лицензирован под
+**GPL-2.0-only** (strong copyleft). Практические ограничения для наших
+деплоев:
 
-- ✅ Internal SaaS / hosted operation — GPL v2 doesn't trigger the
-  distribution clause for hosted services
+- ✅ Internal SaaS / hosted operation — GPL v2 не триггерит distribution
+  clause для hosted-сервисов
 - ❌ On-premise deployment / customer-installable product
-- ❌ Embedding in a closed-source SDK / OEM
-- ❌ Proprietary licensing of a bundle that includes mpdf
+- ❌ Embedding в closed-source SDK / OEM
+- ❌ Proprietary licensing бандла с mpdf внутри
 
-A clean-room MIT-licensed replacement removes these constraints and
-puts maintenance ownership on us (same model as
-`dskripchenko/php-docx`).
+Clean-room MIT-замена снимает эти ограничения и переносит maintenance
+ownership на нас (та же модель, что у `dskripchenko/php-docx`).
 
 ---
 
-## Why the comparison to php-docx is misleading
+## Почему сравнение с php-docx обманчиво
 
 | | php-docx | php-pdf |
 |---|---|---|
-| What we emit | OOXML markup (XML) | Final rendered output (positioned text + embedded fonts + image streams) |
-| Who does layout & rendering | Word / Pages / LibreOffice | **Us** (the library) |
-| Reference spec size | ECMA-376 OOXML, ~5000 pages (but XML schemas are mostly straightforward) | ISO 32000-2 PDF, ~970 pages (binary format, content streams are a graphics PostScript subset, font tables need separate parsing) |
-| Mature open-source size | phpword: ~30 kLOC | mpdf: ~150 kLOC |
-| What we ship | ~5 kLOC (php-docx 1.0) | realistic minimum ~15-25 kLOC |
+| Что мы эмитим | OOXML markup (XML) | Финальный отрендеренный output (positioned text + embedded fonts + image streams) |
+| Кто верстает и рендерит | Word / Pages / LibreOffice | **Мы** (библиотека) |
+| Размер reference-спеки | ECMA-376 OOXML, ~5000 страниц (но XML-схемы в большинстве прямолинейны) | ISO 32000-2 PDF, ~970 страниц (бинарный формат, content streams — PostScript-подмножество, font-таблицы требуют отдельного парсинга) |
+| Размер зрелой open-source реализации | phpword: ~30 kLOC | mpdf: ~150 kLOC |
+| Что мы пишем | ~5 kLOC (php-docx 1.0) | реалистичный минимум ~15-25 kLOC |
 
-**Key implication.** php-docx delegates the hardest work (typography,
-layout, rendering, fonts) to downstream consumers. A PDF library has
-no such delegation — we ship the typesetting itself. This is roughly
-the difference between writing markdown vs. typesetting a book.
-
----
-
-## Honest scope assessment
-
-Building a full mpdf-replacement is approximately equivalent to
-building a partial typesetting / browser engine. It is a multi-year
-effort with a long tail of edge-cases (font corner cases, table
-break-inside, browser-vendor-specific CSS behaviours, accessibility
-tags, PDF/A compliance).
-
-Realistic horizon for a minimal-but-useful v0.1:
-
-- **3-4 weeks** POC + risk-burn-down
-- **4-6 months solo** to a production-usable v0.1 covering ~20% of mpdf
-  functionality (the subset relevant to printable's print-form use case)
-- **multi-year long tail** for parity with mpdf on arbitrary HTML input
-
-This is honest. Saying anything shorter is wishcasting.
+**Ключевой вывод.** php-docx делегирует самую сложную работу (типографика,
+layout, rendering, шрифты) downstream-консьюмерам. У PDF-библиотеки
+такой делегации нет — мы сами реализуем typesetting. Это
+приблизительно разница между «написать текст в markdown» и
+«сверстать книгу для печати».
 
 ---
 
-## Strategic options
+## Честная оценка scope'а
 
-We should pick ONE before investing further.
+Построить полноценную замену mpdf — задача уровня частичного
+typesetting / browser-движка. Это multi-year усилия с длинным хвостом
+edge-case'ов (font corner cases, table break-inside, browser-vendor
+CSS-поведение, accessibility-теги, PDF/A compliance).
 
-### Option A: Full custom PDF engine
+Реалистичный горизонт для minimal-but-useful v0.1:
 
-Greenfield clean-room implementation. License: MIT. Estimated effort:
-4-6 months to v0.1, multi-year long tail. **Risk: high** — font
-handling and table layout have famously many edge cases.
+- **3-4 недели** POC + risk-burn-down
+- **4-6 месяцев solo** до production-usable v0.1, покрывающего ~20%
+  функционала mpdf (подмножество, релевантное для print-form use case
+  printable)
+- **multi-year long tail** для паритета с mpdf на произвольном HTML
 
-### Option B: dompdf migration
-
-Replace `mpdf/mpdf` with `dompdf/dompdf` (LGPL-2.1). Effort: 1-2 days.
-**LGPL allows linking from proprietary code** without making the whole
-work copyleft, so this resolves OEM/on-prem distribution. Tradeoff:
-dompdf's CSS3 support is worse, watermark/header/footer API is
-clunkier, max-PDF-version is 1.4.
-
-### Option C: Sidecar (headless Chrome or LibreOffice)
-
-Our PHP code is a thin MIT wrapper; the actual rendering is done by
-`chromium --print-to-pdf` or `soffice --convert-to pdf`. Effort: 1-2
-weeks. License-clean (separate-process delegation, no linking).
-Quality: Chrome ≈ browser-grade (the best on the market); LO ≈ high.
-Cost: ~500 MB binary on the server (Chrome) or ~250 MB (LO).
-
-### Option D: Custom v0.1 of MINIMAL scope, sidecar fallback for everything else
-
-Implement a small custom emitter (~3 kLOC) that handles the most common
-print-form patterns; fall back to sidecar Chrome/LO for cases outside
-its scope. Effort: 2 months to MVP. Pragmatic but adds operational
-complexity.
-
-**Working assumption for this document: Option A.** This plan is built
-around the case where we commit to building it ourselves. If we
-reconsider during POC and switch to B/C, the work isn't wasted —
-sections 6-7 are still relevant for evaluating any PDF library.
+Это честно. Любая более короткая оценка — это wishcasting.
 
 ---
 
-## Proposed minimal scope (v0.1)
+## Стратегические варианты
 
-What v0.1 MUST handle (to be a useful mpdf replacement for printable):
+Прежде чем продолжать инвестировать, нужно выбрать ОДИН.
 
-| Feature | Notes |
+### Вариант A: Полностью своя PDF-библиотека
+
+Greenfield clean-room реализация. Лицензия: MIT. Оценка: 4-6 месяцев
+до v0.1, multi-year long tail. **Риск: высокий** — font handling и
+table layout знамениты количеством edge case'ов.
+
+### Вариант B: Миграция на dompdf
+
+Заменить `mpdf/mpdf` на `dompdf/dompdf` (LGPL-2.1). Effort: 1-2 дня.
+**LGPL позволяет linking из проприетарного кода** без копилефта на
+весь combined work, что решает OEM/on-prem distribution. Tradeoff:
+поддержка CSS3 в dompdf хуже, watermark/header/footer API менее
+удобный, max-PDF-version 1.4.
+
+### Вариант C: Sidecar (headless Chrome или LibreOffice)
+
+Наш PHP-код — тонкая MIT-обёртка; реальный рендер делает
+`chromium --print-to-pdf` или `soffice --convert-to pdf`. Effort:
+1-2 недели. License-clean (separate-process делегация, нет linking).
+Качество: Chrome ≈ browser-grade (лучший на рынке); LO ≈ высокое.
+Cost: ~500 MB binary на сервере (Chrome) или ~250 MB (LO).
+
+### Вариант D: Минимальный custom v0.1 + sidecar-fallback для остального
+
+Реализовать небольшой custom-эмиттер (~3 kLOC) для самых частых
+print-form паттернов; для остальных кейсов fallback'ить на sidecar
+Chrome/LO. Effort: 2 месяца до MVP. Прагматично, но добавляет
+operational complexity.
+
+**Working assumption для этого документа: Вариант A.** План строится
+из расчёта что мы коммитимся строить сами. Если в ходе POC переключимся
+на B/C, работа не пропадёт — секции 6-7 всё равно релевантны для
+оценки любой PDF-библиотеки.
+
+---
+
+## Предлагаемый минимальный scope (v0.1)
+
+Что v0.1 ДОЛЖЕН покрыть (чтобы быть useful mpdf-заменой для printable):
+
+| Фича | Заметки |
 |---|---|
-| Paragraphs, headings, line breaks, page breaks | inline styles only |
-| Inline runs: bold / italic / underline / strikethrough / sup / sub / color / size / fontFamily | from 14 standard fonts + a small set of bundled TTF |
-| Hyperlinks (external + internal anchors) | + bookmarks for TOC |
-| Images: PNG, JPEG | data: URLs from caller; ext rasterized upstream |
-| Tables: rowSpan/colSpan, borders, padding, cell background, percentage widths | break-across-pages OK; complex break-inside-row in long tail |
-| Lists: bullet, decimal, letter, roman, nested ≥ 3 levels | |
-| Headers, footers, watermarks | per-page; first-page / even-page later |
+| Параграфы, заголовки, line-break'и, page-break'и | только inline-styles |
+| Inline-runs: bold / italic / underline / strikethrough / sup / sub / color / size / fontFamily | из 14 стандартных шрифтов + небольшой набор bundled TTF |
+| Hyperlinks (внешние + internal anchors) | + bookmarks для TOC |
+| Картинки: PNG, JPEG | data: URLs от caller'а; ext-источники upstream-rasterized |
+| Таблицы: rowSpan/colSpan, borders, padding, cell background, percentage widths | break-across-pages OK; complex break-inside-row в long tail |
+| Списки: bullet, decimal, letter, roman, nested ≥ 3 уровней | |
+| Headers, footers, watermark'и | per-page; first-page / even-page позже |
 | Page numbers (PAGE / NUMPAGES fields) | |
-| A4 / A3 / A5 / Letter / Legal, portrait + landscape, custom margins | |
-| Embedded Unicode TTF fonts | subset embedding via cmap; ascii-only fast path |
+| A4 / A3 / A5 / Letter / Legal, portrait + landscape, кастомные margins | |
+| Embedded Unicode TTF шрифты | subset-embedding через cmap; ascii-only fast path |
 
-What is explicitly **OUT of v0.1**:
+Что **OUT of v0.1** явно:
 
-- Complex CSS (flexbox, grid, transforms, gradients, multi-column flow)
-- Floats and absolute positioning (limited support only)
-- SVG (rasterize upstream — same approach as printable already uses)
+- Сложный CSS (flexbox, grid, transforms, gradients, multi-column flow)
+- Float'ы и абсолютное позиционирование (только ограниченно)
+- SVG (rasterize upstream — printable уже так делает)
 - Forms / acroforms
 - Encryption / digital signing / PDF/A compliance
 - RTL / BiDi (Arabic, Hebrew) — Phase L (long tail)
 - Hyphenation
-- Justified text (left/right/center only initially)
+- Justified text (только left/right/center на старте)
 - Page-break-inside avoidance, orphan/widow control
 - Annotations, multimedia, JS actions
-- Color management (CMYK / ICC profiles) — sRGB only
+- Color management (CMYK / ICC profiles) — только sRGB
 - Linearization / streaming write
 
-This subset is informed by what printable actually generates (typed
-print forms, mostly tables + paragraphs + images + headers/footers,
-all sRGB, Latin/Cyrillic).
+Это подмножество соответствует тому, что printable реально генерит
+(типовые печатные формы — в основном таблицы + параграфы + картинки +
+header'ы/footer'ы, всё sRGB, Latin/Cyrillic).
 
 ---
 
-## Architecture sketch
+## Эскиз архитектуры
 
 ```
 HTML (inline styles)
        │
-       ▼  Html\Converter  (REUSE from php-docx — already produces our Document AST)
+       ▼  Html\Converter  (REUSE из php-docx — уже даёт наш Document AST)
    Document (AST)
        │
-       ▼  Layout\Engine   (NEW — paginate AST into rendered page list)
-   list<RenderedPage>     ← each page = list<DrawCommand>
-       │                     (text-at-xy, image-at-xy, line, rect, etc.)
+       ▼  Layout\Engine   (НОВЫЙ — paginate AST в список rendered-страниц)
+   list<RenderedPage>     ← каждая page = list<DrawCommand>
+       │                    (text-at-xy, image-at-xy, line, rect, ...)
        │
-       ▼  Pdf\DocumentWriter  (NEW — emit PDF binary)
+       ▼  Pdf\DocumentWriter  (НОВЫЙ — эмиссия PDF-байтов)
    PDF bytes
 ```
 
-Layers:
+Слои:
 
-1. **HTML → AST (reuse from php-docx).** We already have a well-tested
-   `Html\Converter` that produces `Document/Section/Paragraph/Run/Table/
-   ListNode/Image/Hyperlink/Bookmark/Field`. Same AST powers DOCX
-   writer; we add a PDF renderer.
+1. **HTML → AST (reuse из php-docx).** У нас уже есть протестированный
+   `Html\Converter` который выдаёт `Document/Section/Paragraph/Run/Table/
+   ListNode/Image/Hyperlink/Bookmark/Field`. Тот же AST питает DOCX
+   writer; мы добавляем PDF renderer.
 
-2. **Layout engine (new — the hard part).** Takes the AST + page setup,
-   produces a list of `RenderedPage` objects, each containing a flat
-   list of low-level draw commands at absolute coordinates. Handles:
+2. **Layout engine (новый — самая тяжёлая часть).** Принимает AST +
+   page setup, выдаёт список `RenderedPage`-объектов, каждый со
+   списком low-level draw-команд в абсолютных координатах. Обрабатывает:
    - Text shaping & measurement (per font: glyph widths, kerning)
    - Line breaking & wrapping
    - Paragraph spacing & indentation
@@ -184,107 +184,108 @@ Layers:
      spans, page breaks
    - List numbering
    - Image scaling
-   - Headers/footers/watermarks: rendered once per page
+   - Headers/footers/watermarks: per-page рендер
 
-3. **PDF emitter (new — mechanical but specific).** Takes draw commands
-   and emits valid PDF bytes. Handles:
+3. **PDF emitter (новый — механический, но specific).** Принимает
+   draw-команды и эмитит валидный PDF. Обрабатывает:
    - PDF object tree (catalog, page tree, content streams)
    - Cross-reference table & trailer
    - Font dictionary + embedded TTF subset
-   - Image XObject streams (flate-encoded for PNG, DCT for JPEG)
+   - Image XObject streams (Flate-encoded для PNG, DCT для JPEG)
    - Hyperlinks (annotation dictionaries)
    - Bookmarks (outline dictionary)
 
-The AST reuse is the single biggest scope win — the whole HTML parsing
-and inline-styles cascade is "free" from php-docx.
+Reuse AST'а — самый большой scope-выигрыш. Весь HTML-парсинг и
+inline-styles cascade «бесплатны» из php-docx.
 
 ---
 
-## Research areas (deep dive)
+## Research-области (deep dive)
 
-The following are areas where we have **unknown unknowns** until we
-do POCs. Each item below needs research before phase-locking.
+Ниже — области, где у нас **unknown unknowns** до проведения POC'ов.
+Каждый пункт требует ресёрча до фиксации в фазе.
 
-### R1. PDF format choice & target version
+### R1. Выбор PDF-формата и target-версии
 
-- PDF 1.4 (Adobe Reader 5+, 2001) — minimum baseline, no transparency
-  groups, no embedded color profiles
-- PDF 1.7 / ISO 32000-1 (2008) — current de-facto standard, full
+- PDF 1.4 (Adobe Reader 5+, 2001) — минимальная база, без transparency
+  groups, без embedded color profiles
+- PDF 1.7 / ISO 32000-1 (2008) — текущий де-факто стандарт, full
   transparency, encryption, AES
-- PDF 2.0 / ISO 32000-2 (2017+) — improved compression, accessibility
-  tags
+- PDF 2.0 / ISO 32000-2 (2017+) — улучшенная компрессия, accessibility
+  теги
 
-**Question:** Target 1.7 (most balanced)? Or 1.4 for max compatibility?
-mpdf defaults to 1.4.
+**Вопрос:** Целиться в 1.7 (самый сбалансированный)? Или 1.4 для max
+compatibility? mpdf по умолчанию 1.4.
 
 **Research output:** ADR-PDF-002.
 
-### R2. Font handling (THE HARDEST PROBLEM)
+### R2. Font handling (САМАЯ СЛОЖНАЯ ПРОБЛЕМА)
 
-This is the single largest risk area. Sub-questions:
+Это единственная самая большая зона риска. Подвопросы:
 
-#### R2a. Font sourcing
-- 14 standard PDF base-14 fonts (Helvetica, Times, Courier, Symbol,
-  ZapfDingbats × variants) — guaranteed present in viewers but ONLY
-  cover Latin-1 (no Cyrillic!)
-- For Cyrillic / Greek / accented Latin we MUST embed TTF
-- License of bundled TTF — needs to be OFL or Apache (DejaVu? Liberation?
-  Noto?). Critical for MIT distribution.
+#### R2a. Откуда брать шрифты
+- 14 стандартных PDF base-14 (Helvetica, Times, Courier, Symbol,
+  ZapfDingbats × варианты) — гарантированно есть в viewers, но
+  покрывают ТОЛЬКО Latin-1 (Cyrillic — нет!)
+- Для Cyrillic / Greek / accented Latin мы ОБЯЗАНЫ embed'ить TTF
+- Лицензия bundled TTF — должна быть OFL или Apache (DejaVu? Liberation?
+  Noto?). Критично для MIT-distribution.
 
-#### R2b. TTF parsing
-- Tables to read: `head`, `hhea`, `hmtx`, `cmap`, `name`, `OS/2`, `post`,
-  `glyf`, `loca`, `maxp`, optional `kern`/`GPOS`/`GSUB`
-- Subset generation: identify glyphs used, write minimal `glyf`/`loca`
-  with renumbered glyph IDs
-- CMap construction: cid-to-gid (PDF needs character-code → glyph
-  mapping) + ToUnicode (for copy-paste from PDF reader)
+#### R2b. Парсинг TTF
+- Таблицы для чтения: `head`, `hhea`, `hmtx`, `cmap`, `name`, `OS/2`,
+  `post`, `glyf`, `loca`, `maxp`, опционально `kern`/`GPOS`/`GSUB`
+- Subset generation: определить используемые glyph'ы, написать
+  минимальный `glyf`/`loca` с перенумерованными glyph ID
+- CMap construction: cid-to-gid (PDF'у нужен mapping character-code →
+  glyph) + ToUnicode (для copy-paste из PDF-reader'а)
 
-#### R2c. Embedding strategies
-- Fully-embedded (~500 KB per font, fast)
-- Subset-embedded (~5-50 KB depending on content, our target)
-- Reference-only (font assumed installed on viewer — DON'T do this,
-  unreliable)
+#### R2c. Embedding-стратегии
+- Fully-embedded (~500 KB на шрифт, быстро)
+- Subset-embedded (~5-50 KB в зависимости от контента, наш target)
+- Reference-only (шрифт предполагается установленным у viewer'а —
+  НЕ делать, ненадёжно)
 
-#### R2d. Out-of-scope text features (for v0.1)
+#### R2d. Что НЕ покрываем text-features в v0.1
 - Ligatures (fi, fl)
-- Kerning pairs (mostly via GPOS, we'd lose this in v0.1)
+- Kerning pairs (в основном через GPOS, потеряем в v0.1)
 - BiDi / RTL
-- Complex shaping (Arabic, Indic, CJK with sub-positioning)
+- Сложный shaping (Arabic, Indic, CJK с sub-positioning)
 
-**Estimated effort:** 4-6 weeks just for fonts. Hardest single area.
+**Оценочный effort:** 4-6 недель только на шрифты. Самая сложная
+single-область.
 
 **Research outputs:**
-- POC-R2.a: emit a 1-page PDF with embedded DejaVu Sans Regular subset
-  (5 glyphs)
-- POC-R2.b: same with Cyrillic glyphs (а-я + accents)
-- POC-R2.c: measure copy-paste correctness in Acrobat / preview /
+- POC-R2.a: emit'ить 1-страничный PDF с embedded DejaVu Sans Regular
+  subset (5 glyph'ов)
+- POC-R2.b: то же с Cyrillic glyph'ами (а-я + accents)
+- POC-R2.c: проверить корректность copy-paste в Acrobat / preview /
   evince / Foxit
 
-### R3. Layout engine — text wrapping & line breaking
+### R3. Layout engine — text wrapping и line breaking
 
-- Greedy algorithm: O(n), produces ragged-right (good for v0.1)
-- Knuth-Plass: O(n²), produces beautiful justified text (out of v0.1)
+- Greedy: O(n), даёт ragged-right (хорошо для v0.1)
+- Knuth-Plass: O(n²), даёт красивый justified text (out of v0.1)
 - Hyphenation: pyphen / TeX-style — out of v0.1
-- Soft-hyphens (U+00AD) — straightforward to honor
+- Soft-hyphens (U+00AD) — прямолинейно honor'ить
 
-**Research output:** POC-R3.a — wrap a 500-char paragraph in 4
-different fonts; compare visual output to mpdf reference.
+**Research output:** POC-R3.a — wrapнуть 500-символьный параграф в
+4 разных шрифтах; сравнить визуально с mpdf-reference.
 
-### R4. Layout engine — tables
+### R4. Layout engine — таблицы
 
-This is the second-hardest area after fonts. Sub-questions:
+Вторая по сложности область после шрифтов. Подвопросы:
 
 - Column-width resolution: explicit → percentage → auto (content-based)
-- Row-height: line-count × line-height, plus padding, plus border
-- vMerge/rowSpan with page breaks: if a merged cell crosses a page
-  boundary, how do we render the continuation row? mpdf and Word
-  disagree here. CSS spec (CSS-tables) is ambiguous.
+- Row-height: line-count × line-height + padding + border
+- vMerge/rowSpan с page-break'ами: если merged-cell пересекает границу
+  страниц, как рендерить продолжение? mpdf и Word расходятся. CSS-спека
+  (CSS-tables) неоднозначна.
 - Cell padding + border: collapsing vs separate border models?
-- Header repetition on subsequent pages (mpdf `repeat` feature)
+- Header repetition на subsequent pages (mpdf `repeat`)
 
-**Research output:** POC-R4.a — render the polis-vzr-semya template's
-3-column header table (the one we know breaks in nested tables in
-Pages) — does our layout work?
+**Research output:** POC-R4.a — рендер polis-vzr-semya шаблона
+3-column header (известно что у нас nested-таблицы ломаются в Pages) —
+работает ли наш layout?
 
 ### R5. Page-break handling
 
@@ -292,129 +293,128 @@ Pages) — does our layout work?
 - Soft page break (content overflow)
 - Page-break-inside avoidance — out of v0.1
 - Orphans / widows — out of v0.1
-- Keep-with-next (heading should stay with following paragraph) —
+- Keep-with-next (heading should stay with следующим параграфом) —
   out of v0.1
 
-**Research output:** ADR-PDF-003 — page-break policy.
+**Research output:** ADR-PDF-003 — политика page-break.
 
 ### R6. Image handling
 
-- PNG decoding: read width/height from IHDR, decompress IDAT via zlib,
-  re-encode as Flate-compressed PDF image XObject
-- JPEG: pass through as DCT-encoded XObject (no re-encoding!)
-- Transparency: PNG alpha → PDF SMask (separate grayscale image)
-- ICC profile: strip or pass through?
+- PNG decoding: читать width/height из IHDR, decompress IDAT через zlib,
+  re-encode как Flate-compressed PDF image XObject
+- JPEG: pass-through как DCT-encoded XObject (без re-encoding!)
+- Transparency: PNG alpha → PDF SMask (отдельный grayscale image)
+- ICC profile: strip или pass through?
 
-**Research output:** POC-R6.a — embed a PNG with alpha and a JPEG;
-verify rendering in Acrobat + preview.
+**Research output:** POC-R6.a — embed PNG с alpha и JPEG; verify
+рендер в Acrobat + preview.
 
-### R7. Headers, footers, watermarks
+### R7. Headers, footers, watermark'и
 
-- mpdf model: HTML fragment set via `SetHTMLHeader()`, rendered once
-  per page at top
-- Our approach: render header/footer as a separate `RenderedPage`
-  fragment, blit onto each page
-- Watermark: VML-rotated text shape (DOCX style) or simple text with
-  rotation matrix in content stream? Latter is more PDF-native.
+- mpdf-модель: HTML fragment через `SetHTMLHeader()`, рендер per-page
+  сверху
+- Наш подход: рендерить header/footer как отдельный `RenderedPage`
+  fragment, blit на каждую страницу
+- Watermark: VML-rotated text shape (DOCX-style) или просто текст с
+  rotation matrix в content stream? Второе — более PDF-native.
 
-**Research output:** ADR-PDF-004 — header/footer/watermark rendering
-strategy.
+**Research output:** ADR-PDF-004 — стратегия header/footer/watermark.
 
 ### R8. Hyperlinks & bookmarks
 
-- External link: Annotation Dictionary with URI Action
-- Internal link: Annotation Dictionary with GoTo Action pointing to
+- External link: Annotation Dictionary с URI Action
+- Internal link: Annotation Dictionary с GoTo Action, указывающим на
   named destination
-- Bookmark (outline): top-level dict referencing destinations
+- Bookmark (outline): top-level dict с reference на destinations
 - Tab order, accessibility tags — out of v0.1
 
-**Estimated effort:** 1 week.
+**Оценочный effort:** 1 неделя.
 
 ### R9. PDF content streams
 
-- PDF content streams are a graphics PostScript subset:
+- PDF content streams — PostScript-подмножество:
   - `BT/ET` — begin/end text object
   - `Tf` — set font + size
   - `Td/TD/Tm` — text position
   - `Tj/TJ` — show text
-  - `m/l/c/h/S/f/B` — path operators (for lines, rectangles, etc.)
+  - `m/l/c/h/S/f/B` — path операторы (линии, прямоугольники)
   - `q/Q` — push/pop graphics state
   - `cm` — set CTM (transform)
   - `Do` — invoke XObject (image)
-- Stream content is **compressed** (Flate) and **indirect**-referenced
-  from page object
+- Содержимое stream'а **сжато** (Flate) и **indirect**-ссылается из
+  page object
 
-**Research output:** POC-R9.a — emit a 1-page PDF with formatted text +
-1 rectangle + 1 line. ~200 LOC target.
+**Research output:** POC-R9.a — emit 1-страничный PDF с
+форматированным текстом + 1 rectangle + 1 line. Target ~200 LOC.
 
-### R10. Performance / memory
+### R10. Производительность / память
 
-- Large documents: 100+ pages with images — mpdf can OOM
-- Streaming write — emit pages as they're rendered, don't keep all in
-  memory
-- Cross-reference table needs to be at end (we can write it after
-  streaming pages once we know the offsets)
+- Большие документы: 100+ страниц с картинками — mpdf может OOM'ить
+- Streaming write — эмитить страницы по мере рендера, не держать всё
+  в памяти
+- Cross-reference table нужна в конце (можно писать её после
+  streaming-pages, как только знаем offsets)
 
-**Estimated effort:** Phase L (long tail).
+**Оценочный effort:** Phase L (long tail).
 
 ---
 
-## Phase plan
+## План по фазам
 
-### Phase R0: Risk burn-down POCs (3-4 weeks)
+### Phase R0: Risk burn-down POC'и (3-4 недели)
 
-Build minimal PoCs to validate the hardest unknowns BEFORE committing
-to the full implementation. Pass-criteria for each is binary —
-"can we, in principle, do this?" If R2 (fonts) doesn't pass, we
-reconsider strategic option.
+Построить минимальные POC'и чтобы валидировать самые сложные unknowns
+ДО коммита на full implementation. Pass-criteria каждого — бинарный:
+«можно ли это в принципе?». Если R2 (шрифты) не проходит — пересматриваем
+стратегический вариант.
 
-- [ ] POC-R9.a — emit "Hello world" PDF, 1 page, Times-Roman from
+- [ ] POC-R9.a — emit «Hello world» PDF, 1 page, Times-Roman из
       Adobe core 14
-- [ ] POC-R2.a — embed a subsetted DejaVu Sans (5 glyphs); open in
-      Acrobat
+- [ ] POC-R2.a — embed subsetted DejaVu Sans (5 glyph'ов); открыть
+      в Acrobat
 - [ ] POC-R2.b — embed Cyrillic subset (а-я)
-- [ ] POC-R2.c — verify copy-paste correctness in 3 viewers (preview,
-      Acrobat, evince/Foxit)
-- [ ] POC-R6.a — embed a PNG + JPEG; verify rendering
-- [ ] POC-R3.a — wrap a 500-char paragraph in 2 fonts at 2 sizes
+- [ ] POC-R2.c — проверить copy-paste в 3 viewer'ах (preview, Acrobat,
+      evince/Foxit)
+- [ ] POC-R6.a — embed PNG + JPEG; verify рендер
+- [ ] POC-R3.a — wrap 500-символьный параграф, 2 шрифта × 2 размера
 - [ ] POC-R8.a — emit hyperlinks (external + internal anchor)
 - [ ] POC-R5.a — single forced page break + soft page break
       (content overflow)
-- [ ] POC-R4.a — render polis-vzr-semya 3-column header table
+- [ ] POC-R4.a — рендер polis-vzr-semya 3-column header
 
-**Acceptance:** all POCs pass and we write ADR-PDF-001 with go/no-go
-decision.
+**Acceptance:** все POC'и проходят, мы пишем ADR-PDF-001 с go/no-go.
 
-### Phase 1: PDF skeleton + standard fonts (2-3 weeks)
+### Phase 1: PDF skeleton + стандартные шрифты (2-3 недели)
 
-After R0 success. Output: minimum-viable text-only PDFs.
+После успешного R0. Output: минимальные text-only PDF.
 
 - `Pdf\Document` / `Pdf\Page` / `Pdf\Stream` value-objects
-- Catalog / page tree / cross-reference table emission
-- Adobe core 14 fonts as referenced (no embedding)
-- Plain text rendering with absolute positioning
+- Эмиссия catalog / page tree / cross-reference table
+- Adobe core 14 шрифты as referenced (без embedding)
+- Plain text rendering с абсолютным позиционированием
 - One paragraph per page, fixed layout
 
-**Acceptance:** can emit a 1-page "lorem ipsum" PDF in Times-Roman 12pt.
+**Acceptance:** можем эмитить 1-страничный «lorem ipsum» PDF в
+Times-Roman 12pt.
 
-### Phase 2: TTF subset embedding (4-6 weeks)
+### Phase 2: TTF subset embedding (4-6 недель)
 
-The single hardest phase. Output: arbitrary Unicode characters
-rendered correctly.
+Самая сложная фаза. Output: произвольные Unicode-символы рендерятся
+корректно.
 
 - TTF table parser
 - Subset generation
-- CMap (cid-to-gid) + ToUnicode CMap emission
-- Font dictionary with Type0 composite font + CIDFontType2 descendant
-- Bundled fonts: DejaVu Sans + Serif + Mono (OFL license)
+- CMap (cid-to-gid) + ToUnicode CMap эмиссия
+- Font dictionary с Type0 composite font + CIDFontType2 descendant
+- Bundled шрифты: DejaVu Sans + Serif + Mono (OFL)
 
-**Acceptance:** can render arbitrary Cyrillic and accented Latin text
-with copy-paste-correctness in 3 viewers.
+**Acceptance:** можем рендерить произвольный Cyrillic + accented Latin
+текст с copy-paste-correctness в 3 viewer'ах.
 
-### Phase 3: Layout engine — paragraphs (3 weeks)
+### Phase 3: Layout engine — параграфы (3 недели)
 
-Output: HTML→PDF for the simplest case (paragraphs + headings + line
-breaks).
+Output: HTML→PDF для простейшего случая (параграфы + заголовки +
+line-break'и).
 
 - AST walker → layout engine
 - Text shaping & measurement
@@ -422,114 +422,116 @@ breaks).
 - Paragraph spacing + alignment (left/right/center; no justify yet)
 - Page overflow
 
-**Acceptance:** render a 5-page-long Wikipedia article from HTML.
+**Acceptance:** рендер 5-страничной Wikipedia-статьи из HTML.
 
-### Phase 4: Images (2 weeks)
+### Phase 4: Картинки (2 недели)
 
-- PNG decoding & re-encoding as Flate XObject
-- PNG with alpha → SMask
+- PNG decoding & re-encoding как Flate XObject
+- PNG с alpha → SMask
 - JPEG pass-through
-- Image positioning & scaling
+- Image позиционирование + scaling
 
-**Acceptance:** render a doc with 5 mixed-format images.
+**Acceptance:** рендер документа с 5 mixed-format картинками.
 
-### Phase 5: Tables (4-6 weeks)
+### Phase 5: Таблицы (4-6 недель)
 
 - Column width resolution
 - Row height computation
 - gridSpan / rowSpan
 - Cell padding, borders, background
-- Table break across pages (no break-inside-row in v0.1)
+- Table break-across-pages (без break-inside-row в v0.1)
 
-**Acceptance:** render the polis-vzr-semya template equivalently to
-mpdf (visual diff ≤ 5%).
+**Acceptance:** рендер polis-vzr-semya шаблона эквивалентно mpdf
+(visual diff ≤ 5%).
 
-### Phase 6: Lists (1 week)
+### Phase 6: Списки (1 неделя)
 
-- Bullet / numbered with arbitrary nesting
-- Numbering formats (decimal / letter / roman)
-- ListFormat enum from php-docx already
+- Bullet / numbered с произвольным nesting
+- Numbering формы (decimal / letter / roman)
+- ListFormat enum уже есть из php-docx
 
-**Acceptance:** render nested mixed lists, 3 levels deep.
+**Acceptance:** рендер вложенных mixed-списков, 3 уровня глубины.
 
-### Phase 7: Hyperlinks + bookmarks (1 week)
+### Phase 7: Hyperlinks + bookmarks (1 неделя)
 
 - External link annotations
 - Internal anchor + destination
-- Outline tree (bookmark side panel in PDF readers)
+- Outline tree (bookmark side-panel в PDF reader'ах)
 
-### Phase 8: Headers / footers / watermarks (2 weeks)
+### Phase 8: Header'ы / footer'ы / watermark'и (2 недели)
 
-- Per-page rendering
+- Per-page рендер
 - Field codes (PAGE / NUMPAGES) substitution
-- Watermark with rotation + opacity
+- Watermark с rotation + opacity
 
-### Phase 9: Page setup & advanced (2 weeks)
+### Phase 9: Page setup + advanced (2 недели)
 
 - A4 / A3 / A5 / Letter / Legal
 - Portrait + Landscape
 - Custom margins
-- First-page / even-page header variants (if not done in Phase 8)
+- First-page / even-page header варианты (если не сделаны в Phase 8)
 
-### Phase 10: Integration with printable (2 weeks)
+### Phase 10: Интеграция в printable (2 недели)
 
-- Replace `App\Render\Emitter\PdfEmitter` to use `dskripchenko/php-pdf`
-- A/B switch via `config/admin.php` `pdf.driver` (mpdf | php-pdf)
-- Reference corpus: render all printable templates with both engines,
+- Заменить `App\Render\Emitter\PdfEmitter` на использование
+  `dskripchenko/php-pdf`
+- A/B switch через `config/admin.php` `pdf.driver` (mpdf | php-pdf)
+- Reference corpus: рендер всех printable-шаблонов обоими движками,
   visual-diff threshold ≤ 5% pixel
-- Behind feature flag until parity confirmed
+- За feature-flag'ом до подтверждения parity
 
-### Phase L: Long tail (indefinite)
+### Phase L: Long tail (бессрочно)
 
 - Justified text
 - Hyphenation
 - Page-break-inside avoidance + orphan/widow control
-- More complex tables (break-inside-row, etc.)
-- CMYK & ICC profile support
+- Более сложные таблицы (break-inside-row и т.д.)
+- CMYK + ICC profile support
 - RTL / BiDi
-- Acroforms (only if real demand)
-- Digital signing (only if real demand)
-- PDF/A compliance (only if real demand)
+- Acroforms (только если будет реальный спрос)
+- Digital signing (только если будет реальный спрос)
+- PDF/A compliance (только если будет реальный спрос)
 
 ---
 
-## Open questions to resolve before Phase 1
+## Open questions до Phase 1
 
-1. **Strategic option confirmation.** Confirm Option A (build it) vs
-   B (dompdf) vs C (sidecar). If A, this plan applies.
-2. **Bundled font selection.** DejaVu? Liberation? Noto Sans? License
-   must allow MIT redistribution (OFL ≥ 1.1 OK, Liberation OK, Noto OK).
-3. **PDF target version.** 1.4 or 1.7?
-4. **Glyph layout fidelity floor.** Are we OK without kerning for v0.1?
-   Without ligatures? mpdf has these for free via FPDF lineage.
-5. **Reuse Html\Converter from php-docx?** Yes-likely. Means we depend
-   on dskripchenko/php-docx OR we extract Converter into a third
-   shared package (`dskripchenko/php-doc-ast`?).
-6. **Color management.** sRGB-only for v0.1 (skip ICC)?
-7. **Maintenance budget.** Solo or with help? Solo means everything in
-   this plan stretches 1.5-2×.
+1. **Подтверждение стратегического варианта.** Подтвердить Вариант A
+   (строим) vs B (dompdf) vs C (sidecar). Если A — этот план применим.
+2. **Выбор bundled-шрифтов.** DejaVu? Liberation? Noto Sans? Лицензия
+   должна позволять MIT-перераспределение (OFL ≥ 1.1 OK, Liberation OK,
+   Noto OK).
+3. **Target PDF-версия.** 1.4 или 1.7?
+4. **Floor по glyph-fidelity.** Согласны ли мы на отсутствие kerning
+   в v0.1? Без ligatures? mpdf даёт эти штуки даром через FPDF-наследие.
+5. **Reuse Html\Converter из php-docx?** Скорее всего да. Это значит
+   мы depend'им на dskripchenko/php-docx ИЛИ выносим Converter
+   в третий shared-пакет (`dskripchenko/php-doc-ast`?).
+6. **Color management.** sRGB-only для v0.1 (skip ICC)?
+7. **Maintenance-бюджет.** Solo или с помощью? Solo означает что всё
+   в этом плане растягивается в 1.5-2×.
 
 ---
 
-## References
+## Источники
 
-Specification & reverse-engineering material to read:
+Спецификации и reverse-engineering материалы для чтения:
 
-- **ISO 32000-2** (PDF 2.0) — the spec. 970 pages. Available free from
-  ISO.
-- **Adobe PDF Reference 1.7** — older but widely-available PDF of PDF
-  1.7 spec.
-- **TrueType spec** (Apple TT 1.66, OpenType OTSpec 1.9) — for font
-  tables.
-- **mpdf source code** — for reading-only, never copying. License
-  blocks code reuse.
-- **PDFBox** (Apache 2.0) — Java PDF library; license-compatible for
-  reading reference behavior.
-- **TCPDF** (LGPL-3) — read-only reference; can't copy code.
-- **iText 7 community** (AGPL) — DO NOT READ to avoid license
-  contamination.
+- **ISO 32000-2** (PDF 2.0) — спека. 970 страниц. Доступна бесплатно
+  от ISO.
+- **Adobe PDF Reference 1.7** — старее, но более widely-доступная PDF
+  спецификации 1.7.
+- **TrueType spec** (Apple TT 1.66, OpenType OTSpec 1.9) — для font
+  таблиц.
+- **mpdf source code** — для чтения ТОЛЬКО, никогда не копировать.
+  Лицензия блокирует code-reuse.
+- **PDFBox** (Apache 2.0) — Java PDF библиотека; license-compatible
+  для чтения reference-поведения.
+- **TCPDF** (LGPL-3) — read-only reference; нельзя копировать код.
+- **iText 7 community** (AGPL) — НЕ ЧИТАТЬ во избежание license-
+  контаминации.
 
-Clean-room implementation note: developers reading mpdf or iText for
-**reference** should NOT then write code that resembles those projects.
-Implement from specs only. If we want to be conservative, restrict to
-spec-reading and PDFBox (Apache).
+Замечание про clean-room: разработчики, читающие mpdf или iText для
+**reference**, НЕ должны затем писать код, похожий на эти проекты.
+Реализовывать только из спеки. Если хотим перестраховаться —
+ограничиться spec-чтением и PDFBox (Apache).
