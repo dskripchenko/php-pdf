@@ -160,6 +160,25 @@ final class ContentStream
      * Stroked rectangle (только outline, без fill). RGB stroke color
      * 0..1, line width в pt.
      */
+    /**
+     * Phase 44: stroked straight line from (x1,y1) to (x2,y2).
+     */
+    public function strokeLine(
+        float $x1, float $y1, float $x2, float $y2,
+        float $lineWidthPt = 0.5,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        $this->body .= 'q'."\n";
+        $this->body .= sprintf("%s w\n", $this->formatNumber($lineWidthPt));
+        $this->body .= sprintf("%s %s %s RG\n", $this->formatNumber($r), $this->formatNumber($g), $this->formatNumber($b));
+        $this->body .= sprintf("%s %s m\n", $this->formatNumber($x1), $this->formatNumber($y1));
+        $this->body .= sprintf("%s %s l\n", $this->formatNumber($x2), $this->formatNumber($y2));
+        $this->body .= 'S'."\n";
+        $this->body .= 'Q'."\n";
+
+        return $this;
+    }
+
     public function strokeRectangle(
         float $xPt,
         float $yPt,

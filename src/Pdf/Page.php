@@ -264,6 +264,19 @@ final class Page
     }
 
     /**
+     * Phase 44: stroked straight line.
+     */
+    public function strokeLine(
+        float $x1, float $y1, float $x2, float $y2,
+        float $lineWidthPt = 0.5,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        $this->stream->strokeLine($x1, $y1, $x2, $y2, $lineWidthPt, $r, $g, $b);
+
+        return $this;
+    }
+
+    /**
      * Draw image (PNG/JPEG) at (x, y) with scaling to (widthPt, heightPt).
      */
     public function drawImage(PdfImage $image, float $x, float $y, float $widthPt, float $heightPt): self

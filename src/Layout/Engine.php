@@ -12,6 +12,7 @@ use Dskripchenko\PhpPdf\Element\Field;
 use Dskripchenko\PhpPdf\Font\FontProvider;
 use Dskripchenko\PhpPdf\Font\PdfFontResolver;
 use Dskripchenko\PhpPdf\Element\Barcode;
+use Dskripchenko\PhpPdf\Element\BarChart;
 use Dskripchenko\PhpPdf\Element\ColumnSet;
 use Dskripchenko\PhpPdf\Element\FormField;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
@@ -246,8 +247,129 @@ final class Engine
             $block instanceof Barcode => $this->renderBarcode($block, $ctx),
             $block instanceof ColumnSet => $this->renderColumnSet($block, $ctx),
             $block instanceof FormField => $this->renderFormField($block, $ctx),
+            $block instanceof BarChart => $this->renderBarChart($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 44: Bar chart rendering — fillRect для bars, line operators
+     * для axes, showText для labels + title.
+     *
+     * Layout (vertical bars):
+     *  - Title at top (if set)
+     *  - Plot area: bars rise from x-axis at bottom
+     *  - X-axis labels under bars
+     *  - Y-axis: leftmost vertical line + max value label at top
+     */
+    private function renderBarChart(BarChart $bc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $bc->spaceBeforePt;
+
+        $totalW = min($bc->widthPt, $ctx->contentWidth);
+        $totalH = $bc->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($bc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        // Reserve title strip at top, label strip at bottom.
+        $titleStripH = $bc->title !== null ? $bc->titleSizePt + 4.0 : 0;
+        $labelStripH = $bc->axisLabelSizePt + 4.0;
+        $axisLabelPaddingLeft = 32.0; // Reserve space для y-axis values.
+
+        $plotTop = $topY - $titleStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        // Title.
+        if ($bc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $bc->titleSizePt))->widthPt($bc->title)
+                : mb_strlen($bc->title, 'UTF-8') * $bc->titleSizePt * 0.5;
+            $titleX = $blockX + ($totalW - $titleW) / 2;
+            $titleY = $topY - $bc->titleSizePt;
+            if ($this->defaultFont !== null) {
+                $ctx->currentPage->showEmbeddedText($bc->title, $titleX, $titleY, $this->defaultFont, $bc->titleSizePt);
+            } else {
+                $ctx->currentPage->showText($bc->title, $titleX, $titleY, $this->fallbackStandard, $bc->titleSizePt);
+            }
+        }
+
+        // Compute max value для scaling.
+        $maxValue = 0.0;
+        foreach ($bc->bars as $bar) {
+            if ($bar['value'] > $maxValue) {
+                $maxValue = $bar['value'];
+            }
+        }
+        if ($maxValue <= 0) {
+            $maxValue = 1.0;
+        }
+
+        // Y-axis vertical line.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        // X-axis horizontal line.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        // Y-axis max label.
+        $maxLabel = $this->formatChartNumber($maxValue);
+        $maxLabelW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $bc->axisLabelSizePt))->widthPt($maxLabel)
+            : mb_strlen($maxLabel, 'UTF-8') * $bc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $maxLabel, $plotLeft - $maxLabelW - 2, $plotTop - $bc->axisLabelSizePt * 0.5, $bc->axisLabelSizePt);
+
+        // Bars.
+        $n = count($bc->bars);
+        $gapRatio = 0.3; // 30% gap, 70% bar width.
+        $slotW = $plotW / max($n, 1);
+        $barW = $slotW * (1 - $gapRatio);
+
+        foreach ($bc->bars as $i => $bar) {
+            $h = ($bar['value'] / $maxValue) * $plotH;
+            $x = $plotLeft + $i * $slotW + ($slotW - $barW) / 2;
+            $y = $plotBottom;
+            $hex = $bar['color'] ?? $bc->defaultBarColor;
+            [$r, $g, $b] = $this->hexToRgb($hex);
+            $ctx->currentPage->fillRect($x, $y, $barW, $h, $r, $g, $b);
+
+            // X-axis label under bar.
+            $label = $bar['label'];
+            $labelW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $bc->axisLabelSizePt))->widthPt($label)
+                : mb_strlen($label, 'UTF-8') * $bc->axisLabelSizePt * 0.5;
+            $labelX = $x + ($barW - $labelW) / 2;
+            $this->chartText($ctx->currentPage, $label, $labelX, $plotBottom - $bc->axisLabelSizePt - 2, $bc->axisLabelSizePt);
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
+    private function chartText(\Dskripchenko\PhpPdf\Pdf\Page $page, string $text, float $x, float $y, float $sizePt): void
+    {
+        if ($this->defaultFont !== null) {
+            $page->showEmbeddedText($text, $x, $y, $this->defaultFont, $sizePt);
+        } else {
+            $page->showText($text, $x, $y, $this->fallbackStandard, $sizePt);
+        }
+    }
+
+    private function formatChartNumber(float $value): string
+    {
+        if ($value === floor($value)) {
+            return (string) (int) $value;
+        }
+
+        return rtrim(rtrim(sprintf('%.2F', $value), '0'), '.');
     }
 
     /**
