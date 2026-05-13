@@ -87,7 +87,34 @@ final class Engine
         public readonly StandardFont $fallbackStandard = StandardFont::Helvetica,
         public readonly float $defaultFontSizePt = 11,
         public readonly float $defaultLineHeightMult = 1.2,
+        /**
+         * Optional font-variants. Если заданы, используются для Run.style.
+         * bold/italic вместо $defaultFont (Phase 10c font matcher). Если
+         * не заданы, defaultFont применяется ко всем стилям.
+         */
+        public readonly ?PdfFont $boldFont = null,
+        public readonly ?PdfFont $italicFont = null,
+        public readonly ?PdfFont $boldItalicFont = null,
     ) {}
+
+    /**
+     * Resolves embedded font для given RunStyle bold/italic комбо.
+     * Fallback к defaultFont если конкретного variant'а нет.
+     */
+    private function resolveEmbeddedFont(RunStyle $style): ?PdfFont
+    {
+        if ($style->bold && $style->italic) {
+            return $this->boldItalicFont ?? $this->boldFont ?? $this->italicFont ?? $this->defaultFont;
+        }
+        if ($style->bold) {
+            return $this->boldFont ?? $this->defaultFont;
+        }
+        if ($style->italic) {
+            return $this->italicFont ?? $this->defaultFont;
+        }
+
+        return $this->defaultFont;
+    }
 
     public function render(AstDocument $document): PdfDocument
     {
@@ -722,6 +749,10 @@ final class Engine
             }
 
             $this->showText($ctx->currentPage, $word, $x, $baselineY, $sizePt, $style);
+            // Underline / strikethrough — draw line below/through glyphs.
+            if ($style->underline || $style->strikethrough) {
+                $this->drawTextDecorations($ctx->currentPage, $x, $baselineY, $wordWidth, $sizePt, $style);
+            }
             $x += $wordWidth;
             if ($linkRef !== null) {
                 $linkLastX = $x;
@@ -761,30 +792,58 @@ final class Engine
     }
 
     /**
-     * Renders text using engine's resolved font.
+     * Draws underline и/или strikethrough линии под/через rendered word.
+     *
+     * Position relative to baseline (PDF coordinate system Y растёт вверх):
+     *  - Underline: ~ baselineY - sizePt × 0.12 (чуть ниже baseline)
+     *  - Strike:    ~ baselineY + sizePt × 0.28 (через x-height)
+     * Stroke width: sizePt × 0.055 (тоньше чем глифы).
+     * Color: текущий цвет текста (Run.style.color), default чёрный.
+     */
+    private function drawTextDecorations(Page $page, float $x, float $baselineY, float $width, float $sizePt, RunStyle $style): void
+    {
+        $lineWidth = max(0.4, $sizePt * 0.055);
+        [$r, $g, $b] = $style->color !== null
+            ? $this->hexToRgb($style->color)
+            : [0.0, 0.0, 0.0];
+
+        if ($style->underline) {
+            $y = $baselineY - $sizePt * 0.12;
+            $page->strokeRect($x, $y, $width, 0, $lineWidth, $r, $g, $b);
+        }
+        if ($style->strikethrough) {
+            $y = $baselineY + $sizePt * 0.28;
+            $page->strokeRect($x, $y, $width, 0, $lineWidth, $r, $g, $b);
+        }
+    }
+
+    /**
+     * Renders text using engine's resolved font (bold/italic variant если
+     * registered, иначе defaultFont, иначе fallbackStandard).
      */
     private function showText(Page $page, string $text, float $x, float $baselineY, float $sizePt, RunStyle $style): void
     {
-        if ($this->defaultFont !== null) {
-            $page->showEmbeddedText($text, $x, $baselineY, $this->defaultFont, $sizePt);
+        $font = $this->resolveEmbeddedFont($style);
+        if ($font !== null) {
+            $page->showEmbeddedText($text, $x, $baselineY, $font, $sizePt);
         } else {
             $page->showText($text, $x, $baselineY, $this->fallbackStandard, $sizePt);
         }
     }
 
     /**
-     * Measures width в pt (using engine's resolved font).
+     * Measures width в pt — использует resolveEmbeddedFont для точных
+     * metrics bold/italic variant'а.
      */
     private function measureWidth(string $text, RunStyle $style): float
     {
-        if ($this->defaultFont !== null) {
-            $m = new TextMeasurer($this->defaultFont, $style->sizePt ?? $this->defaultFontSizePt);
+        $font = $this->resolveEmbeddedFont($style);
+        if ($font !== null) {
+            $m = new TextMeasurer($font, $style->sizePt ?? $this->defaultFontSizePt);
 
             return $m->widthPt($text);
         }
-        // Fallback: estimate widths from standard font metrics. Для
-        // Phase 3 минимума — простая monospace-like estimation
-        // (sizePt × 0.5 на character).
+        // Fallback: estimate widths from standard font metrics.
         $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
 
         return mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
