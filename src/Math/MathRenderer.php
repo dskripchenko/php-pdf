@@ -60,8 +60,65 @@ final class MathRenderer
     public static function parse(string $tex): array
     {
         $pos = 0;
+        $tokens = self::parseGroup($tex, $pos, false);
 
-        return self::parseGroup($tex, $pos, false);
+        // Phase 80: combine big operators (\sum, \int, \prod, \lim,
+        // \bigcup, \bigcap) с following sub/sup → 'bigop' token.
+        return self::combineBigOperators($tokens);
+    }
+
+    /**
+     * Phase 80: walk tokens, merge sequences (text=∑/∏/∫, sub, sup?) или
+     * (text, sup, sub?) → bigop token.
+     *
+     * @param  list<array<string, mixed>>  $tokens
+     * @return list<array<string, mixed>>
+     */
+    private static function combineBigOperators(array $tokens): array
+    {
+        $bigOpChars = ['∑', '∏', '∫', "\u{22C3}", "\u{22C2}", "\u{2295}", "\u{2297}"]; // sum, prod, int, bigcup, bigcap, oplus, otimes
+        $bigOpNames = ['lim']; // \lim — emitted как 'lim' text by unknown-command fallback.
+        $out = [];
+        $i = 0;
+        $n = count($tokens);
+        while ($i < $n) {
+            $tok = $tokens[$i];
+            $isBigOp = false;
+            if ($tok['type'] === 'text') {
+                if (in_array($tok['value'], $bigOpChars, true) || in_array($tok['value'], $bigOpNames, true)) {
+                    $isBigOp = true;
+                }
+            }
+            if (! $isBigOp) {
+                $out[] = $tok;
+                $i++;
+
+                continue;
+            }
+            // Look ahead: collect optional sup and sub tokens.
+            $sup = null;
+            $sub = null;
+            while ($i + 1 < $n && in_array($tokens[$i + 1]['type'], ['sup', 'sub'], true)) {
+                $next = $tokens[$i + 1];
+                if ($next['type'] === 'sup' && $sup === null) {
+                    $sup = $next['value'];
+                    $i++;
+                } elseif ($next['type'] === 'sub' && $sub === null) {
+                    $sub = $next['value'];
+                    $i++;
+                } else {
+                    break;
+                }
+            }
+            if ($sup !== null || $sub !== null) {
+                $out[] = ['type' => 'bigop', 'symbol' => $tok['value'], 'sup' => $sup, 'sub' => $sub];
+            } else {
+                $out[] = $tok;
+            }
+            $i++;
+        }
+
+        return $out;
     }
 
     /**
@@ -345,6 +402,11 @@ final class MathRenderer
             ) + 4.0,
             'sqrt' => self::measureWidth($tok['value'], $fontSize, $font) + $fontSize * 0.6,
             'matrix' => self::measureMatrix($tok['rows'], $tok['variant'], $fontSize, $font),
+            'bigop' => max(
+                mb_strlen($tok['symbol'], 'UTF-8') * $charWidth * 1.3,
+                $tok['sup'] !== null ? self::measureWidth($tok['sup'], $fontSize * 0.7, $font) : 0,
+                $tok['sub'] !== null ? self::measureWidth($tok['sub'], $fontSize * 0.7, $font) : 0,
+            ),
             default => 0.0,
         };
     }
@@ -457,6 +519,33 @@ final class MathRenderer
 
             case 'matrix':
                 return self::renderMatrix($tok['rows'], $tok['variant'], $page, $x, $baselineY, $fontSize, $font);
+
+            case 'bigop':
+                // Phase 80: big operator с centered limits above/below.
+                $sym = $tok['symbol'];
+                $symW = mb_strlen($sym, 'UTF-8') * $fontSize * 0.55;
+                $supSize = $fontSize * 0.7;
+                $subSize = $fontSize * 0.7;
+                $supW = $tok['sup'] !== null ? self::measureWidth($tok['sup'], $supSize, $font) : 0;
+                $subW = $tok['sub'] !== null ? self::measureWidth($tok['sub'], $subSize, $font) : 0;
+                $totalW = max($symW, $supW, $subW);
+
+                // Symbol at center; sup above, sub below.
+                $symX = $x + ($totalW - $symW) / 2;
+                self::drawText($page, $sym, $symX, $baselineY, $fontSize * 1.2, $font);
+
+                if ($tok['sup'] !== null) {
+                    $supX = $x + ($totalW - $supW) / 2;
+                    $supY = $baselineY + $fontSize * 0.95;
+                    self::render($tok['sup'], $page, $supX, $supY, $supSize, $font);
+                }
+                if ($tok['sub'] !== null) {
+                    $subX = $x + ($totalW - $subW) / 2;
+                    $subY = $baselineY - $fontSize * 0.4;
+                    self::render($tok['sub'], $page, $subX, $subY, $subSize, $font);
+                }
+
+                return $x + $totalW + $fontSize * 0.2;
         }
 
         return $x;
