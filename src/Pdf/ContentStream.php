@@ -276,6 +276,17 @@ final class ContentStream
     }
 
     /**
+     * Phase 86: Begin /Artifact marked content (PDF/UA — content
+     * excluded from struct tree / screen readers). No MCID.
+     */
+    public function emitBeginArtifact(string $type = 'Pagination'): self
+    {
+        $this->body .= sprintf("/Artifact << /Type /%s >> BDC\n", $type);
+
+        return $this;
+    }
+
+    /**
      * Phase 45: filled polygon. Points = list<[x, y]>; closed path.
      *
      * @param  list<array{0: float, 1: float}>  $points

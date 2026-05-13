@@ -1735,6 +1735,22 @@ final class Engine
         }
         $section = $this->currentSection;
 
+        // Phase 86: PDF/UA — header/footer/watermark = /Artifact (excluded
+        // from struct tree / screen readers). Only emit если есть что
+        // рисовать.
+        $taggedPdf = $ctx->pdf->isTagged();
+        $hasAnything = $section->hasWatermark()
+            || $section->effectiveHeaderBlocksFor($this->currentPageNumber($ctx)) !== []
+            || $section->effectiveFooterBlocksFor($this->currentPageNumber($ctx)) !== [];
+        $artifactOpen = false;
+        $savedSkip = false;
+        if ($taggedPdf && $hasAnything) {
+            $ctx->currentPage->beginArtifact('Pagination');
+            $artifactOpen = true;
+            $savedSkip = $ctx->skipParagraphTag;
+            $ctx->skipParagraphTag = true;
+        }
+
         // Watermark — рисуется первым на странице, чтобы оказаться под
         // content'ом (PDF z-order: позже = выше). Image первым, чтобы
         // text-watermark (если оба заданы) лежал поверх.
@@ -1771,6 +1787,7 @@ final class Engine
                 bottomY: $pageHeight - $setup->margins->topPt + 4.0,
                 topY: $pageHeight - 8.0,
                 pageSetup: $setup,
+                skipParagraphTag: $ctx->skipParagraphTag,
             );
             foreach ($headerBlocks as $block) {
                 $this->renderBlock($block, $headerArea);
@@ -1779,7 +1796,6 @@ final class Engine
 
         $footerBlocks = $section->effectiveFooterBlocksFor($pageNum);
         if ($footerBlocks !== []) {
-            // Estimate footer height up-front (для bottom alignment).
             $footerHeight = 0;
             foreach ($footerBlocks as $block) {
                 $footerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
@@ -1793,10 +1809,17 @@ final class Engine
                 bottomY: 4.0,
                 topY: $setup->margins->bottomPt - 4.0 + $footerHeight,
                 pageSetup: $setup,
+                skipParagraphTag: $ctx->skipParagraphTag,
             );
             foreach ($footerBlocks as $block) {
                 $this->renderBlock($block, $footerArea);
             }
+        }
+
+        // Phase 86: close /Artifact + restore tag suppression.
+        if ($artifactOpen) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->skipParagraphTag = $savedSkip;
         }
     }
 

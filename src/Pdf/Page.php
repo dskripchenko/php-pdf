@@ -412,6 +412,17 @@ final class Page
     }
 
     /**
+     * Phase 86: Begin /Artifact marked content (PDF/UA — content
+     * excluded from struct tree).
+     */
+    public function beginArtifact(string $type = 'Pagination'): self
+    {
+        $this->stream->emitBeginArtifact($type);
+
+        return $this;
+    }
+
+    /**
      * Phase 44: stroked straight line.
      */
     public function strokeLine(
