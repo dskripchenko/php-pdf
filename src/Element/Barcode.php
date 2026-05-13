@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Dskripchenko\PhpPdf\Element;
 
+use Dskripchenko\PhpPdf\Barcode\QrEccLevel;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
@@ -33,5 +34,7 @@ final readonly class Barcode implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 0,
+        // Phase 37: ECC level для 2D barcodes (QR). Linear barcodes ignore.
+        public ?QrEccLevel $eccLevel = null,
     ) {}
 }

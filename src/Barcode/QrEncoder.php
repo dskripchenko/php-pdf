@@ -5,56 +5,76 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 36: QR Code encoder (minimal subset).
+ * Phase 36-37: QR Code encoder.
  *
  * ISO/IEC 18004:2015.
  *
  * Supported:
- *  - Byte mode only (ECI / Kanji / Alphanumeric / Numeric — deferred).
- *  - Error correction level L (lowest, max data capacity).
- *  - Versions 1..10 (max ~271 bytes для ECC L).
+ *  - Byte mode (ECI / Kanji / Alphanumeric / Numeric — Phase 38).
+ *  - Error correction levels L / M / Q / H:
+ *    - V1..V4: все 4 levels.
+ *    - V5..V10: только ECC L (V5+ ECC M/Q/H deferred — mixed-block layout).
+ *  - Versions 1..10.
  *  - Mask pattern 0 (i+j mod 2 = 0) — single pattern, без best-mask
- *    selection (slightly less optimal scanning, но decoders OK).
- *
- * Capacity (ECC L, byte mode):
- *   V1=17, V2=32, V3=53, V4=78, V5=106, V6=134, V7=154, V8=192, V9=230,
- *   V10=271.
+ *    selection.
  *
  * Output — 2D bool matrix; true = black module.
  */
 final class QrEncoder
 {
     /**
-     * ECC L capacity (data bytes) для versions 1..10.
+     * Byte mode data capacity по [version][ecc-level].
+     * Capacity = data_codewords - overhead_bytes(2 для V1-9, 3 для V10).
      */
-    private const CAPACITY_L = [
-        1 => 17,
-        2 => 32,
-        3 => 53,
-        4 => 78,
-        5 => 106,
-        6 => 134,
-        7 => 154,
-        8 => 192,
-        9 => 230,
-        10 => 271,
+    private const CAPACITY = [
+        1 => ['L' => 17, 'M' => 14, 'Q' => 11, 'H' => 7],
+        2 => ['L' => 32, 'M' => 26, 'Q' => 20, 'H' => 14],
+        3 => ['L' => 53, 'M' => 42, 'Q' => 32, 'H' => 24],
+        4 => ['L' => 78, 'M' => 62, 'Q' => 46, 'H' => 34],
+        5 => ['L' => 106],
+        6 => ['L' => 134],
+        7 => ['L' => 154],
+        8 => ['L' => 192],
+        9 => ['L' => 230],
+        10 => ['L' => 271],
     ];
 
     /**
-     * ECC L: total codewords - data codewords = ecc codewords per block.
-     * Tuple [data_codewords, total_codewords, ecc_per_block, num_blocks].
+     * ECC parameters: [data_codewords, total_codewords, ecc_per_block, num_blocks].
+     * Indexed by [version][ecc-level-string].
      */
-    private const ECC_L_PARAMS = [
-        1 => [19, 26, 7, 1],
-        2 => [34, 44, 10, 1],
-        3 => [55, 70, 15, 1],
-        4 => [80, 100, 20, 1],
-        5 => [108, 134, 26, 1],
-        6 => [136, 172, 18, 2],
-        7 => [156, 196, 20, 2],
-        8 => [194, 242, 24, 2],
-        9 => [232, 292, 30, 2],
-        10 => [274, 346, 18, 2],
+    private const ECC_PARAMS = [
+        1 => [
+            'L' => [19, 26, 7, 1],
+            'M' => [16, 26, 10, 1],
+            'Q' => [13, 26, 13, 1],
+            'H' => [9, 26, 17, 1],
+        ],
+        2 => [
+            'L' => [34, 44, 10, 1],
+            'M' => [28, 44, 16, 1],
+            'Q' => [22, 44, 22, 1],
+            'H' => [16, 44, 28, 1],
+        ],
+        3 => [
+            'L' => [55, 70, 15, 1],
+            'M' => [44, 70, 26, 1],
+            'Q' => [34, 70, 18, 2],
+            'H' => [26, 70, 22, 2],
+        ],
+        4 => [
+            'L' => [80, 100, 20, 1],
+            'M' => [64, 100, 18, 2],
+            'Q' => [48, 100, 26, 2],
+            'H' => [36, 100, 16, 4],
+        ],
+        // V5+ only ECC L (mixed-block layout для M/Q/H deferred).
+        5 => ['L' => [108, 134, 26, 1]],
+        6 => ['L' => [136, 172, 18, 2]],
+        7 => ['L' => [156, 196, 20, 2]],
+        8 => ['L' => [194, 242, 24, 2]],
+        9 => ['L' => [232, 292, 30, 2]],
+        10 => ['L' => [274, 346, 18, 2]],
     ];
 
     /**
@@ -78,6 +98,8 @@ final class QrEncoder
 
     public readonly int $size;
 
+    public readonly QrEccLevel $eccLevel;
+
     /**
      * Matrix: $modules[y][x] = bool.
      *
@@ -85,26 +107,30 @@ final class QrEncoder
      */
     private array $modules;
 
-    public function __construct(public readonly string $data)
+    public function __construct(public readonly string $data, ?QrEccLevel $eccLevel = null)
     {
         if ($data === '') {
             throw new \InvalidArgumentException('QR input must be non-empty');
         }
+        $this->eccLevel = $eccLevel ?? QrEccLevel::L;
         $byteLen = strlen($data);
+        $eccKey = $this->eccLevel->value;
 
-        // Pick smallest version supporting data в byte mode + ECC L.
+        // Pick smallest version supporting data в byte mode + chosen ECC level.
         $version = null;
-        foreach (self::CAPACITY_L as $v => $cap) {
-            if ($byteLen <= $cap) {
+        foreach (self::CAPACITY as $v => $perLevel) {
+            $cap = $perLevel[$eccKey] ?? null;
+            if ($cap !== null && $byteLen <= $cap) {
                 $version = $v;
                 break;
             }
         }
         if ($version === null) {
             throw new \InvalidArgumentException(sprintf(
-                'QR input too long (%d bytes); max %d for ECC L versions 1..10',
+                'QR input too long (%d bytes) for ECC %s — max %d at this level',
                 $byteLen,
-                self::CAPACITY_L[10],
+                $eccKey,
+                self::maxCapacityForLevel($eccKey),
             ));
         }
 
@@ -127,6 +153,22 @@ final class QrEncoder
     public function size(): int
     {
         return $this->size;
+    }
+
+    /**
+     * Maximum data byte capacity для ECC level (max version reached).
+     */
+    public static function maxCapacityForLevel(string $level): int
+    {
+        $max = 0;
+        foreach (self::CAPACITY as $perLevel) {
+            $cap = $perLevel[$level] ?? 0;
+            if ($cap > $max) {
+                $max = $cap;
+            }
+        }
+
+        return $max;
     }
 
     /**
@@ -161,7 +203,7 @@ final class QrEncoder
             $bits .= str_pad(decbin(ord($data[$i])), 8, '0', STR_PAD_LEFT);
         }
         // Terminator: up to 4 zeros (or fewer if at capacity).
-        [$dataCodewords] = self::ECC_L_PARAMS[$version];
+        [$dataCodewords] = self::ECC_PARAMS[$version][$this->eccLevel->value];
         $capacityBits = $dataCodewords * 8;
         $terminatorLen = min(4, $capacityBits - strlen($bits));
         $bits .= str_repeat('0', $terminatorLen);
@@ -292,7 +334,7 @@ final class QrEncoder
      */
     private function applyReedSolomon(array $codewords, int $version): array
     {
-        [$totalData, , $eccPerBlock, $numBlocks] = self::ECC_L_PARAMS[$version];
+        [$totalData, , $eccPerBlock, $numBlocks] = self::ECC_PARAMS[$version][$this->eccLevel->value];
         $blockSize = intdiv($totalData, $numBlocks);
 
         $blocks = [];
@@ -314,7 +356,7 @@ final class QrEncoder
      */
     private function interleaveBlocks(array $dataCodewords, array $eccBlocks, int $version): array
     {
-        [$totalData, , , $numBlocks] = self::ECC_L_PARAMS[$version];
+        [$totalData, , , $numBlocks] = self::ECC_PARAMS[$version][$this->eccLevel->value];
         $blockSize = intdiv($totalData, $numBlocks);
         $dataBlocks = [];
         for ($b = 0; $b < $numBlocks; $b++) {
@@ -543,8 +585,9 @@ final class QrEncoder
      */
     private function writeFormatInfo(array &$matrix, int $size): void
     {
-        // ECC L (01) + mask 000 = 5 bits: 01000.
-        $data = 0b01000;
+        // ECC level (2 bits) + mask 000 (3 bits) = 5 bits.
+        // L=01, M=00, Q=11, H=10 — left-shifted в high 2 bits.
+        $data = ($this->eccLevel->formatBits() << 3) | 0b000;
         // BCH(15,5) — divide by generator 0b10100110111.
         $bits = $data << 10;
         for ($i = 4; $i >= 0; $i--) {
