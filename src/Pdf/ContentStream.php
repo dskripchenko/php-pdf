@@ -198,6 +198,106 @@ final class ContentStream
     }
 
     /**
+     * Stroked rounded rectangle. Rounded corners через 4 cubic Bezier
+     * arcs (quarter-circle approximation, control points = r × 0.5523).
+     */
+    public function strokeRoundedRectangle(
+        float $xPt, float $yPt, float $widthPt, float $heightPt, float $radiusPt,
+        float $lineWidthPt = 0.5,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        $r0 = max(0, min($radiusPt, min($widthPt, $heightPt) / 2));
+        $kappa = 0.55228474983;  // 4 × (sqrt(2) - 1) / 3
+        $cp = $r0 * $kappa;
+
+        $x = $xPt; $y = $yPt; $w = $widthPt; $h = $heightPt;
+        $f = $this->formatNumber(...);
+        $this->body .= 'q'."\n";
+        $this->body .= sprintf("%s w\n", $f($lineWidthPt));
+        $this->body .= sprintf("%s %s %s RG\n", $f($r), $f($g), $f($b));
+        // Path: start at (x+r, y), follow rect's outer edge через arcs.
+        $this->body .= sprintf("%s %s m\n", $f($x + $r0), $f($y));
+        // Bottom edge → bottom-right corner.
+        $this->body .= sprintf("%s %s l\n", $f($x + $w - $r0), $f($y));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x + $w - $r0 + $cp), $f($y),
+            $f($x + $w), $f($y + $r0 - $cp),
+            $f($x + $w), $f($y + $r0),
+        );
+        // Right edge → top-right corner.
+        $this->body .= sprintf("%s %s l\n", $f($x + $w), $f($y + $h - $r0));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x + $w), $f($y + $h - $r0 + $cp),
+            $f($x + $w - $r0 + $cp), $f($y + $h),
+            $f($x + $w - $r0), $f($y + $h),
+        );
+        // Top edge → top-left corner.
+        $this->body .= sprintf("%s %s l\n", $f($x + $r0), $f($y + $h));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x + $r0 - $cp), $f($y + $h),
+            $f($x), $f($y + $h - $r0 + $cp),
+            $f($x), $f($y + $h - $r0),
+        );
+        // Left edge → bottom-left corner.
+        $this->body .= sprintf("%s %s l\n", $f($x), $f($y + $r0));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x), $f($y + $r0 - $cp),
+            $f($x + $r0 - $cp), $f($y),
+            $f($x + $r0), $f($y),
+        );
+        $this->body .= "h\nS\n";
+        $this->body .= 'Q'."\n";
+
+        return $this;
+    }
+
+    /**
+     * Filled rounded rectangle.
+     */
+    public function fillRoundedRectangle(
+        float $xPt, float $yPt, float $widthPt, float $heightPt, float $radiusPt,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        $r0 = max(0, min($radiusPt, min($widthPt, $heightPt) / 2));
+        $kappa = 0.55228474983;
+        $cp = $r0 * $kappa;
+
+        $x = $xPt; $y = $yPt; $w = $widthPt; $h = $heightPt;
+        $f = $this->formatNumber(...);
+        $this->body .= 'q'."\n";
+        $this->body .= sprintf("%s %s %s rg\n", $f($r), $f($g), $f($b));
+        $this->body .= sprintf("%s %s m\n", $f($x + $r0), $f($y));
+        $this->body .= sprintf("%s %s l\n", $f($x + $w - $r0), $f($y));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x + $w - $r0 + $cp), $f($y),
+            $f($x + $w), $f($y + $r0 - $cp),
+            $f($x + $w), $f($y + $r0),
+        );
+        $this->body .= sprintf("%s %s l\n", $f($x + $w), $f($y + $h - $r0));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x + $w), $f($y + $h - $r0 + $cp),
+            $f($x + $w - $r0 + $cp), $f($y + $h),
+            $f($x + $w - $r0), $f($y + $h),
+        );
+        $this->body .= sprintf("%s %s l\n", $f($x + $r0), $f($y + $h));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x + $r0 - $cp), $f($y + $h),
+            $f($x), $f($y + $h - $r0 + $cp),
+            $f($x), $f($y + $h - $r0),
+        );
+        $this->body .= sprintf("%s %s l\n", $f($x), $f($y + $r0));
+        $this->body .= sprintf("%s %s %s %s %s %s c\n",
+            $f($x), $f($y + $r0 - $cp),
+            $f($x + $r0 - $cp), $f($y),
+            $f($x + $r0), $f($y),
+        );
+        $this->body .= "h\nf\n";
+        $this->body .= 'Q'."\n";
+
+        return $this;
+    }
+
+    /**
      * Rotated text для watermarks. $angleRad — counter-clockwise angle
      * относительно X-axis. Поворот around точки (xPt, yPt). $color — RGB
      * 0..1.

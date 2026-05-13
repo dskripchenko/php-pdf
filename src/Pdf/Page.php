@@ -168,6 +168,37 @@ final class Page
     }
 
     /**
+     * Filled rounded rectangle. radius=0 фолбэк на fillRect.
+     */
+    public function fillRoundedRect(
+        float $x, float $y, float $width, float $height, float $radius,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        if ($radius <= 0) {
+            return $this->fillRect($x, $y, $width, $height, $r, $g, $b);
+        }
+        $this->stream->fillRoundedRectangle($x, $y, $width, $height, $radius, $r, $g, $b);
+
+        return $this;
+    }
+
+    /**
+     * Stroked rounded rectangle.
+     */
+    public function strokeRoundedRect(
+        float $x, float $y, float $width, float $height, float $radius,
+        float $lineWidthPt = 0.5,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        if ($radius <= 0) {
+            return $this->strokeRect($x, $y, $width, $height, $lineWidthPt, $r, $g, $b);
+        }
+        $this->stream->strokeRoundedRectangle($x, $y, $width, $height, $radius, $lineWidthPt, $r, $g, $b);
+
+        return $this;
+    }
+
+    /**
      * Outline rectangle (RGB 0..1).
      */
     public function strokeRect(

@@ -1174,10 +1174,17 @@ final class Engine
             }
             $cs = $this->effectiveCellStyle($t, $cell);
 
-            // Background fill.
+            // Background fill (rounded если cornerRadius > 0).
             if ($cs->backgroundColor !== null) {
                 [$r, $g, $b] = $this->hexToRgb($cs->backgroundColor);
-                $ctx->currentPage->fillRect($cellX, $rowBottomY, $cellWidth, $rowHeight, $r, $g, $b);
+                if ($cs->cornerRadiusPt > 0) {
+                    $ctx->currentPage->fillRoundedRect(
+                        $cellX, $rowBottomY, $cellWidth, $rowHeight,
+                        $cs->cornerRadiusPt, $r, $g, $b,
+                    );
+                } else {
+                    $ctx->currentPage->fillRect($cellX, $rowBottomY, $cellWidth, $rowHeight, $r, $g, $b);
+                }
             }
 
             $cellX += $cellWidth;
@@ -1212,11 +1219,16 @@ final class Engine
             $borders = $cs->borders ?? $this->defaultBorderSet($t->style);
 
             if ($borders !== null) {
-                if ($collapse) {
-                    // Border-collapse: each cell рисует top+left; last column
-                    // дополнительно right; last row дополнительно bottom.
-                    // Adjacent cells шарят edge (first-drawn wins — Phase L
-                    // priority resolution).
+                // Rounded corners: только когда radius > 0 AND borders uniform
+                // (все 4 стороны same style/width/color) AND не collapse mode.
+                if ($cs->cornerRadiusPt > 0 && ! $collapse && $this->areBordersUniform($borders)) {
+                    $b = $borders->top;
+                    [$r, $g, $bb] = $this->hexToRgb($b->color);
+                    $ctx->currentPage->strokeRoundedRect(
+                        $cellX, $rowBottomY, $cellWidth, $rowHeight,
+                        $cs->cornerRadiusPt, $b->widthPt(), $r, $g, $bb,
+                    );
+                } elseif ($collapse) {
                     $isLastCol = ($colIdx + $cell->columnSpan) >= $columnCount;
                     $collapsed = new BorderSet(
                         top: $borders->top,
@@ -1292,6 +1304,26 @@ final class Engine
         }
 
         return null;
+    }
+
+    /**
+     * Все 4 стороны одинаковые (style + width + color) И non-null?
+     */
+    private function areBordersUniform(BorderSet $bs): bool
+    {
+        if ($bs->top === null || $bs->left === null || $bs->bottom === null || $bs->right === null) {
+            return false;
+        }
+        $ref = $bs->top;
+        foreach ([$bs->left, $bs->bottom, $bs->right] as $b) {
+            if ($b->style !== $ref->style
+                || $b->sizeEighthsOfPoint !== $ref->sizeEighthsOfPoint
+                || $b->color !== $ref->color) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function drawCellBorders(\Dskripchenko\PhpPdf\Pdf\Page $page, float $x, float $y, float $w, float $h, BorderSet $borders): void

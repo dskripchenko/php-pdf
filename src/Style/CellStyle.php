@@ -28,6 +28,12 @@ final readonly class CellStyle
         public VerticalAlignment $verticalAlign = VerticalAlignment::Top,
         public ?string $backgroundColor = null,
         public ?BorderSet $borders = null,
+        /**
+         * Border-radius (rounded corners) в pt. 0 = square corners.
+         * Применяется только когда borders uniform (все 4 стороны
+         * одинаковые); иначе fallback к square corners.
+         */
+        public float $cornerRadiusPt = 0,
     ) {}
 
     public function withPadding(float $pt): self
@@ -70,6 +76,7 @@ final readonly class CellStyle
         ?VerticalAlignment $verticalAlign = null,
         ?string $backgroundColor = null,
         ?BorderSet $borders = null,
+        ?float $cornerRadiusPt = null,
     ): self {
         return new self(
             widthPt: $widthPt ?? $this->widthPt,
@@ -81,6 +88,7 @@ final readonly class CellStyle
             verticalAlign: $verticalAlign ?? $this->verticalAlign,
             backgroundColor: $backgroundColor ?? $this->backgroundColor,
             borders: $borders ?? $this->borders,
+            cornerRadiusPt: $cornerRadiusPt ?? $this->cornerRadiusPt,
         );
     }
 }
