@@ -51,6 +51,8 @@ final class DocumentBuilder
     /** @var list<BlockElement> */
     private array $footerBlocks = [];
 
+    private ?string $watermarkText = null;
+
     private PageSetup $pageSetup;
 
     public function __construct()
@@ -86,6 +88,17 @@ final class DocumentBuilder
         $b = new HeaderFooterBuilder;
         $build($b);
         $this->footerBlocks = $b->buildBlocks();
+
+        return $this;
+    }
+
+    /**
+     * Watermark — диагональный текст на каждой странице (под body content).
+     * Передай пустую строку или null чтобы отключить.
+     */
+    public function watermark(?string $text): self
+    {
+        $this->watermarkText = $text;
 
         return $this;
     }
@@ -273,6 +286,7 @@ final class DocumentBuilder
             pageSetup: $this->pageSetup,
             headerBlocks: $this->headerBlocks,
             footerBlocks: $this->footerBlocks,
+            watermarkText: $this->watermarkText,
         ));
     }
 

@@ -160,6 +160,58 @@ final class ContentStream
         return $this;
     }
 
+    /**
+     * Rotated text для watermarks. $angleRad — counter-clockwise angle
+     * относительно X-axis. Поворот around точки (xPt, yPt). $color — RGB
+     * 0..1.
+     *
+     * Использует text matrix Tm:
+     *   cos(a) sin(a) -sin(a) cos(a) x y Tm
+     *
+     * Для embedded font передавай $hexString с угловыми скобками (Identity-H
+     * encoded) + $isHex=true.
+     */
+    public function rotatedText(
+        string $fontName,
+        float $sizePt,
+        float $xPt,
+        float $yPt,
+        float $angleRad,
+        string $text,
+        float $r = 0.85,
+        float $g = 0.85,
+        float $b = 0.85,
+        bool $isHex = false,
+    ): self {
+        $cos = cos($angleRad);
+        $sin = sin($angleRad);
+        $this->body .= "q\n";
+        $this->body .= sprintf("%s %s %s rg\n",
+            $this->formatNumber($r),
+            $this->formatNumber($g),
+            $this->formatNumber($b),
+        );
+        $this->body .= 'BT'."\n";
+        $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
+        $this->body .= sprintf("%s %s %s %s %s %s Tm\n",
+            $this->formatNumber($cos),
+            $this->formatNumber($sin),
+            $this->formatNumber(-$sin),
+            $this->formatNumber($cos),
+            $this->formatNumber($xPt),
+            $this->formatNumber($yPt),
+        );
+        if ($isHex) {
+            $this->body .= sprintf("%s Tj\n", $text);
+        } else {
+            $this->body .= sprintf("(%s) Tj\n", $this->escapeString($text));
+        }
+        $this->body .= 'ET'."\n";
+        $this->body .= 'Q'."\n";
+
+        return $this;
+    }
+
     public function toString(): string
     {
         return $this->body;

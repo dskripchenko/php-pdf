@@ -28,6 +28,7 @@ final readonly class Section
         public PageSetup $pageSetup = new PageSetup,
         public array $headerBlocks = [],
         public array $footerBlocks = [],
+        public ?string $watermarkText = null,
     ) {}
 
     public function hasHeader(): bool
@@ -38,5 +39,10 @@ final readonly class Section
     public function hasFooter(): bool
     {
         return $this->footerBlocks !== [];
+    }
+
+    public function hasWatermark(): bool
+    {
+        return $this->watermarkText !== null && $this->watermarkText !== '';
     }
 }

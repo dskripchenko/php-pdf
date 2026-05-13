@@ -101,6 +101,41 @@ final class Page
     }
 
     /**
+     * Drawn watermark — large diagonal text behind content. Use StandardFont
+     * вариант для base14 или embedded для PdfFont.
+     */
+    public function drawWatermark(
+        string $text,
+        float $cx,
+        float $cy,
+        StandardFont $font,
+        float $sizePt,
+        float $angleRad = -0.7854,    // -45° (down-right diagonal)
+        float $r = 0.88, float $g = 0.88, float $b = 0.88,
+    ): self {
+        $resourceName = $this->registerStandardFont($font);
+        $this->stream->rotatedText($resourceName, $sizePt, $cx, $cy, $angleRad, $text, $r, $g, $b);
+
+        return $this;
+    }
+
+    public function drawWatermarkEmbedded(
+        string $text,
+        float $cx,
+        float $cy,
+        PdfFont $font,
+        float $sizePt,
+        float $angleRad = -0.7854,
+        float $r = 0.88, float $g = 0.88, float $b = 0.88,
+    ): self {
+        $resourceName = $this->registerEmbeddedFont($font);
+        $hex = $font->encodeText($text);
+        $this->stream->rotatedText($resourceName, $sizePt, $cx, $cy, $angleRad, $hex, $r, $g, $b, isHex: true);
+
+        return $this;
+    }
+
+    /**
      * Filled rectangle (RGB 0..1).
      */
     public function fillRect(

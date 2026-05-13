@@ -174,6 +174,12 @@ final class Engine
             return;
         }
         $section = $this->currentSection;
+
+        // Watermark — рисуется первым на странице, чтобы оказаться под
+        // content'ом (PDF z-order: позже = выше).
+        if ($section->hasWatermark()) {
+            $this->renderWatermark((string) $section->watermarkText, $ctx);
+        }
         $setup = $ctx->pageSetup;
         [$pageWidth, $pageHeight] = $setup->dimensions();
 
@@ -212,6 +218,45 @@ final class Engine
             foreach ($section->footerBlocks as $block) {
                 $this->renderBlock($block, $footerArea);
             }
+        }
+    }
+
+    /**
+     * Renders diagonal watermark на текущей page. Centered, 72pt size,
+     * angle ≈ -45° (down-right), light-gray (0.88 0.88 0.88).
+     *
+     * Text positioned relative к center page'а; rotation matrix вращает
+     * around этой точки.
+     */
+    private function renderWatermark(string $text, LayoutContext $ctx): void
+    {
+        $setup = $ctx->pageSetup;
+        [$pageWidth, $pageHeight] = $setup->dimensions();
+
+        $sizePt = 72;
+        // Estimate text width — для positioning'а centre.
+        $textWidth = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $sizePt))->widthPt($text)
+            : mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
+
+        // Хотим чтобы центр rotated text оказался в центре page'а.
+        // Tm-матрица применяется к origin'у (0,0) → перемещает к (x,y).
+        // Поскольку текст рисуется от baseline left, для центрирования:
+        // start position = pageCenter - rotatedHalfWidth × cosθ + ...
+        // Для простоты: размещаем baseline left at offset от центра.
+        $angleRad = -M_PI / 4; // -45°
+        $halfWidth = $textWidth / 2;
+        $cx = $pageWidth / 2 - $halfWidth * cos($angleRad);
+        $cy = $pageHeight / 2 - $halfWidth * sin($angleRad) - $sizePt * 0.3;
+
+        if ($this->defaultFont !== null) {
+            $ctx->currentPage->drawWatermarkEmbedded(
+                $text, $cx, $cy, $this->defaultFont, $sizePt, $angleRad,
+            );
+        } else {
+            $ctx->currentPage->drawWatermark(
+                $text, $cx, $cy, $this->fallbackStandard, $sizePt, $angleRad,
+            );
         }
     }
 
