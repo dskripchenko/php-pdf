@@ -2816,6 +2816,14 @@ final class Engine
 
         $ctx->cursorY -= $t->style->spaceBeforePt;
 
+        // Phase 65: tagged PDF — wrap table в /Table struct.
+        $taggedPdf = $ctx->pdf->isTagged();
+        $tableMcid = null;
+        if ($taggedPdf) {
+            $tableMcid = $ctx->currentPage->nextMcid();
+            $ctx->currentPage->beginMarkedContent('Table', $tableMcid);
+        }
+
         $columnCount = $t->columnCount();
         $tableWidth = $this->computeTableWidth($t->style, $ctx->contentWidth);
         $colWidths = $this->computeColumnWidths($t, $tableWidth, $columnCount);
@@ -2846,6 +2854,12 @@ final class Engine
         }
 
         $ctx->cursorY -= $t->style->spaceAfterPt;
+
+        // Phase 65: end /Table struct.
+        if ($taggedPdf && $tableMcid !== null) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->pdf->addStructElement('Table', $tableMcid, $ctx->currentPage);
+        }
     }
 
     private function computeTableWidth(TableStyle $style, float $contentWidth): float
@@ -2925,6 +2939,14 @@ final class Engine
      */
     private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false): void
     {
+        // Phase 65: tagged PDF — wrap row в /TR struct.
+        $taggedPdf = $ctx->pdf->isTagged();
+        $rowMcid = null;
+        if ($taggedPdf) {
+            $rowMcid = $ctx->currentPage->nextMcid();
+            $ctx->currentPage->beginMarkedContent('TR', $rowMcid);
+        }
+
         $rowTopY = $ctx->cursorY;
         $rowBottomY = $rowTopY - $rowHeight;
         $collapse = $t->style->borderCollapse;
@@ -2979,7 +3001,24 @@ final class Engine
             }
             $cs = $this->effectiveCellStyle($t, $cell);
 
+            // Phase 65: wrap cell в /TD struct.
+            $cellMcid = null;
+            if ($taggedPdf) {
+                $cellMcid = $ctx->currentPage->nextMcid();
+                $ctx->currentPage->beginMarkedContent('TD', $cellMcid);
+            }
+
+            // Phase 65: cell context — suppress nested paragraph /P tags
+            // (cell-level wrapping subsumes them).
+            $savedSkip = $ctx->skipParagraphTag;
+            $ctx->skipParagraphTag = true;
             $this->renderCellContent($cell, $cs, $cellX, $rowTopY, $cellWidth, $rowHeight, $ctx);
+            $ctx->skipParagraphTag = $savedSkip;
+
+            if ($taggedPdf && $cellMcid !== null) {
+                $ctx->currentPage->endMarkedContent();
+                $ctx->pdf->addStructElement('TD', $cellMcid, $ctx->currentPage);
+            }
 
             $cellX += $cellWidth;
             $colIdx += $cell->columnSpan;
@@ -3034,6 +3073,12 @@ final class Engine
             $cellX += $cellWidth;
             $colIdx += $cell->columnSpan;
         }
+
+        // Phase 65: end /TR struct.
+        if ($taggedPdf && $rowMcid !== null) {
+            $ctx->currentPage->endMarkedContent();
+            $ctx->pdf->addStructElement('TR', $rowMcid, $ctx->currentPage);
+        }
     }
 
     private function renderCellContent(
@@ -3066,6 +3111,9 @@ final class Engine
             bottomY: $cellTopY - $rowHeight - 10000,
             topY: $cellTopY - $cs->paddingTopPt - $vOffset,
             pageSetup: $ctx->pageSetup,
+            // Phase 65: propagate skipParagraphTag (table cells suppress
+            // nested /P tagging).
+            skipParagraphTag: $ctx->skipParagraphTag,
         );
 
         foreach ($cell->children as $block) {
