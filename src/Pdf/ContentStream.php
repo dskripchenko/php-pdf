@@ -78,6 +78,30 @@ final class ContentStream
     }
 
     /**
+     * Stroked rectangle (только outline, без fill). RGB stroke color
+     * 0..1, line width в pt.
+     */
+    public function strokeRectangle(
+        float $xPt,
+        float $yPt,
+        float $widthPt,
+        float $heightPt,
+        float $lineWidthPt = 0.5,
+        float $r = 0,
+        float $g = 0,
+        float $b = 0,
+    ): self {
+        $this->body .= 'q'."\n";
+        $this->body .= sprintf("%s w\n", $this->formatNumber($lineWidthPt));
+        $this->body .= sprintf("%s %s %s RG\n", $this->formatNumber($r), $this->formatNumber($g), $this->formatNumber($b));
+        $this->body .= sprintf("%s %s %s %s re\n", $this->formatNumber($xPt), $this->formatNumber($yPt), $this->formatNumber($widthPt), $this->formatNumber($heightPt));
+        $this->body .= 'S'."\n";
+        $this->body .= 'Q'."\n";
+
+        return $this;
+    }
+
+    /**
      * Draw image (XObject) с translation + scale.
      *
      * PDF coords: image XObject родной 1×1 unit. Чтобы получить ширину
