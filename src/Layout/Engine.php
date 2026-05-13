@@ -14,8 +14,10 @@ use Dskripchenko\PhpPdf\Font\PdfFontResolver;
 use Dskripchenko\PhpPdf\Element\Barcode;
 use Dskripchenko\PhpPdf\Element\BarChart;
 use Dskripchenko\PhpPdf\Element\ColumnSet;
+use Dskripchenko\PhpPdf\Element\DonutChart;
 use Dskripchenko\PhpPdf\Element\FormField;
 use Dskripchenko\PhpPdf\Element\GroupedBarChart;
+use Dskripchenko\PhpPdf\Element\ScatterChart;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
 use Dskripchenko\PhpPdf\Element\LineChart;
 use Dskripchenko\PhpPdf\Element\MultiLineChart;
@@ -263,9 +265,202 @@ final class Engine
             $block instanceof GroupedBarChart => $this->renderGroupedBarChart($block, $ctx),
             $block instanceof StackedBarChart => $this->renderStackedBarChart($block, $ctx),
             $block instanceof MultiLineChart => $this->renderMultiLineChart($block, $ctx),
+            $block instanceof DonutChart => $this->renderDonutChart($block, $ctx),
+            $block instanceof ScatterChart => $this->renderScatterChart($block, $ctx),
             $block instanceof SvgElement => $this->renderSvgElement($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 55: Donut chart — pie с inner hole.
+     */
+    private function renderDonutChart(DonutChart $dc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $dc->spaceBeforePt;
+        $totalW = min($dc->sizePt, $ctx->contentWidth);
+        $totalH = $totalW;
+        $legendW = $dc->showLegend ? 80.0 : 0;
+        $legendW = min($legendW, max(0, $ctx->contentWidth - $totalW));
+        $blockW = $totalW + $legendW;
+        $this->ensureRoomFor($ctx, $totalH + ($dc->title !== null ? $dc->titleSizePt + 4 : 0));
+
+        $blockX = match ($dc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $blockW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $blockW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+
+        if ($dc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $dc->titleSizePt))->widthPt($dc->title)
+                : mb_strlen($dc->title, 'UTF-8') * $dc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $dc->title,
+                $blockX + ($blockW - $titleW) / 2, $topY - $dc->titleSizePt, $dc->titleSizePt);
+            $topY -= $dc->titleSizePt + 4;
+        }
+
+        $cx = $blockX + $totalW / 2;
+        $cy = $topY - $totalW / 2;
+        $outerRadius = $totalW / 2 * 0.9;
+        $innerRadius = $outerRadius * $dc->innerRatio;
+
+        $total = 0.0;
+        foreach ($dc->slices as $s) {
+            $total += $s['value'];
+        }
+        if ($total <= 0) {
+            $total = 1.0;
+        }
+
+        $colorWheel = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0', 'f542a7', '8c8c8c'];
+        $angle = -M_PI / 2;
+        $segmentsPerFullCircle = 60;
+
+        foreach ($dc->slices as $idx => $slice) {
+            $sliceAngle = ($slice['value'] / $total) * 2 * M_PI;
+            $segments = max(1, (int) ceil($sliceAngle / (2 * M_PI) * $segmentsPerFullCircle));
+            // Ring sector: outer arc + inner arc reverse.
+            $points = [];
+            for ($i = 0; $i <= $segments; $i++) {
+                $a = $angle + ($sliceAngle * $i / $segments);
+                $points[] = [$cx + cos($a) * $outerRadius, $cy + sin($a) * $outerRadius];
+            }
+            for ($i = $segments; $i >= 0; $i--) {
+                $a = $angle + ($sliceAngle * $i / $segments);
+                $points[] = [$cx + cos($a) * $innerRadius, $cy + sin($a) * $innerRadius];
+            }
+            $hex = $slice['color'] ?? $colorWheel[$idx % count($colorWheel)];
+            [$r, $g, $b] = $this->hexToRgb($hex);
+            $ctx->currentPage->fillPolygon($points, $r, $g, $b);
+            $angle += $sliceAngle;
+        }
+
+        // Legend.
+        if ($dc->showLegend && $legendW > 0) {
+            $legendX = $blockX + $totalW + 6;
+            $legendY = $topY - 4;
+            foreach ($dc->slices as $idx => $slice) {
+                $hex = $slice['color'] ?? $colorWheel[$idx % count($colorWheel)];
+                [$r, $g, $b] = $this->hexToRgb($hex);
+                $ctx->currentPage->fillRect($legendX, $legendY - $dc->legendSizePt, $dc->legendSizePt, $dc->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $slice['label'],
+                    $legendX + $dc->legendSizePt + 4, $legendY - $dc->legendSizePt + 1, $dc->legendSizePt);
+                $legendY -= $dc->legendSizePt + 4;
+            }
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $dc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 55: Scatter chart — discrete points, no connecting lines.
+     */
+    private function renderScatterChart(ScatterChart $sc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $sc->spaceBeforePt;
+        $totalW = min($sc->widthPt, $ctx->contentWidth);
+        $totalH = $sc->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($sc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        $titleStripH = $sc->title !== null ? $sc->titleSizePt + 4.0 : 0;
+        $labelStripH = $sc->axisLabelSizePt + 4.0;
+        $legendStripH = $sc->showLegend ? $sc->legendSizePt + 6.0 : 0;
+        $axisLabelPaddingLeft = 36.0;
+
+        $plotTop = $topY - $titleStripH - $legendStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        if ($sc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $sc->titleSizePt))->widthPt($sc->title)
+                : mb_strlen($sc->title, 'UTF-8') * $sc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $sc->title,
+                $blockX + ($totalW - $titleW) / 2, $topY - $sc->titleSizePt, $sc->titleSizePt);
+        }
+
+        // Auto-scale: find x/y min/max across all series.
+        $xMin = INF; $xMax = -INF; $yMin = INF; $yMax = -INF;
+        foreach ($sc->series as $s) {
+            foreach ($s['points'] as $p) {
+                if ($p['x'] < $xMin) $xMin = $p['x'];
+                if ($p['x'] > $xMax) $xMax = $p['x'];
+                if ($p['y'] < $yMin) $yMin = $p['y'];
+                if ($p['y'] > $yMax) $yMax = $p['y'];
+            }
+        }
+        if ($xMin === $xMax) { $xMax = $xMin + 1; }
+        if ($yMin === $yMax) { $yMax = $yMin + 1; }
+
+        $defaultColors = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0'];
+
+        // Legend at top.
+        if ($sc->showLegend) {
+            $legendY = $topY - $titleStripH - $sc->legendSizePt;
+            $legendX = $blockX + $axisLabelPaddingLeft;
+            foreach ($sc->series as $idx => $s) {
+                $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
+                [$r, $g, $b] = $this->hexToRgb($color);
+                $ctx->currentPage->fillRect($legendX, $legendY, $sc->legendSizePt, $sc->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $s['name'],
+                    $legendX + $sc->legendSizePt + 3, $legendY + 1, $sc->legendSizePt);
+                $legendX += $sc->legendSizePt + 3
+                    + ($this->defaultFont !== null
+                        ? (new TextMeasurer($this->defaultFont, $sc->legendSizePt))->widthPt($s['name'])
+                        : mb_strlen($s['name'], 'UTF-8') * $sc->legendSizePt * 0.5)
+                    + 14;
+            }
+        }
+
+        // Axes.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        // Axis labels (min + max для X, max для Y).
+        $this->chartText($ctx->currentPage, $this->formatChartNumber($xMin),
+            $plotLeft, $plotBottom - $sc->axisLabelSizePt - 2, $sc->axisLabelSizePt);
+        $xMaxLabel = $this->formatChartNumber($xMax);
+        $xMaxW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $sc->axisLabelSizePt))->widthPt($xMaxLabel)
+            : mb_strlen($xMaxLabel, 'UTF-8') * $sc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $xMaxLabel,
+            $plotRight - $xMaxW, $plotBottom - $sc->axisLabelSizePt - 2, $sc->axisLabelSizePt);
+
+        $yMaxLabel = $this->formatChartNumber($yMax);
+        $yMaxW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $sc->axisLabelSizePt))->widthPt($yMaxLabel)
+            : mb_strlen($yMaxLabel, 'UTF-8') * $sc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $yMaxLabel,
+            $plotLeft - $yMaxW - 2, $plotTop - $sc->axisLabelSizePt * 0.5, $sc->axisLabelSizePt);
+
+        // Points.
+        $half = $sc->markerSize / 2;
+        foreach ($sc->series as $idx => $s) {
+            $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
+            [$r, $g, $b] = $this->hexToRgb($color);
+            foreach ($s['points'] as $p) {
+                $x = $plotLeft + (($p['x'] - $xMin) / ($xMax - $xMin)) * $plotW;
+                $y = $plotBottom + (($p['y'] - $yMin) / ($yMax - $yMin)) * $plotH;
+                $ctx->currentPage->fillRect($x - $half, $y - $half, $sc->markerSize, $sc->markerSize, $r, $g, $b);
+            }
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $sc->spaceAfterPt;
     }
 
     /**
