@@ -231,6 +231,10 @@ final class Engine
         if ($document->tagged) {
             $pdf->enableTagged();
         }
+        // Phase 89: forward language hint.
+        if ($document->lang !== null) {
+            $pdf->setLang($document->lang);
+        }
         $page = $pdf->addPage();
 
         $context = new LayoutContext(

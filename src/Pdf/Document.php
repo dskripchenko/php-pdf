@@ -109,6 +109,16 @@ final class Document
      */
     private array $viewerPreferences = [];
 
+    /** Phase 89: BCP 47 language tag для /Lang в Catalog. */
+    private ?string $lang = null;
+
+    public function setLang(string $lang): self
+    {
+        $this->lang = $lang;
+
+        return $this;
+    }
+
     /**
      * Phase 88: Configure viewer preferences. Keys: hideToolbar,
      * hideMenubar, hideWindowUI, fitWindow, centerWindow,
@@ -958,7 +968,16 @@ final class Document
             }
         }
 
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef >>");
+        // Phase 89: /Lang entry в Catalog (PDF/UA requirement).
+        $langRef = '';
+        if ($this->lang !== null && $this->lang !== '') {
+            // Avoid double-emission if PDF/A mode already injects /Lang.
+            if ($this->pdfA === null) {
+                $langRef = ' /Lang '.$this->pdfString($this->lang);
+            }
+        }
+
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef$langRef >>");
 
         $writer->setRoot($catalogId);
 

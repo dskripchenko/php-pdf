@@ -39,6 +39,13 @@ final readonly class Document
         public array $additionalSections = [],
         /** Phase 48: enable Tagged PDF (accessibility) при emission. */
         public bool $tagged = false,
+        /**
+         * Phase 89: Document language hint (BCP 47 language tag — e.g. 'en',
+         * 'ru', 'en-US'). Emitted as /Lang в Catalog. PDF/UA requires
+         * this entry для tagged documents — screen readers used для
+         * default speech locale.
+         */
+        public ?string $lang = null,
     ) {}
 
     /**
