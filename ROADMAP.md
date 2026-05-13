@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v0.18 — 17 фаз закрыты (419 + 192 printable = 611 тестов).
+**Текущий статус:** v0.19 — 18 фаз закрыты (423 + 193 printable = 616 тестов).
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
 ---
@@ -84,10 +84,12 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 ### Important (feature parity, не строгий блокер)
 
-**Phase 18: border-radius (rounded corners)**
-- Сейчас `border-radius` в Whitelist'е есть, но игнорируется.
-- Нужно: corners → Bezier curves в content stream (`re` → `m + c + l`
-  с control points для четвертного arc'а).
+**Phase 18: border-radius (rounded corners)** ✅ DONE
+- Done (4f32049 + dcf41a2): CellStyle.cornerRadiusPt; ContentStream/Page
+  имеют fill/strokeRoundedRectangle через cubic Bezier (kappa 0.5523).
+  Engine uses rounded path для uniform borders + non-zero radius;
+  non-uniform borders или collapse mode → square fallback.
+- Tests: 4 в BorderRadiusTest, 1 в printable.
 
 **Phase 19: border-spacing + border priority**
 - В collapse-mode сейчас "first-drawn wins" (left cell.right убирается).
@@ -213,8 +215,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 | 15 | Justify alignment (word-spacing distribution) | 6 | 8e45e75 |
 | 16 | Inline images (text wrap, baseline alignment) | 6 | a084140 |
 | 17 | CSS <style>/classes (CssInliner integration) | +1 | 6921211 (printable) |
+| 18 | border-radius (rounded corners) | 4 + 1 | 4f32049 + dcf41a2 (printable) |
 
-**Итого:** 419 тестов в php-pdf, 192 теста в printable, 8 в Liberation package.
+**Итого:** 423 теста в php-pdf, 193 теста в printable, 8 в Liberation package.
 
 ---
 
