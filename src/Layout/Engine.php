@@ -16,6 +16,8 @@ use Dskripchenko\PhpPdf\Element\BarChart;
 use Dskripchenko\PhpPdf\Element\ColumnSet;
 use Dskripchenko\PhpPdf\Element\FormField;
 use Dskripchenko\PhpPdf\Element\HorizontalRule;
+use Dskripchenko\PhpPdf\Element\LineChart;
+use Dskripchenko\PhpPdf\Element\PieChart;
 use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Image;
 use Dskripchenko\PhpPdf\Element\LineBreak;
@@ -248,8 +250,182 @@ final class Engine
             $block instanceof ColumnSet => $this->renderColumnSet($block, $ctx),
             $block instanceof FormField => $this->renderFormField($block, $ctx),
             $block instanceof BarChart => $this->renderBarChart($block, $ctx),
+            $block instanceof LineChart => $this->renderLineChart($block, $ctx),
+            $block instanceof PieChart => $this->renderPieChart($block, $ctx),
             default => null,
         };
+    }
+
+    /**
+     * Phase 45: Line chart — strokePolyline через data points + axes.
+     */
+    private function renderLineChart(LineChart $lc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $lc->spaceBeforePt;
+        $totalW = min($lc->widthPt, $ctx->contentWidth);
+        $totalH = $lc->heightPt;
+        $this->ensureRoomFor($ctx, $totalH);
+
+        $blockX = match ($lc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+        $bottomY = $topY - $totalH;
+
+        $titleStripH = $lc->title !== null ? $lc->titleSizePt + 4.0 : 0;
+        $labelStripH = $lc->axisLabelSizePt + 4.0;
+        $axisLabelPaddingLeft = 32.0;
+
+        $plotTop = $topY - $titleStripH;
+        $plotBottom = $bottomY + $labelStripH;
+        $plotLeft = $blockX + $axisLabelPaddingLeft;
+        $plotRight = $blockX + $totalW;
+        $plotW = $plotRight - $plotLeft;
+        $plotH = $plotTop - $plotBottom;
+
+        if ($lc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $lc->titleSizePt))->widthPt($lc->title)
+                : mb_strlen($lc->title, 'UTF-8') * $lc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $lc->title,
+                $blockX + ($totalW - $titleW) / 2, $topY - $lc->titleSizePt, $lc->titleSizePt);
+        }
+
+        // Max value scaling.
+        $maxValue = 0.0;
+        foreach ($lc->points as $p) {
+            if ($p['value'] > $maxValue) {
+                $maxValue = $p['value'];
+            }
+        }
+        if ($maxValue <= 0) {
+            $maxValue = 1.0;
+        }
+
+        // Axes.
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
+        $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
+
+        $maxLabel = $this->formatChartNumber($maxValue);
+        $maxLabelW = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $lc->axisLabelSizePt))->widthPt($maxLabel)
+            : mb_strlen($maxLabel, 'UTF-8') * $lc->axisLabelSizePt * 0.5;
+        $this->chartText($ctx->currentPage, $maxLabel, $plotLeft - $maxLabelW - 2, $plotTop - $lc->axisLabelSizePt * 0.5, $lc->axisLabelSizePt);
+
+        $n = count($lc->points);
+        $stepX = $n > 1 ? $plotW / ($n - 1) : 0;
+        [$lr, $lg, $lb] = $this->hexToRgb($lc->lineColor);
+
+        // Compute polyline points.
+        $coords = [];
+        foreach ($lc->points as $i => $p) {
+            $x = $plotLeft + $i * $stepX;
+            $y = $plotBottom + ($p['value'] / $maxValue) * $plotH;
+            $coords[] = [$x, $y];
+
+            // Label под x-axis.
+            $label = $p['label'];
+            $labelW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $lc->axisLabelSizePt))->widthPt($label)
+                : mb_strlen($label, 'UTF-8') * $lc->axisLabelSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $label,
+                $x - $labelW / 2, $plotBottom - $lc->axisLabelSizePt - 2, $lc->axisLabelSizePt);
+        }
+
+        // Polyline.
+        $ctx->currentPage->strokePolyline($coords, 1.5, $lr, $lg, $lb);
+
+        // Markers (filled small rects по точкам — fast вместо circles).
+        if ($lc->showMarkers) {
+            foreach ($coords as $c) {
+                $ctx->currentPage->fillRect($c[0] - 1.5, $c[1] - 1.5, 3, 3, $lr, $lg, $lb);
+            }
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $lc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 45: Pie chart — slices через polygon approximation (60 segments
+     * per full circle scaled to slice angle).
+     */
+    private function renderPieChart(PieChart $pc, LayoutContext $ctx): void
+    {
+        $ctx->cursorY -= $pc->spaceBeforePt;
+        $totalW = min($pc->sizePt, $ctx->contentWidth);
+        $totalH = $totalW;
+
+        // Legend takes extra horizontal space к right if shown.
+        $legendW = $pc->showLegend ? 80.0 : 0;
+        $legendW = min($legendW, max(0, $ctx->contentWidth - $totalW));
+        $blockW = $totalW + $legendW;
+        $this->ensureRoomFor($ctx, $totalH + ($pc->title !== null ? $pc->titleSizePt + 4 : 0));
+
+        $blockX = match ($pc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $blockW) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $blockW,
+            default => $ctx->leftX,
+        };
+        $topY = $ctx->cursorY;
+
+        if ($pc->title !== null) {
+            $titleW = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $pc->titleSizePt))->widthPt($pc->title)
+                : mb_strlen($pc->title, 'UTF-8') * $pc->titleSizePt * 0.5;
+            $this->chartText($ctx->currentPage, $pc->title,
+                $blockX + ($blockW - $titleW) / 2, $topY - $pc->titleSizePt, $pc->titleSizePt);
+            $topY -= $pc->titleSizePt + 4;
+        }
+
+        $cx = $blockX + $totalW / 2;
+        $cy = $topY - $totalW / 2;
+        $radius = $totalW / 2 * 0.9;
+
+        $total = 0.0;
+        foreach ($pc->slices as $s) {
+            $total += $s['value'];
+        }
+        if ($total <= 0) {
+            $total = 1.0;
+        }
+
+        $colorWheel = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0', 'f542a7', '8c8c8c'];
+        $angle = -M_PI / 2; // start at top.
+        $segmentsPerFullCircle = 60;
+
+        foreach ($pc->slices as $idx => $slice) {
+            $sliceAngle = ($slice['value'] / $total) * 2 * M_PI;
+            $segments = max(1, (int) ceil($sliceAngle / (2 * M_PI) * $segmentsPerFullCircle));
+            $points = [[$cx, $cy]];
+            for ($i = 0; $i <= $segments; $i++) {
+                $a = $angle + ($sliceAngle * $i / $segments);
+                $points[] = [$cx + cos($a) * $radius, $cy + sin($a) * $radius];
+            }
+            $hex = $slice['color'] ?? $colorWheel[$idx % count($colorWheel)];
+            [$r, $g, $b] = $this->hexToRgb($hex);
+            $ctx->currentPage->fillPolygon($points, $r, $g, $b);
+            $angle += $sliceAngle;
+        }
+
+        // Legend.
+        if ($pc->showLegend && $legendW > 0) {
+            $legendX = $blockX + $totalW + 6;
+            $legendY = $topY - 4;
+            foreach ($pc->slices as $idx => $slice) {
+                $hex = $slice['color'] ?? $colorWheel[$idx % count($colorWheel)];
+                [$r, $g, $b] = $this->hexToRgb($hex);
+                $ctx->currentPage->fillRect($legendX, $legendY - $pc->legendSizePt, $pc->legendSizePt, $pc->legendSizePt, $r, $g, $b);
+                $this->chartText($ctx->currentPage, $slice['label'],
+                    $legendX + $pc->legendSizePt + 4, $legendY - $pc->legendSizePt + 1, $pc->legendSizePt);
+                $legendY -= $pc->legendSizePt + 4;
+            }
+        }
+
+        $ctx->cursorY -= $totalH;
+        $ctx->cursorY -= $pc->spaceAfterPt;
     }
 
     /**

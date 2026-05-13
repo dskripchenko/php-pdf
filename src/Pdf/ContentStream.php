@@ -161,6 +161,52 @@ final class ContentStream
      * 0..1, line width в pt.
      */
     /**
+     * Phase 45: filled polygon. Points = list<[x, y]>; closed path.
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     */
+    public function fillPolygon(array $points, float $r = 0, float $g = 0, float $b = 0): self
+    {
+        if (count($points) < 3) {
+            return $this;
+        }
+        $this->body .= 'q'."\n";
+        $this->body .= sprintf("%s %s %s rg\n", $this->formatNumber($r), $this->formatNumber($g), $this->formatNumber($b));
+        $this->body .= sprintf("%s %s m\n", $this->formatNumber($points[0][0]), $this->formatNumber($points[0][1]));
+        for ($i = 1; $i < count($points); $i++) {
+            $this->body .= sprintf("%s %s l\n", $this->formatNumber($points[$i][0]), $this->formatNumber($points[$i][1]));
+        }
+        $this->body .= "h\nf\nQ\n";
+
+        return $this;
+    }
+
+    /**
+     * Phase 45: stroked polyline (НЕ closed) для line charts.
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     */
+    public function strokePolyline(
+        array $points,
+        float $lineWidthPt = 1.0,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        if (count($points) < 2) {
+            return $this;
+        }
+        $this->body .= 'q'."\n";
+        $this->body .= sprintf("%s w\n", $this->formatNumber($lineWidthPt));
+        $this->body .= sprintf("%s %s %s RG\n", $this->formatNumber($r), $this->formatNumber($g), $this->formatNumber($b));
+        $this->body .= sprintf("%s %s m\n", $this->formatNumber($points[0][0]), $this->formatNumber($points[0][1]));
+        for ($i = 1; $i < count($points); $i++) {
+            $this->body .= sprintf("%s %s l\n", $this->formatNumber($points[$i][0]), $this->formatNumber($points[$i][1]));
+        }
+        $this->body .= "S\nQ\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 44: stroked straight line from (x1,y1) to (x2,y2).
      */
     public function strokeLine(

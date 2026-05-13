@@ -277,6 +277,33 @@ final class Page
     }
 
     /**
+     * Phase 45: filled polygon (closed path).
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     */
+    public function fillPolygon(array $points, float $r = 0, float $g = 0, float $b = 0): self
+    {
+        $this->stream->fillPolygon($points, $r, $g, $b);
+
+        return $this;
+    }
+
+    /**
+     * Phase 45: stroked polyline (not closed).
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     */
+    public function strokePolyline(
+        array $points,
+        float $lineWidthPt = 1.0,
+        float $r = 0, float $g = 0, float $b = 0,
+    ): self {
+        $this->stream->strokePolyline($points, $lineWidthPt, $r, $g, $b);
+
+        return $this;
+    }
+
+    /**
      * Draw image (PNG/JPEG) at (x, y) with scaling to (widthPt, heightPt).
      */
     public function drawImage(PdfImage $image, float $x, float $y, float $widthPt, float $heightPt): self
