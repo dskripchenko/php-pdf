@@ -525,8 +525,9 @@ final class Engine
             $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $style);
 
             if ($currentLine !== [] && $currentWidth + $sepWidth + $wordWidth > $effectiveAvail) {
-                // Linebreak — emit current line + начать новую.
-                $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent);
+                // Overflow-driven line break — line followed by more content,
+                // so isLastLine = false (justify candidate).
+                $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
                 $currentLine = [$item];
                 $currentWidth = $wordWidth;
                 $isFirstLine = false;
@@ -674,6 +675,7 @@ final class Engine
         RunStyle $defaultStyle,
         bool $isFirstLine,
         float $firstLineIndent,
+        bool $isLastLine = true,
     ): void {
         // Split items на word/marker. Markers (bookmark) — zero-width;
         // attached к line top-Y но не учитываются для line-width.
@@ -731,6 +733,22 @@ final class Engine
         $effectiveAvail = $availableWidth - ($isFirstLine ? $firstLineIndent : 0);
         $startX = $ctx->leftX + $p->style->indentLeftPt + ($isFirstLine ? $firstLineIndent : 0);
 
+        // Justify (Both/Distribute) — distribute extra space across gaps
+        // между words. Last-line + lines с ≥80% fill skipped (CSS spec'у
+        // следующая norm: avoid huge gaps).
+        $extraPerGap = 0.0;
+        $isJustify = ($p->style->alignment === Alignment::Both
+            || $p->style->alignment === Alignment::Distribute);
+        if ($isJustify && ! $isLastLine && $countWords > 1) {
+            $slack = $effectiveAvail - $totalContentWidth;
+            $fillRatio = $effectiveAvail > 0 ? $totalContentWidth / $effectiveAvail : 1.0;
+            // Расширяем только если line хотя бы 60% заполнена (избегаем
+            // нелепо большие gaps на коротких lines).
+            if ($slack > 0 && $fillRatio >= 0.6) {
+                $extraPerGap = $slack / ($countWords - 1);
+            }
+        }
+
         switch ($p->style->alignment) {
             case Alignment::End:
                 $startX += $effectiveAvail - $totalContentWidth;
@@ -739,6 +757,8 @@ final class Engine
                 $startX += ($effectiveAvail - $totalContentWidth) / 2;
                 break;
             default:
+                // Start / Both / Distribute → start at startX; justify
+                // распределяется через $extraPerGap при rendering.
                 break;
         }
 
@@ -797,11 +817,9 @@ final class Engine
             }
 
             if ($i + 1 < $countWords) {
-                $spaceWidth = $this->measureWidth(' ', $style);
+                $spaceWidth = $this->measureWidth(' ', $style) + $extraPerGap;
                 $x += $spaceWidth;
                 $this->showText($ctx->currentPage, ' ', $x - $spaceWidth, $baselineY, $sizePt, $style);
-                // Если next word имеет тот же link — extend linkLastX через
-                // space; иначе linkFlush сработает на next iter.
                 if ($linkRef !== null && (($wordItems[$i + 1]['link'] ?? null) === $linkRef)) {
                     $linkLastX = $x;
                 }
