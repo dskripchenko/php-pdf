@@ -31,11 +31,15 @@ final class ContentStream
     public function text(
         string $fontName, float $sizePt, float $xPt, float $yPt, string $text,
         ?float $r = null, ?float $g = null, ?float $b = null,
+        float $letterSpacingPt = 0,
     ): self {
         $escapedText = $this->escapeString($text);
         $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
+        if ($letterSpacingPt !== 0.0) {
+            $this->body .= sprintf("%s Tc\n", $this->formatNumber($letterSpacingPt));
+        }
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= sprintf("(%s) Tj\n", $escapedText);
         $this->body .= 'ET'."\n";
@@ -52,10 +56,14 @@ final class ContentStream
     public function textHexString(
         string $fontName, float $sizePt, float $xPt, float $yPt, string $hexString,
         ?float $r = null, ?float $g = null, ?float $b = null,
+        float $letterSpacingPt = 0,
     ): self {
         $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
+        if ($letterSpacingPt !== 0.0) {
+            $this->body .= sprintf("%s Tc\n", $this->formatNumber($letterSpacingPt));
+        }
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= sprintf("%s Tj\n", $hexString);
         $this->body .= 'ET'."\n";

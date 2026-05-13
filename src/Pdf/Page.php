@@ -90,9 +90,10 @@ final class Page
     public function showText(
         string $text, float $x, float $y, StandardFont $font, float $sizePt,
         ?float $r = null, ?float $g = null, ?float $b = null,
+        float $letterSpacingPt = 0,
     ): self {
         $resourceName = $this->registerStandardFont($font);
-        $this->stream->text($resourceName, $sizePt, $x, $y, $text, $r, $g, $b);
+        $this->stream->text($resourceName, $sizePt, $x, $y, $text, $r, $g, $b, $letterSpacingPt);
 
         return $this;
     }
@@ -108,13 +109,22 @@ final class Page
     public function showEmbeddedText(
         string $text, float $x, float $y, PdfFont $font, float $sizePt,
         ?float $r = null, ?float $g = null, ?float $b = null,
+        float $letterSpacingPt = 0,
     ): self {
         $resourceName = $this->registerEmbeddedFont($font);
         $tjOps = $font->encodeTextTjArray($text);
         if (count($tjOps) === 1) {
-            $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0], $r, $g, $b);
+            $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0], $r, $g, $b, $letterSpacingPt);
         } else {
-            $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps, $r, $g, $b);
+            // textTjArray не имеет letter-spacing поддержки (TJ кernit'инг
+            // делает adjustments сам); если задан letter-spacing — fall
+            // back на Tc + hex single string.
+            if ($letterSpacingPt !== 0.0) {
+                $hex = $font->encodeText($text);
+                $this->stream->textHexString($resourceName, $sizePt, $x, $y, $hex, $r, $g, $b, $letterSpacingPt);
+            } else {
+                $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps, $r, $g, $b);
+            }
         }
 
         return $this;

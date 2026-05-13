@@ -30,6 +30,8 @@ final readonly class RunStyle
         public bool $subscript = false,
         /** Named highlight color: yellow, green, cyan, etc. (OOXML-style). */
         public ?string $highlight = null,
+        /** Phase 21: letter-spacing (Tc operator) в pt. null = inherit/0. */
+        public ?float $letterSpacingPt = null,
     ) {}
 
     public function withBold(bool $value = true): self
@@ -101,7 +103,13 @@ final readonly class RunStyle
             superscript: $this->superscript || $parent->superscript,
             subscript: $this->subscript || $parent->subscript,
             highlight: $this->highlight ?? $parent->highlight,
+            letterSpacingPt: $this->letterSpacingPt ?? $parent->letterSpacingPt,
         );
+    }
+
+    public function withLetterSpacingPt(float $pt): self
+    {
+        return $this->copy(letterSpacingPt: $pt);
     }
 
     private function copy(
@@ -116,6 +124,7 @@ final readonly class RunStyle
         ?bool $superscript = null,
         ?bool $subscript = null,
         ?string $highlight = null,
+        ?float $letterSpacingPt = null,
     ): self {
         return new self(
             sizePt: $sizePt ?? $this->sizePt,
@@ -129,6 +138,7 @@ final readonly class RunStyle
             superscript: $superscript ?? $this->superscript,
             subscript: $subscript ?? $this->subscript,
             highlight: $highlight ?? $this->highlight,
+            letterSpacingPt: $letterSpacingPt ?? $this->letterSpacingPt,
         );
     }
 
@@ -139,6 +149,7 @@ final readonly class RunStyle
             && $this->backgroundColor === null
             && $this->fontFamily === null
             && $this->highlight === null
+            && $this->letterSpacingPt === null
             && ! $this->bold && ! $this->italic && ! $this->underline
             && ! $this->strikethrough && ! $this->superscript && ! $this->subscript;
     }

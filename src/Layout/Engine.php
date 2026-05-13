@@ -962,11 +962,12 @@ final class Engine
         if ($style->color !== null) {
             [$r, $g, $b] = $this->hexToRgb($style->color);
         }
+        $tracking = $style->letterSpacingPt ?? 0;
         $font = $this->resolveEmbeddedFont($style);
         if ($font !== null) {
-            $page->showEmbeddedText($text, $x, $baselineY, $font, $sizePt, $r, $g, $b);
+            $page->showEmbeddedText($text, $x, $baselineY, $font, $sizePt, $r, $g, $b, $tracking);
         } else {
-            $page->showText($text, $x, $baselineY, $this->fallbackStandard, $sizePt, $r, $g, $b);
+            $page->showText($text, $x, $baselineY, $this->fallbackStandard, $sizePt, $r, $g, $b, $tracking);
         }
     }
 
