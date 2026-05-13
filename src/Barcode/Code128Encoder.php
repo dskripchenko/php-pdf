@@ -61,6 +61,8 @@ final class Code128Encoder
 
     private const START_B = 104;
 
+    private const START_C = 105;
+
     private const STOP = 106;
 
     /**
@@ -72,7 +74,13 @@ final class Code128Encoder
 
     public function __construct(public readonly string $data)
     {
-        $this->encode($data);
+        // Phase 57: auto-detect Set C mode для digit-only input length ≥ 4.
+        // Set C encodes 2 digits per codeword — compactнее, чем Set B.
+        if (preg_match('@^\d+$@', $data) && strlen($data) >= 4 && strlen($data) % 2 === 0) {
+            $this->encodeSetC($data);
+        } else {
+            $this->encodeSetB($data);
+        }
     }
 
     /**
@@ -101,7 +109,7 @@ final class Code128Encoder
         return [...$quiet, ...$this->modules, ...$quiet];
     }
 
-    private function encode(string $data): void
+    private function encodeSetB(string $data): void
     {
         if ($data === '') {
             throw new \InvalidArgumentException('Code 128 input must be non-empty');
@@ -118,10 +126,31 @@ final class Code128Encoder
             }
             $codes[] = $byte - 32;
         }
+        $this->finalize($codes);
+    }
 
+    /**
+     * Phase 57: Code 128 Set C — encodes 2 digits per codeword. Requires
+     * even-length digit-only input (caller validates).
+     */
+    private function encodeSetC(string $data): void
+    {
+        $codes = [self::START_C];
+        for ($i = 0; $i < strlen($data); $i += 2) {
+            $pair = (int) substr($data, $i, 2);
+            $codes[] = $pair;
+        }
+        $this->finalize($codes);
+    }
+
+    /**
+     * @param  list<int>  $codes  Start CW followed by data CWs.
+     */
+    private function finalize(array $codes): void
+    {
         // Checksum: (start + Σ(value × position)) mod 103. Position 1-based
         // для data; start counts as position 0 (т.е. multiplier 1).
-        $sum = self::START_B;
+        $sum = $codes[0];
         $position = 1;
         for ($i = 1; $i < count($codes); $i++) {
             $sum += $codes[$i] * $position;

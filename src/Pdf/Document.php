@@ -950,6 +950,15 @@ final class Document
                 $isChecked ? '/Yes' : '/Off',
             );
         }
+        if ($type === 'signature') {
+            // Phase 56: Signature field — placeholder без real signing.
+            // /V можно set later through external signing tools.
+            return sprintf(
+                '<< /Type /Annot /Subtype /Widget /FT /Sig /Rect %s '
+                .'%s%s /Ff %d /P %d 0 R >>',
+                $rect, $namePart, $tooltipPart, $flags, $pageId,
+            );
+        }
         if ($type === 'combo' || $type === 'list') {
             $optsArray = '['.implode(' ', array_map(fn ($o) => $this->pdfString($o), $field['options'])).']';
             $valuePart = $field['defaultValue'] !== ''

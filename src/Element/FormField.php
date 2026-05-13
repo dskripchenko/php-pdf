@@ -37,10 +37,12 @@ final readonly class FormField implements BlockElement
 
     public const TYPE_LIST = 'list';
 
+    public const TYPE_SIGNATURE = 'signature';
+
     public const SUPPORTED_TYPES = [
         self::TYPE_TEXT, self::TYPE_TEXT_MULTILINE, self::TYPE_PASSWORD,
         self::TYPE_CHECKBOX, self::TYPE_RADIO_GROUP, self::TYPE_COMBO,
-        self::TYPE_LIST,
+        self::TYPE_LIST, self::TYPE_SIGNATURE,
     ];
 
     /**
