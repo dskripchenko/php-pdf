@@ -124,10 +124,45 @@ final class SvgRenderer
                 'polygon' => self::renderPolygon($child, $page, $tx, $ty, true, $scaleX),
                 'polyline' => self::renderPolygon($child, $page, $tx, $ty, false, $scaleX),
                 'path' => self::renderPath($child, $page, $tx, $ty, $scaleX),
+                'text' => self::renderText($child, $page, $tx, $ty, $scaleX),
                 'g' => self::walkElement($child, $page, $tx, $ty, $scaleX, $scaleY),
                 default => null,
             };
         }
+    }
+
+    /**
+     * Phase 58: SVG <text>. Basic support: x, y, font-size, fill.
+     *
+     * Limitations:
+     *  - Uses StandardFont::Helvetica (no font-family resolution).
+     *  - text-anchor: middle/end ignored (default = start).
+     *  - tspan / nested elements skipped.
+     *
+     * @param  callable(float): float  $tx
+     * @param  callable(float): float  $ty
+     */
+    private static function renderText(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX): void
+    {
+        $x = (float) ($el['x'] ?? 0);
+        $y = (float) ($el['y'] ?? 0);
+        $fontSize = (float) ($el['font-size'] ?? 16);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
+        if (! $hasFill) {
+            return;
+        }
+        // SVG text positioned at baseline; в PDF showText X-Y используются
+        // same way (Y = baseline).
+        $text = trim((string) $el);
+        if ($text === '') {
+            return;
+        }
+        $page->showText(
+            $text, $tx($x), $ty($y),
+            \Dskripchenko\PhpPdf\Pdf\StandardFont::Helvetica,
+            $fontSize * $scaleX, // Scale font size с x-scale.
+            $fr, $fg, $fb,
+        );
     }
 
     /**
