@@ -20,4 +20,6 @@ namespace Dskripchenko\PhpPdf\Element;
 enum BarcodeFormat: string
 {
     case Code128 = 'code128';
+    case Ean13 = 'ean13';
+    case UpcA = 'upca';
 }

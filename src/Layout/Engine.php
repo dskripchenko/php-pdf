@@ -493,9 +493,23 @@ final class Engine
     {
         $ctx->cursorY -= $bc->spaceBeforePt;
 
-        // Encode.
-        $encoder = new \Dskripchenko\PhpPdf\Barcode\Code128Encoder($bc->value);
-        $modules = $encoder->modulesWithQuietZone(10);
+        // Encode по format'у.
+        [$modules, $captionText] = match ($bc->format) {
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::Code128 => [
+                (new \Dskripchenko\PhpPdf\Barcode\Code128Encoder($bc->value))->modulesWithQuietZone(10),
+                $bc->value,
+            ],
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::Ean13 => (function () use ($bc): array {
+                $e = new \Dskripchenko\PhpPdf\Barcode\Ean13Encoder($bc->value);
+
+                return [$e->modulesWithQuietZone(9), $e->canonical];
+            })(),
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::UpcA => (function () use ($bc): array {
+                $e = new \Dskripchenko\PhpPdf\Barcode\Ean13Encoder($bc->value, upcA: true);
+
+                return [$e->modulesWithQuietZone(9), $e->canonical];
+            })(),
+        };
         $moduleCount = count($modules);
 
         // Width / height.
@@ -546,24 +560,23 @@ final class Engine
         }
 
         // Caption (human-readable). Используем base-14 Helvetica либо
-        // embedded font если задан. Code 128 input — printable ASCII,
-        // safely encoded WinAnsi → Standard font работает.
+        // embedded font если задан. Для EAN-13/UPC-A caption — canonical
+        // form с checksum digit.
         if ($bc->showText) {
             $captionY = $yBottom - $bc->textSizePt - 1.0;
-            // Estimate caption width для centering.
             $captionWidth = $this->defaultFont !== null
-                ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($bc->value)
-                : mb_strlen($bc->value, 'UTF-8') * $bc->textSizePt * 0.5;
+                ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($captionText)
+                : mb_strlen($captionText, 'UTF-8') * $bc->textSizePt * 0.5;
             $captionX = $blockX + ($totalWidth - $captionWidth) / 2;
 
             if ($this->defaultFont !== null) {
                 $ctx->currentPage->showEmbeddedText(
-                    $bc->value, $captionX, $captionY,
+                    $captionText, $captionX, $captionY,
                     $this->defaultFont, $bc->textSizePt,
                 );
             } else {
                 $ctx->currentPage->showText(
-                    $bc->value, $captionX, $captionY,
+                    $captionText, $captionX, $captionY,
                     $this->fallbackStandard, $bc->textSizePt,
                 );
             }
