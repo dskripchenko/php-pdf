@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 103 фазы закрыты (965 + 194 printable = 1159 тестов).
+**Текущий статус:** v1.1-dev — 106 фаз закрыты (993 + 194 printable = 1187 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-105 closed (81 фаза):
+**v1.1 progress:** 25-108 closed (84 фазы):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -67,7 +67,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 102 drawImage с rotation,
  - 103 PDF/A-2u / PDF/A-3 support,
  - 104 DataMatrix barcode (ECC 200, sizes 10×10..26×26),
- - 105 QR auto best-mask selection (8 patterns + penalty scoring).
+ - 105 QR auto best-mask selection (8 patterns + penalty scoring),
+ - 106 AES-256 V5 R6 (PDF 2.0) iterative hash 2.B,
+ - 107 Form XObject reusable content streams,
+ - 108 PKCS#7 detached AcroForm signing.
 
 ---
 
@@ -238,7 +241,7 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Encryption (password-protected PDFs) — RC4-128~~ ✅ **Phase 41 closed** (c3d7743).
 - ~~Encryption — AES-128 (V4 R4)~~ ✅ **Phase 42 closed** (2d18542).
 - ~~AES-256 (V5 R5, Adobe Supplement)~~ ✅ **Phase 50 closed** (2040bfd).
-- AES-256 V5 R6 (PDF 2.0 — 64-round hash iteration).
+- ~~AES-256 V5 R6 (PDF 2.0 — iterative hash 2.B)~~ ✅ **Phase 106 closed** (61b8230).
 - ~~String encryption (literal strings → encrypted hex)~~ ✅ **Phase 77 closed** (e6c8d2f).
 - ~~Form fields (interactive AcroForm) — text + checkbox~~ ✅ **Phase 43 closed** (aac0c20).
 - ~~AcroForm extensions: multi-line, password, combo, list, radio~~ ✅ **Phase 46 closed** (7862b41).
@@ -251,12 +254,12 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - Tagged PDF /Link, reading order /StructParents tree, role mapping.
 - ~~PDF/A-1b compliance mode~~ ✅ **Phase 47 closed** (25884b1).
 - ~~AcroForm signature field placeholder~~ ✅ **Phase 56 closed** (b93c6c8).
-- AcroForm signature actual signing (PKCS#7 two-pass byte range).
+- ~~AcroForm signature actual signing (PKCS#7 two-pass byte range)~~ ✅ **Phase 108 closed** (757e1e7).
 - ~~JavaScript validation / calculation / format / keystroke actions~~ ✅ **Phase 67 closed** (5c8e1b4).
 - ~~AcroForm submit / reset / push buttons~~ ✅ **Phase 83 closed** (ba8e13d).
 - ~~AcroForm /CO calculation order~~ ✅ **Phase 97 closed** (ef445eb).
 - ~~AcroForm /DA default appearance + /DR resources~~ ✅ **Phase 99 closed** (bd704dc).
-- Digital signatures (PKCS#7 signing of arbitrary fields).
+- ~~Digital signatures (PKCS#7 signing of arbitrary fields)~~ ✅ **Phase 108 closed** (757e1e7).
 - ~~PDF/UA heading hierarchy (/H1-/H6)~~ ✅ **Phase 61 closed** (38b3c3b).
 - ~~PDF/UA alt-text для figures~~ ✅ **Phase 62 closed** (38ccc36).
 - ~~PDF/UA /Link struct elements~~ ✅ **Phase 72 closed** (bfa0246).
