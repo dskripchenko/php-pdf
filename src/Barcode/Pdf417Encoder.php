@@ -142,8 +142,16 @@ final class Pdf417Encoder
     }
 
     /**
-     * PDF417 byte compaction: each byte → 1 codeword (mode 901).
-     * When length divisible by 6, use 924 + groups of 6 → 5 codewords each.
+     * PDF417 byte compaction per ISO/IEC 15438 §5.4.2.4.
+     *
+     * Latch codeword 924 (used when len % 6 == 0): every 6 bytes pack как
+     * base-900 → 5 codewords.
+     *
+     * Latch codeword 901 (used when len % 6 != 0): same 6-byte groups +
+     * tail bytes (1-5) encoded как 1 codeword per byte (raw value 0-255).
+     *
+     * The 1-byte-per-codeword tail mode is what makes 901 distinct from
+     * 924 — both use base-900 packing для full groups.
      *
      * @return list<int>
      */
@@ -151,18 +159,15 @@ final class Pdf417Encoder
     {
         $len = strlen($data);
         $cw = [];
-        if ($len % 6 === 0) {
-            // Multi-byte mode: groups of 6 bytes → 5 codewords each.
-            $cw[] = self::MODE_LATCH_BYTE_MULTI;
-            for ($i = 0; $i < $len; $i += 6) {
-                $cw = array_merge($cw, self::packSixBytes(substr($data, $i, 6)));
-            }
-        } else {
-            // Single-byte mode: 1 codeword per byte.
-            $cw[] = self::MODE_LATCH_BYTE_SINGLE;
-            for ($i = 0; $i < $len; $i++) {
-                $cw[] = ord($data[$i]);
-            }
+        $cw[] = ($len % 6 === 0) ? self::MODE_LATCH_BYTE_MULTI : self::MODE_LATCH_BYTE_SINGLE;
+        // Full groups of 6 bytes → 5 codewords each (base-900 packing).
+        $fullGroups = intdiv($len, 6);
+        for ($g = 0; $g < $fullGroups; $g++) {
+            $cw = array_merge($cw, self::packSixBytes(substr($data, $g * 6, 6)));
+        }
+        // Tail bytes (1-5) emitted as raw byte codewords (после full groups).
+        for ($i = $fullGroups * 6; $i < $len; $i++) {
+            $cw[] = ord($data[$i]);
         }
 
         return $cw;
