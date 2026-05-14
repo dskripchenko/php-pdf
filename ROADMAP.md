@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 134 фазы закрыты (1206 + 194 printable = 1400 тестов).
+**Текущий статус:** v1.1-dev — 135 фаз закрыты (1217 + 194 printable = 1411 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-136 closed (112 фаз):
+**v1.1 progress:** 25-137 closed (113 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -110,7 +110,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 135 Arabic basic shaping (joining classes + Pres Forms B mapping +
    RTL reversal + lam-alef ligature, integrated в PdfFont),
  - 136 Unicode Bidi Algorithm UAX 9 (implicit levels — W/N/I rules +
-   L2 reordering, integrated в PdfFont для mixed LTR/RTL text).
+   L2 reordering, integrated в PdfFont для mixed LTR/RTL text),
+ - 137 Indic basic shaping (pre-base matra reorder для Devanagari,
+   Bengali, Tamil, Telugu, Kannada, Malayalam, Gujarati, Gurmukhi,
+   Oriya, Sinhala — handles conjuncts через halant traversal).
 
 ---
 
@@ -271,7 +274,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   - ~~Unicode Bidi Algorithm~~ ✅ **Phase 136 closed** (c02b27b).
     UAX 9 implicit levels (W/N/I rules + L2). Mixed LTR/RTL paragraphs.
     X explicit/isolate rules + L3 mirroring deferred.
-  - Indic combining marks — deferred (complex reordering rules per script).
+  - ~~Indic combining marks (pre-base matra reorder)~~ ✅ **Phase 137 closed** (f4778b5).
+    Devanagari/Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/Gurmukhi/
+    Oriya/Sinhala. Two-part matras + reph + conjunct GSUB substitution
+    deferred (typical font handles conjunct rendering, two-part rare).
 - ~~Line-height absolute (`line-height: 18pt`)~~ ✅ **Phase 79 closed** (9a33ed7).
 
 ### Typography
