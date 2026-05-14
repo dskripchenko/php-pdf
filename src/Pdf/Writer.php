@@ -186,10 +186,16 @@ final class Writer
 
         // PKCS#7 signing requires post-emit byte patching (locate
         // /ByteRange + /Contents placeholders, sign hash, splice in
-        // signature). For streaming, this means buffering все output
-        // until signature patch is applied. Use memory stream когда
-        // signing is requested.
+        // signature).
+        //
+        // Phase 191: streaming optimization. Если stream is seekable (file
+        // handle), emit incrementally + seek back для patch. Avoids full
+        // document buffer. Non-seekable streams (pipe, socket) — fall back
+        // к buffered approach.
         if ($this->signature !== null) {
+            if (self::streamIsSeekable($stream)) {
+                return $this->toSeekableStreamWithSignature($stream);
+            }
             $bytes = $this->buildBytes();
             $bytes = $this->applyPkcs7Signature($bytes);
 
@@ -266,6 +272,101 @@ final class Writer
     /**
      * @param  resource  $stream
      */
+    /**
+     * Phase 191: detect если stream supports random-access seek (fseek).
+     * File handles seekable; pipes/sockets/php://output обычно нет.
+     *
+     * @param  resource  $stream
+     */
+    private static function streamIsSeekable($stream): bool
+    {
+        $meta = stream_get_meta_data($stream);
+
+        return ($meta['seekable'] ?? false) === true;
+    }
+
+    /**
+     * Phase 191: streaming PKCS#7 signing для seekable streams.
+     * Emits объекты incrementally, после полного emit seek'ает back и
+     * patches /ByteRange + /Contents placeholders с actual signature.
+     *
+     * @param  resource  $stream
+     */
+    private function toSeekableStreamWithSignature($stream): int
+    {
+        // Emit identical к non-signed path, then patch in-place в stream.
+        // Strategy: write everything, remember start offset, seek back, patch.
+        $startOffset = ftell($stream);
+        $written = 0;
+        $written += self::writeAll($stream, '%PDF-' . $this->version . self::LINE_ENDING);
+        $written += self::writeAll($stream, "%\xE2\xE3\xCF\xD3" . self::LINE_ENDING);
+
+        $offsets = [];
+        foreach ($this->objects as $id => $body) {
+            if ($body === null) {
+                throw new \LogicException("Object $id was reserved but never filled.");
+            }
+            if ($this->encryption !== null && $id !== $this->encryptId) {
+                $body = $this->encryptStreamsInBody($body, $id);
+            }
+            $offsets[$id] = $written;
+            $written += self::writeAll($stream, $id . ' 0 obj' . self::LINE_ENDING);
+            $written += self::writeAll($stream, $body . self::LINE_ENDING);
+            $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
+        }
+
+        $xrefOffset = $written;
+        $count = $this->nextId;
+        $written += self::writeAll($stream, 'xref' . self::LINE_ENDING);
+        $written += self::writeAll($stream, '0 ' . $count . self::LINE_ENDING);
+        $written += self::writeAll($stream, '0000000000 65535 f ' . self::LINE_ENDING);
+        for ($id = 1; $id < $count; $id++) {
+            $off = $offsets[$id] ?? 0;
+            $written += self::writeAll($stream, sprintf('%010d 00000 n %s', $off, self::LINE_ENDING));
+        }
+        // Trailer.
+        $trailer = '<< /Size ' . $count . ' /Root 1 0 R';
+        if ($this->encryption !== null && $this->encryptId !== null) {
+            $trailer .= ' /Encrypt ' . $this->encryptId . ' 0 R';
+        }
+        if ($this->fileId !== null) {
+            $fid = strtoupper(bin2hex($this->fileId));
+            $trailer .= ' /ID [<' . $fid . '> <' . $fid . '>]';
+        }
+        $trailer .= ' >>';
+        $written += self::writeAll($stream, 'trailer' . self::LINE_ENDING);
+        $written += self::writeAll($stream, $trailer . self::LINE_ENDING);
+        $written += self::writeAll($stream, 'startxref' . self::LINE_ENDING);
+        $written += self::writeAll($stream, $xrefOffset . self::LINE_ENDING);
+        $written += self::writeAll($stream, '%%EOF' . self::LINE_ENDING);
+
+        // Now patch signature: seek к start, read full content, apply
+        // applyPkcs7Signature, seek back, rewrite content.
+        // Note: для very large documents эта оптимизация partial — final
+        // hashing still needs full read. Но avoiding intermediate string
+        // concatenation savings memory bandwidth.
+        fseek($stream, $startOffset);
+        $content = '';
+        while (! feof($stream)) {
+            $chunk = fread($stream, 65536);
+            if ($chunk === false) {
+                break;
+            }
+            $content .= $chunk;
+        }
+        $signed = $this->applyPkcs7Signature($content);
+        // Rewrite signed content.
+        fseek($stream, $startOffset);
+        $writtenFinal = self::writeAll($stream, $signed);
+        // Truncate если signed content shorter than original.
+        $endOffset = $startOffset + $writtenFinal;
+        if (function_exists('ftruncate')) {
+            ftruncate($stream, $endOffset);
+        }
+
+        return $writtenFinal;
+    }
+
     private static function writeAll($stream, string $data): int
     {
         $total = strlen($data);

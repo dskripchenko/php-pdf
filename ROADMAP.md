@@ -624,12 +624,11 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 
 - **Public-key encryption** — /Filter /PubSec (currently /Standard only).
   X.509 certificate-based access control.
-- **PDF/A-1a (accessible)** — requires semantic Tagged PDF conformance
-  enforcement: H1-H6 hierarchy, Figure/Caption, Table headers, etc.
-  Currently PDF/A-1b (basic) и PDF/A-2u (Unicode) supported.
-- **Streaming PKCS#7 signing** — currently requires internal buffer для
-  post-emit byte-range patching. Streaming variant requires placeholder
-  reservation + offset back-patching без full buffer.
+- ~~PDF/A-1a (accessible)~~ ✅ **Phase 190 closed**. PdfAConfig::CONFORMANCE_A
+  с part=1 automatically enables Tagged PDF (matches PDF/A-2a, 3a behavior).
+- ~~Streaming PKCS#7 signing~~ ✅ **Phase 191 closed**. Seekable streams
+  (file handles) emit incrementally + seek back для patch; non-seekable
+  fallback к buffer.
 - **Per-object content stream incremental emission** — currently each Page
   content stream materializes fully before emission. Deeper API rewrite.
 

@@ -302,14 +302,20 @@ final class Document
 
     /**
      * Phase 47: Enable PDF/A-1b compliance mode.
+     * Phase 190: PDF/A-1a (accessibility) variant — requires Tagged PDF.
      */
     public function enablePdfA(PdfAConfig $config): self
     {
         if ($this->encryption !== null) {
-            throw new \LogicException('PDF/A-1b disallows encryption — call enablePdfA() перед encrypt() либо не вызывайте encrypt().');
+            throw new \LogicException('PDF/A disallows encryption — call enablePdfA() перед encrypt() либо не вызывайте encrypt().');
         }
         $this->pdfA = $config;
         $this->pdfVersion = '1.4';
+        // Phase 190: PDF/A-1a (and PDF/A-2a, 3a) require Tagged PDF structure.
+        // Auto-enable tagging если conformance = 'A'.
+        if ($config->conformance === PdfAConfig::CONFORMANCE_A && ! $this->tagged) {
+            $this->enableTagged();
+        }
 
         return $this;
     }
