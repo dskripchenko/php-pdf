@@ -84,8 +84,28 @@ final class PdfFont
         private readonly TtfFile $ttf,
         private readonly bool $subset = true,
         private readonly array $axes = [],
+        /**
+         * Phase 194: vertical writing mode для CJK text. When true:
+         *  - CIDFontType2 dict gets /WMode 1
+         *  - /W2 array emitted с vertical advance metrics from vmtx table
+         *  - Caller responsible для using vertical positioning в layout
+         *
+         * Font must have vhea+vmtx tables — check TtfFile::hasVerticalMetrics()
+         * перед setting verticalWriting=true.
+         */
+        private readonly bool $verticalWriting = false,
     ) {
+        if ($verticalWriting && ! $ttf->hasVerticalMetrics()) {
+            throw new \InvalidArgumentException(
+                'Vertical writing requested but font lacks vhea+vmtx tables'
+            );
+        }
         $this->writerRegistrations = new \SplObjectStorage;
+    }
+
+    public function isVerticalWriting(): bool
+    {
+        return $this->verticalWriting;
     }
 
     /**
@@ -685,18 +705,57 @@ final class PdfFont
 
     /**
      * CIDFontType2 descendant — содержит glyph widths и связь с descriptor'ом.
+     *
+     * Phase 194: vertical writing — adds /WMode 1 + /W2 array (vertical
+     * advance metrics from vmtx).
      */
     private function buildCIDFont(int $descriptorId): string
     {
+        $verticalParts = '';
+        if ($this->verticalWriting) {
+            $verticalParts = '/WMode 1 /W2 '.$this->buildVerticalWidthsArray().' ';
+        }
+
         return sprintf(
             '<< /Type /Font /Subtype /CIDFontType2 /BaseFont /%s '
             .'/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> '
             .'/CIDToGIDMap /Identity /FontDescriptor %d 0 R '
-            .'/W %s >>',
+            .'/W %s %s>>',
             $this->ttf->postScriptName(),
             $descriptorId,
             $this->buildWidthsArray(),
+            $verticalParts,
         );
+    }
+
+    /**
+     * Phase 194: /W2 array per PDF spec §9.7.4.3 — vertical metrics для CIDFont.
+     * Format: [<gid> [<v_y> <v_y_origin> <w1y>] ...]
+     * Где:
+     *   v_y — vertical displacement к origin point (default 880 thousandths)
+     *   v_y_origin — y coordinate относительно horizontal origin
+     *   w1y — vertical advance (negative — moves downward).
+     *
+     * Simplified emission: per glyph derive w1y from vmtx advanceHeight,
+     * v_y / v_y_origin use defaults (PDF readers typically tolerate this).
+     */
+    private function buildVerticalWidthsArray(): string
+    {
+        if ($this->usedGlyphs === []) {
+            return '[]';
+        }
+        $upem = $this->ttf->unitsPerEm();
+        $parts = [];
+        ksort($this->usedGlyphs);
+        foreach (array_keys($this->usedGlyphs) as $gid) {
+            $advHeight = $this->ttf->advanceHeight($gid) ?? 1000;
+            // PDF /W2 advance в negative thousandths (1000 unitsPerEm = 1 em).
+            $w1y = -(int) round($advHeight * 1000 / $upem);
+            // v_y default: 880 (PDF §9.7.4.3); v_y_origin default 500.
+            $parts[] = "$gid [880 500 $w1y]";
+        }
+
+        return '['.implode(' ', $parts).']';
     }
 
     /**
