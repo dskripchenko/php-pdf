@@ -209,6 +209,67 @@ final class TtfFile
     }
 
     /**
+     * Phase 131: Detect OpenType variable font (presence of `fvar` table).
+     */
+    public function isVariable(): bool
+    {
+        return $this->tableInfo('fvar') !== null;
+    }
+
+    /** @var array{axes:list<array{tag:string,min:float,default:float,max:float,nameId:int,flags:int}>, instances:list<array{nameId:int,coordinates:array<string,float>,postScriptNameId:?int,flags:int}>}|null */
+    private ?array $fvarParsed = null;
+
+    /**
+     * Phase 131: Variation axes definitions из fvar table.
+     *
+     * Returns list of axes с tag (4-char like "wght", "wdth", "ital", "slnt",
+     * "opsz" or custom), min/default/max values, и nameId (for human-readable
+     * name lookup via `name` table).
+     *
+     * @return list<array{tag:string,min:float,default:float,max:float,nameId:int,flags:int}>
+     */
+    public function variationAxes(): array
+    {
+        return $this->parseFvar()['axes'];
+    }
+
+    /**
+     * Phase 131: Named instances (predefined coordinate combinations) из fvar.
+     *
+     * Each instance имеет subfamily nameId (e.g., "Light", "Regular", "Bold"),
+     * coordinates map axisTag → value, optional postScript nameId.
+     *
+     * @return list<array{nameId:int,coordinates:array<string,float>,postScriptNameId:?int,flags:int}>
+     */
+    public function namedInstances(): array
+    {
+        return $this->parseFvar()['instances'];
+    }
+
+    /** @return array{axes:list<array<string,mixed>>, instances:list<array<string,mixed>>} */
+    private function parseFvar(): array
+    {
+        if ($this->fvarParsed !== null) {
+            return $this->fvarParsed;
+        }
+        $info = $this->tableInfo('fvar');
+        if ($info === null) {
+            return $this->fvarParsed = ['axes' => [], 'instances' => []];
+        }
+
+        return $this->fvarParsed = (new FvarReader)->read($this->bytes, $info);
+    }
+
+    /**
+     * Phase 131: Lookup human-readable name by nameID through `name` table.
+     * Returns null если nameID не найден.
+     */
+    public function nameById(int $nameId): ?string
+    {
+        return $this->namesById[$nameId] ?? null;
+    }
+
+    /**
      * Read header + table directory.
      * Header: scaler type (4) + numTables (2) + 3 × uint16 = 12 bytes.
      * Каждый entry — tag (4) + checksum (4) + offset (4) + length (4) = 16.
@@ -524,6 +585,9 @@ final class TtfFile
      * Мы ищем nameID 6 (PostScript name). Предпочтение — Windows
      * (platformID 3) с Unicode (UTF-16BE).
      */
+    /** @var array<int, string> Phase 131: nameId → decoded UTF-8 string (best-quality variant). */
+    private array $namesById = [];
+
     private function parseName(): void
     {
         $info = $this->tableInfo('name');
@@ -537,6 +601,7 @@ final class TtfFile
         $count = $this->reader->readUInt16();
         $stringOffset = $this->reader->readUInt16();
 
+        // Collect все name records, prefer Windows platform=3 над Macintosh=1.
         $best = null;
         for ($i = 0; $i < $count; $i++) {
             $platformId = $this->reader->readUInt16();
@@ -545,26 +610,25 @@ final class TtfFile
             $nameId = $this->reader->readUInt16();
             $length = $this->reader->readUInt16();
             $offset = $this->reader->readUInt16();
-            if ($nameId !== 6) {
-                continue; // не PostScript name
-            }
             $absOffset = $nameStart + $stringOffset + $offset;
             $rawString = substr($this->bytes, $absOffset, $length);
             $value = match ($platformId) {
                 3 => mb_convert_encoding($rawString, 'UTF-8', 'UTF-16BE'),
-                1 => $rawString, // Macintosh, MacRoman; для PostScript name
-                                 // это ASCII-only de facto
+                1 => $rawString,
                 default => $rawString,
             };
             if ($value === '' || $value === false) {
                 continue;
             }
-            // Prefer Windows (platform 3).
-            if ($platformId === 3) {
-                $best = $value;
-                break;
+            // Phase 131: store ALL name IDs для variable-font instance/axis lookup.
+            // Prefer Windows (platform 3) — overwrites Mac entry если оба есть.
+            if (! isset($this->namesById[$nameId]) || $platformId === 3) {
+                $this->namesById[$nameId] = $value;
             }
-            $best ??= $value;
+            // PostScript name = nameId 6.
+            if ($nameId === 6 && ($platformId === 3 || $best === null)) {
+                $best = $value;
+            }
         }
 
         $this->postScriptName = $best ?? 'UnknownFont';
