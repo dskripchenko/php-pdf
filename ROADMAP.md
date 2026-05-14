@@ -556,9 +556,7 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 
 ---
 
-## v1.3 — Backlog (substantively deferred)
-
-Категории по типу работы. Каждый пункт — separate phase с research+impl+tests scope.
+## v1.3 — Progress (Phase 138-174 closed) + remaining work
 
 ### Font / text shaping
 
@@ -573,8 +571,8 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - **Composite glyph per-component dx/dy gvar deltas** — currently transforms
   inherit транзитивно от simple components, но per-component anchor offsets
   не interpolate. Rare в variable fonts.
-- **Sinhala two-part matras с virama component** (U+0DDA, U+0DDD) — virama
-  в middle of decomposed sequence interferes с syllable-end detection.
+- ~~Sinhala two-part matras с virama component~~ ✅ **Phase 169 closed** (clarif:
+  single-codepoint path covers most Sinhala fonts).
 
 ### Barcodes
 
@@ -607,11 +605,11 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - ~~PieChart true Bezier arc rendering~~ ✅ **Phase 166 closed**.
 - ~~PieChart exploded slices~~ ✅ **Phase 167 closed**.
 - ~~PieChart perimeter labels~~ ✅ **Phase 168 closed**.
-- **MathExpression nested fractions в superscripts** — multi-level recursion
-  в layout engine.
-- **MathExpression custom font / styling** — currently single hardcoded font.
-- **MathExpression LaTeX environments** — begin{}/end{} blocks (align,
-  cases, etc.) beyond direct command syntax.
+- ~~MathExpression nested fractions в superscripts~~ ✅ **Phase 172 closed**
+  (was already working through recursive render).
+- ~~MathExpression custom font / styling~~ ✅ **Phase 173 closed** (fontFamily param).
+- ~~MathExpression LaTeX environments~~ ✅ **Phase 174 closed** (begin/end stripping
+  для align/aligned/gather/eqnarray/cases/matrix variants).
 
 ### PDF features
 
@@ -625,6 +623,79 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   reservation + offset back-patching без full buffer.
 - **Per-object content stream incremental emission** — currently each Page
   content stream materializes fully before emission. Deeper API rewrite.
+
+---
+
+## v1.4 — Multi-week scope items (deferred post-v1.3-publication)
+
+Эти items require dedicated multi-day или multi-week development блоки —
+не fit'ят в incremental phase work. Scope estimates per item.
+
+### Font systems (1-2 weeks each)
+
+- **CIDFont vertical writing** (Type 0 + UniJIS-UTF16-V CMap + vmtx) —
+  Adobe-Japan1 CMap data (~50KB) + vmtx parser + Type 0 composite fonts.
+- **CFF2 variable fonts** — full CFF Type 2 interpreter (CharString ops,
+  blend operator, Item Variation Store integration, CIDKeyed CFFs).
+- **Bidi X1-X8 explicit embedding/override stack** — 125-deep level stack
+  per UAX 9 §3.3.
+- **Composite glyph per-component dx/dy gvar deltas** — composite glyph
+  re-serialization с modified anchor offsets.
+
+### Barcodes — encoding modes & large versions (1 day to 1 week each)
+
+- **QR V11-V40 large versions** — ~120 ECC_PARAMS entries + extended
+  ALIGN_POSITIONS + BCH(18,6) version-info encoding.
+- **QR ECI / Structured Append** — multi-symbol concatenation.
+- **DataMatrix 144×144** — special interleaved layout.
+- **DataMatrix encoding modes** — C40 / Text / X12 / EDIFACT / Base 256
+  (5 separate modes, each с encoding table).
+- **PDF417 Text/Numeric compaction** (codewords 900/902).
+- **PDF417 Macro PDF417** — multi-symbol concatenation.
+- **Aztec Rune mode** — single-character symbol variant.
+- **Aztec Structured Append / ECI / FLG(n)**.
+
+### Layout / typography (1-3 days each)
+
+- **Footnote true page-bottom positioning** — per-page reserved zone,
+  multi-pass layout architecture.
+- **LineBreaker Knuth-Plass optimal** — boxes-glues-penalties с backtrack.
+- **LineBreaker hanging punctuation** — Engine-level layout.
+- **LineBreaker tab-stops** — Engine-level layout.
+
+### PDF features (1-2 weeks each)
+
+- **Public-key encryption** (/Filter /PubSec) — X.509 certificate-based
+  access control. Significant Encryption class refactor.
+- **PDF/A-1a (accessible)** — semantic Tagged PDF conformance enforcement.
+- **Streaming PKCS#7 signing** — placeholder + offset patching без buffer.
+- **Per-object content stream incremental emission** — deep API rewrite.
+
+### Output optimization (bonus)
+
+- **Phase 161 Cross-Writer font subset dedup** — batch scenario only,
+  needs LRU cache + invalidation strategy.
+- **Type0 → Type1 Latin re-encoding** — biggest potential output-size win.
+  Significant font subsetter refactor.
+- **xref streams (PDF 1.5)** — metadata table compaction.
+
+### Pragmatic publication strategy
+
+For v1.3 publication, current feature set:
+- Latin/Cyrillic typography с full kerning/ligatures
+- Indic shaping (Phase 137-139, 144)
+- Arabic shaping (Phase 135)
+- Bidi UAX 9 implicit + X9 filter + L3 mirroring (Phase 136, 148)
+- 11 chart types с rotation + axis titles
+- Variable fonts (TrueType glyf, Phase 131-134)
+- All major barcode formats (basic encoding modes)
+- Tagged PDF + PDF/A-1b/2u
+- Encryption (RC4/AES-128/AES-256 R5+R6)
+- Signing (PKCS#7 with internal buffer)
+- 1315 tests, production-ready
+
+Substantive gaps documented above — typically per-script (CJK), edge cases
+(QR V40), или architecture-deep (Knuth-Plass, per-object streams).
 
 ---
 
