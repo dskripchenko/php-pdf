@@ -259,6 +259,14 @@ final class Document
     private array $structElements = [];
 
     /**
+     * Phase 151: structElement index → /StructParent number tree key for tagged
+     * Link annotations. Used to wire /Link annot back к its StructElem in ParentTree.
+     *
+     * @var array<int, int>
+     */
+    private array $structParentLinkKeys = [];
+
+    /**
      * Phase 48: Enable Tagged PDF (accessibility).
      *
      * Adds /MarkInfo /Marked true + /StructTreeRoot к Catalog. Each rendered
@@ -820,50 +828,68 @@ final class Document
                     $this->fmt($ann['x1']), $this->fmt($ann['y1']),
                     $this->fmt($ann['x2']), $this->fmt($ann['y2']),
                 );
+
+                // Phase 151: reserve /StructParent number for tagged links —
+                // counter starts after page indices. Annotation dict includes
+                // /StructParent N; ParentTree maps N → struct elem ID.
+                $structParentPart = '';
+                $structParentKey = -1;
+                if ($this->tagged) {
+                    $structParentKey = count($this->pages) + count($this->structParentLinkKeys);
+                    $structParentPart = sprintf(' /StructParent %d', $structParentKey);
+                }
                 $body = match ($ann['kind']) {
                     'uri' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
-                        .'/Border [0 0 0] /A << /S /URI /URI %s >> >>',
+                        .'/Border [0 0 0] /A << /S /URI /URI %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
+                        $structParentPart,
                     ),
                     'named' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
-                        .'/Border [0 0 0] /A << /Type /Action /S /Named /N /%s >> >>',
+                        .'/Border [0 0 0] /A << /Type /Action /S /Named /N /%s >>%s >>',
                         $rect,
                         $ann['target'],
+                        $structParentPart,
                     ),
                     'javascript' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
-                        .'/Border [0 0 0] /A << /Type /Action /S /JavaScript /JS %s >> >>',
+                        .'/Border [0 0 0] /A << /Type /Action /S /JavaScript /JS %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
+                        $structParentPart,
                     ),
                     'launch' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
-                        .'/Border [0 0 0] /A << /Type /Action /S /Launch /F %s >> >>',
+                        .'/Border [0 0 0] /A << /Type /Action /S /Launch /F %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
+                        $structParentPart,
                     ),
                     default => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
-                        .'/Border [0 0 0] /Dest %s >>',
+                        .'/Border [0 0 0] /Dest %s%s >>',
                         $rect,
                         $this->pdfNameString($ann['target']),
+                        $structParentPart,
                     ),
                 };
                 $linkAnnotId = $writer->addObject($body);
                 $annotIds[] = $linkAnnotId;
 
-                // Phase 72: tagged PDF — register /Link struct element
-                // referencing this annotation through /OBJR.
+                // Phase 72/151: tagged PDF — register /Link struct element
+                // referencing this annotation через /OBJR; reserve ParentTree
+                // entry under reserved StructParent key.
                 if ($this->tagged) {
+                    $structIdx = count($this->structElements);
                     $this->structElements[] = [
                         'type' => 'Link',
-                        'mcid' => -1, // sentinel — uses /OBJR instead of /K MCID.
+                        'mcid' => -1,
                         'page' => $page,
                         'objr' => $linkAnnotId,
                     ];
+                    $this->structParentLinkKeys[$structIdx] = $structParentKey;
                 }
             }
             // Phase 109: markup annotations (Text/Highlight/Underline/StrikeOut/FreeText).
@@ -1156,6 +1182,18 @@ final class Document
                 $refs = implode(' ', array_map(fn ($id) => "$id 0 R", $elemIds));
                 $parentTreeNums[] = "$pageIdx [$refs]";
             }
+            // Phase 151: per-Link /StructParent entries — map key к single
+            // struct elem reference (NOT an array; OBJR convention).
+            $maxParentKey = count($this->pages);
+            foreach ($this->structParentLinkKeys as $structIdx => $key) {
+                $elemId = $childIds[$structIdx] ?? null;
+                if ($elemId !== null) {
+                    $parentTreeNums[] = "$key $elemId 0 R";
+                    if ($key + 1 > $maxParentKey) {
+                        $maxParentKey = $key + 1;
+                    }
+                }
+            }
             $parentTreeId = $writer->addObject(
                 '<< /Nums ['.implode(' ', $parentTreeNums).'] >>',
             );
@@ -1175,7 +1213,7 @@ final class Document
                 .'/ParentTreeNextKey %d%s >>',
                 $kidsArray,
                 $parentTreeId,
-                count($this->pages),
+                $maxParentKey,
                 $roleMapRef,
             ));
             $taggedRef = sprintf(
