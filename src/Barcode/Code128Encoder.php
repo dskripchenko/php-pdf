@@ -89,16 +89,72 @@ final class Code128Encoder
     private const FNC1 = 102;           // Function 1 (GS1-128 separator, all sets)
 
     /**
+     * Phase 165: AI lengths для GS1-128. Variable-length AIs need FNC1 after.
+     * Key = AI code (2-4 digits), value = data length (null = variable).
+     *
+     * @var array<string, ?int>
+     */
+    private const GS1_AI_LENGTHS = [
+        '00' => 18, '01' => 14, '02' => 14,
+        '11' => 6, '12' => 6, '13' => 6, '15' => 6, '16' => 6, '17' => 6,
+        '20' => 2,
+        '422' => 3, '424' => 3, '425' => 3, '426' => 3,
+        // Fixed 6-digit + 1 length indicator (treated as 6).
+        '310' => 7, '311' => 7, '312' => 7, '313' => 7, '314' => 7, '315' => 7, '316' => 7,
+        '320' => 7, '321' => 7, '322' => 7, '323' => 7, '324' => 7, '325' => 7,
+        '330' => 7, '331' => 7, '332' => 7, '333' => 7, '334' => 7, '335' => 7,
+        '340' => 7, '341' => 7, '342' => 7, '343' => 7, '344' => 7, '345' => 7,
+        '350' => 7, '351' => 7, '352' => 7, '353' => 7, '354' => 7, '355' => 7,
+        '360' => 7, '361' => 7, '362' => 7, '363' => 7, '364' => 7, '365' => 7,
+        // All other AIs default к variable (null lookup).
+    ];
+
+    private bool $gs1Mode = false;
+
+    /**
      * Resulting modules: each entry true = black, false = white.
      *
      * @var list<bool>
      */
     private array $modules = [];
 
-    public function __construct(public readonly string $data, bool $autoMode = true)
+    /**
+     * Phase 165: GS1-128 factory — parses "(NN)data(MM)data" syntax,
+     * inserts FNC1 codewords per GS1-128 spec.
+     *
+     * Variable-length AIs require FNC1 separator after data (except last AI).
+     * Fixed-length AIs (per GS1 General Specifications table) — нет separator.
+     *
+     * Common AIs supported (fixed-length subset):
+     *  - 00: SSCC (18 digits)
+     *  - 01: GTIN-14 (14 digits)
+     *  - 02: GTIN of contained trade items (14 digits)
+     *  - 11..17: Date fields (6 digits YYMMDD)
+     *  - 20: Variant (2 digits)
+     *  - 31xx..36xx: Measurement (6 digits + length indicator)
+     *
+     * All other AIs treated как variable-length → FNC1 separator emitted.
+     */
+    public static function gs1(string $aiData): self
     {
+        return new self($aiData, autoMode: true, gs1Mode: true);
+    }
+
+    public function __construct(
+        public readonly string $data,
+        bool $autoMode = true,
+        bool $gs1Mode = false,
+    ) {
         if ($data === '') {
             throw new \InvalidArgumentException('Code 128 input must be non-empty');
+        }
+        $this->gs1Mode = $gs1Mode;
+
+        if ($gs1Mode) {
+            $codes = $this->encodeGs1($data);
+            $this->finalize($codes);
+
+            return;
         }
         // Phase 164: auto-mode switching — пытаемся optimal encoding с CODE_X
         // переключениями между sets чтобы минимизировать total codewords.
@@ -129,6 +185,166 @@ final class Code128Encoder
         } else {
             $this->encodeSetB($data);
         }
+    }
+
+    /**
+     * Phase 165: GS1-128 encoding с FNC1 separators.
+     *
+     * Input format: "(01)09506000134352(10)ABC123(17)260930"
+     * Parser strips parens, accumulates AI + data segments, inserts FNC1
+     * codeword (102) после variable-length AI'ев (per GS1 spec).
+     *
+     * Output codewords:
+     *   START + FNC1 (GS1-128 indicator) + AI1+data1 + [FNC1] + AI2+data2 + ...
+     *
+     * Encoding outside FNC1 uses standard auto-mode logic per concatenated
+     * (AI+data) chunks.
+     *
+     * @return list<int>
+     */
+    private function encodeGs1(string $aiData): array
+    {
+        $segments = self::parseGs1Ais($aiData);
+        if ($segments === []) {
+            throw new \InvalidArgumentException('GS1-128 input must contain at least one (AI)data segment');
+        }
+        // Build flat plaintext с FNC1 sentinel \x1D между variable-length AI boundaries.
+        // \x1D = ASCII GS (Group Separator) — convenient internal marker.
+        $flat = '';
+        $fnc1Positions = []; // byte-positions в $flat (после flat construction)
+        foreach ($segments as $i => $seg) {
+            $combined = $seg['ai'].$seg['data'];
+            // Validate AI length если known.
+            $expectedDataLen = self::GS1_AI_LENGTHS[$seg['ai']] ?? null;
+            if ($expectedDataLen !== null && strlen($seg['data']) !== $expectedDataLen) {
+                throw new \InvalidArgumentException(sprintf(
+                    'GS1 AI (%s) expects %d data digits, got %d ("%s")',
+                    $seg['ai'], $expectedDataLen, strlen($seg['data']), $seg['data']
+                ));
+            }
+            $flat .= $combined;
+            $isVariable = $expectedDataLen === null;
+            $isLast = $i === count($segments) - 1;
+            if ($isVariable && ! $isLast) {
+                $fnc1Positions[strlen($flat)] = true; // FNC1 inserted ПЕРЕД next AI
+            }
+        }
+        // Now build codewords. Start with appropriate set + FNC1 indicator.
+        $startsWithDigit = ctype_digit(substr($flat, 0, 1));
+        if ($startsWithDigit && strlen($flat) >= 2 && ctype_digit($flat[1])) {
+            $codes = [self::START_C, self::FNC1];
+            $currentSet = 'C';
+        } else {
+            $codes = [self::START_B, self::FNC1];
+            $currentSet = 'B';
+        }
+        // Encode $flat using auto-mode style splitting, inserting FNC1 at
+        // marked positions.
+        $i = 0;
+        $n = strlen($flat);
+        while ($i < $n) {
+            if (isset($fnc1Positions[$i])) {
+                $codes[] = self::FNC1;
+            }
+            // Greedy: if we're в C и есть 2 digits → encode pair.
+            if ($currentSet === 'C' && $i + 1 < $n && ctype_digit($flat[$i]) && ctype_digit($flat[$i + 1])) {
+                // Avoid pair if next byte is FNC1 sentinel position (would split pair).
+                if (! isset($fnc1Positions[$i + 1])) {
+                    $codes[] = (int) substr($flat, $i, 2);
+                    $i += 2;
+
+                    continue;
+                }
+            }
+            // Need switch?
+            $remainingDigits = self::countLeadingDigits($flat, $i, $fnc1Positions);
+            if ($currentSet !== 'C' && $remainingDigits >= 4 && $remainingDigits % 2 === 0) {
+                $codes[] = self::CODE_C_FROM_A; // 99
+                $currentSet = 'C';
+
+                continue;
+            }
+            if ($currentSet === 'C' && ! ctype_digit($flat[$i])) {
+                $codes[] = self::CODE_B_FROM_C; // 100
+                $currentSet = 'B';
+
+                continue;
+            }
+            // Plain Set B encoding (default).
+            if ($currentSet === 'B') {
+                $byte = ord($flat[$i]);
+                if ($byte < 32 || $byte > 126) {
+                    throw new \InvalidArgumentException(sprintf(
+                        'GS1-128 Set B got byte 0x%02X (outside 32..126)', $byte,
+                    ));
+                }
+                $codes[] = $byte - 32;
+                $i++;
+            } else { // A
+                $byte = ord($flat[$i]);
+                $codes[] = $byte <= 31 ? $byte + 64 : $byte - 32;
+                $i++;
+            }
+        }
+
+        return $codes;
+    }
+
+    /**
+     * Count consecutive digits starting at $i, stopping before any FNC1 boundary.
+     *
+     * @param  array<int, true>  $fnc1Positions
+     */
+    private static function countLeadingDigits(string $s, int $i, array $fnc1Positions): int
+    {
+        $count = 0;
+        $n = strlen($s);
+        while ($i + $count < $n && ctype_digit($s[$i + $count])) {
+            if ($count > 0 && isset($fnc1Positions[$i + $count])) {
+                break; // FNC1 inserted перед этим byte
+            }
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Parse "(NN)data(MM)data" → list of [ai, data] pairs.
+     *
+     * @return list<array{ai: string, data: string}>
+     */
+    private static function parseGs1Ais(string $input): array
+    {
+        $result = [];
+        $offset = 0;
+        $n = strlen($input);
+        while ($offset < $n) {
+            if ($input[$offset] !== '(') {
+                throw new \InvalidArgumentException(sprintf(
+                    'GS1-128 syntax error at position %d: expected "(", got %s', $offset, $input[$offset]
+                ));
+            }
+            $close = strpos($input, ')', $offset);
+            if ($close === false) {
+                throw new \InvalidArgumentException('GS1-128 unmatched "(" в input');
+            }
+            $ai = substr($input, $offset + 1, $close - $offset - 1);
+            if (! preg_match('@^\d{2,4}$@', $ai)) {
+                throw new \InvalidArgumentException("GS1-128 invalid AI: ($ai)");
+            }
+            // Find next "(" or end.
+            $next = strpos($input, '(', $close);
+            $dataEnd = $next === false ? $n : $next;
+            $data = substr($input, $close + 1, $dataEnd - $close - 1);
+            if ($data === '') {
+                throw new \InvalidArgumentException("GS1-128 AI ($ai) has no data");
+            }
+            $result[] = ['ai' => $ai, 'data' => $data];
+            $offset = $dataEnd;
+        }
+
+        return $result;
     }
 
     /**
