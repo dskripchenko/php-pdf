@@ -529,6 +529,27 @@ final class Page
     }
 
     /**
+     * Phase 117: set DeviceCMYK fill color для последующих fill ops.
+     * Effective until next color change or graphics state restore.
+     */
+    public function setCmykFillColor(float $c, float $m, float $y, float $k): self
+    {
+        $this->stream->setCmykFillColor($c, $m, $y, $k);
+
+        return $this;
+    }
+
+    /**
+     * Phase 117: set DeviceCMYK stroke color.
+     */
+    public function setCmykStrokeColor(float $c, float $m, float $y, float $k): self
+    {
+        $this->stream->setCmykStrokeColor($c, $m, $y, $k);
+
+        return $this;
+    }
+
+    /**
      * Phase 116: clip subsequent drawing к a rectangle. Helper wraps
      * push/clip/draw/pop в одну операцию.
      */

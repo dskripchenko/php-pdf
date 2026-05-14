@@ -541,6 +541,45 @@ final class ContentStream
     }
 
     /**
+     * Phase 117: set DeviceCMYK non-stroking (fill) color. Values 0..1.
+     * Emits `c m y k k`.
+     */
+    public function setCmykFillColor(float $c, float $m, float $y, float $k): self
+    {
+        self::validateCmyk($c, $m, $y, $k);
+        $this->body .= sprintf("%s %s %s %s k\n",
+            $this->formatNumber($c), $this->formatNumber($m),
+            $this->formatNumber($y), $this->formatNumber($k),
+        );
+
+        return $this;
+    }
+
+    /**
+     * Phase 117: set DeviceCMYK stroking color. Values 0..1.
+     * Emits `c m y k K`.
+     */
+    public function setCmykStrokeColor(float $c, float $m, float $y, float $k): self
+    {
+        self::validateCmyk($c, $m, $y, $k);
+        $this->body .= sprintf("%s %s %s %s K\n",
+            $this->formatNumber($c), $this->formatNumber($m),
+            $this->formatNumber($y), $this->formatNumber($k),
+        );
+
+        return $this;
+    }
+
+    private static function validateCmyk(float $c, float $m, float $y, float $k): void
+    {
+        foreach ([$c, $m, $y, $k] as $v) {
+            if ($v < 0.0 || $v > 1.0) {
+                throw new \InvalidArgumentException('CMYK components must be в диапазоне 0..1');
+            }
+        }
+    }
+
+    /**
      * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *
