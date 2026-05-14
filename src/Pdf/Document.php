@@ -70,6 +70,9 @@ final class Document
     /** @var list<int> Phase 43: form field object IDs (filled во время toBytes). */
     private array $collectedFormFieldIds = [];
 
+    /** @var list<int> Phase 97: field IDs с /AA /C calculate scripts (для AcroForm /CO). */
+    private array $calculatedFieldIds = [];
+
     /** Phase 47: PDF/A-1b configuration. */
     private ?PdfAConfig $pdfA = null;
 
@@ -685,6 +688,11 @@ final class Document
                 $fieldId = $writer->addObject($body);
                 $annotIds[] = $fieldId;
                 $this->collectedFormFieldIds[] = $fieldId;
+
+                // Phase 97: track fields с calculate scripts.
+                if (! empty($field['calculateScript'])) {
+                    $this->calculatedFieldIds[] = $fieldId;
+                }
             }
             $annotsRef = $annotIds === []
                 ? ''
@@ -812,13 +820,19 @@ final class Document
             $kidsRefs, count($pageIds),
         ));
 
-        // Phase 43: AcroForm reference в Catalog.
+        // Phase 43+97: AcroForm reference в Catalog. /CO entry — fields
+        // с calculateScript (Phase 67), in calculation order.
         $acroFormRef = '';
         if ($this->collectedFormFieldIds !== []) {
             $fieldsArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->collectedFormFieldIds));
+            $coRef = '';
+            if ($this->calculatedFieldIds !== []) {
+                $coArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->calculatedFieldIds));
+                $coRef = " /CO [$coArray]";
+            }
             $acroFormId = $writer->addObject(sprintf(
-                '<< /Fields [%s] /NeedAppearances true >>',
-                $fieldsArray,
+                '<< /Fields [%s] /NeedAppearances true%s >>',
+                $fieldsArray, $coRef,
             ));
             $acroFormRef = " /AcroForm $acroFormId 0 R";
         }
