@@ -806,10 +806,27 @@ final class Document
             $structParentsRef = $this->tagged ? " /StructParents $i" : '';
             // Phase 94: page rotation /Rotate.
             $rotateRef = $page->rotation() !== 0 ? ' /Rotate '.$page->rotation() : '';
+            // Phase 110: optional page boxes (/CropBox /BleedBox /TrimBox /ArtBox).
+            $boxRef = '';
+            foreach ([
+                'CropBox' => $page->cropBox(),
+                'BleedBox' => $page->bleedBox(),
+                'TrimBox' => $page->trimBox(),
+                'ArtBox' => $page->artBox(),
+            ] as $name => $box) {
+                if ($box !== null) {
+                    $boxRef .= sprintf(
+                        ' /%s [%s %s %s %s]',
+                        $name,
+                        $this->fmt($box[0]), $this->fmt($box[1]),
+                        $this->fmt($box[2]), $this->fmt($box[3]),
+                    );
+                }
+            }
 
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
-                .'/Contents %d 0 R /Resources %s%s%s%s%s%s >>',
+                .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s >>',
                 $pagesId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
@@ -820,6 +837,7 @@ final class Document
                 $durRef,
                 $structParentsRef,
                 $rotateRef,
+                $boxRef,
             ));
         }
 

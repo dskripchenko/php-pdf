@@ -62,6 +62,18 @@ final class Page
     /** Phase 94: Page rotation в degrees (0, 90, 180, 270). */
     private int $rotation = 0;
 
+    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /CropBox [llx lly urx ury]. */
+    private ?array $cropBox = null;
+
+    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /BleedBox. */
+    private ?array $bleedBox = null;
+
+    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /TrimBox. */
+    private ?array $trimBox = null;
+
+    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /ArtBox. */
+    private ?array $artBox = null;
+
     /**
      * Phase 94: Set page rotation. Multiple of 90.
      */
@@ -79,6 +91,71 @@ final class Page
     public function rotation(): int
     {
         return $this->rotation;
+    }
+
+    /**
+     * Phase 110: set /CropBox (visible/printable area). All values в PDF
+     * points в bottom-left origin coordinate system. Spec: §14.11.2.
+     */
+    public function setCropBox(float $llx, float $lly, float $urx, float $ury): self
+    {
+        $this->cropBox = [$llx, $lly, $urx, $ury];
+
+        return $this;
+    }
+
+    /**
+     * Phase 110: set /BleedBox (printed area incl. bleed past trim).
+     */
+    public function setBleedBox(float $llx, float $lly, float $urx, float $ury): self
+    {
+        $this->bleedBox = [$llx, $lly, $urx, $ury];
+
+        return $this;
+    }
+
+    /**
+     * Phase 110: set /TrimBox (final trimmed page after print finishing).
+     */
+    public function setTrimBox(float $llx, float $lly, float $urx, float $ury): self
+    {
+        $this->trimBox = [$llx, $lly, $urx, $ury];
+
+        return $this;
+    }
+
+    /**
+     * Phase 110: set /ArtBox (extent of meaningful artistic content).
+     */
+    public function setArtBox(float $llx, float $lly, float $urx, float $ury): self
+    {
+        $this->artBox = [$llx, $lly, $urx, $ury];
+
+        return $this;
+    }
+
+    /** @return array{0:float,1:float,2:float,3:float}|null */
+    public function cropBox(): ?array
+    {
+        return $this->cropBox;
+    }
+
+    /** @return array{0:float,1:float,2:float,3:float}|null */
+    public function bleedBox(): ?array
+    {
+        return $this->bleedBox;
+    }
+
+    /** @return array{0:float,1:float,2:float,3:float}|null */
+    public function trimBox(): ?array
+    {
+        return $this->trimBox;
+    }
+
+    /** @return array{0:float,1:float,2:float,3:float}|null */
+    public function artBox(): ?array
+    {
+        return $this->artBox;
     }
 
     /** Phase 85: Auto-advance duration в seconds (display time). */
