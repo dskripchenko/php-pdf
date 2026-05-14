@@ -686,6 +686,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   + 1-narrow inter-char gap = 16 modules per char-with-gap. Optional Mod-43
   self-check digit via `withCheckDigit: true`. `BarcodeFormat::Code39` +
   Engine dispatch.
+- ~~ITF (Interleaved 2 of 5) — ITF-14 GTIN profile~~ ✅ **Phase 203 closed**.
+  ISO/IEC 16390 — numeric even-length. Pair interleaving: digit A → 5 bars,
+  digit B → 5 spaces (3 narrow + 2 wide per digit @ 2:1 ratio). Start
+  `1010`, stop wide-bar + narrow-space + narrow-bar. 8 + 7·N modules.
+  Optional GTIN-style Mod-10 right-to-left weighted check digit. Поддержка
+  GTIN-8/12/13/14 через `computeCheckDigit()`. `BarcodeFormat::Itf` + Engine.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.

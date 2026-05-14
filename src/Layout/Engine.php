@@ -2334,6 +2334,11 @@ final class Engine
 
                 return [$e->modulesWithQuietZone(10), $e->canonical];
             })(),
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::Itf => (function () use ($bc): array {
+                $e = new \Dskripchenko\PhpPdf\Barcode\ItfEncoder($bc->value);
+
+                return [$e->modulesWithQuietZone(10), $e->canonical];
+            })(),
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::Ean13 => (function () use ($bc): array {
                 $e = new \Dskripchenko\PhpPdf\Barcode\Ean13Encoder($bc->value);
 

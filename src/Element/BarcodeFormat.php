@@ -24,6 +24,7 @@ enum BarcodeFormat: string
 {
     case Code128 = 'code128';
     case Code39 = 'code39';   // Phase 202: alphanumeric self-checking variable-length.
+    case Itf = 'itf';         // Phase 203: Interleaved 2 of 5 (ITF-14 GTIN profile).
     case Ean13 = 'ean13';
     case Ean8 = 'ean8';      // Phase 200: short EAN variant (7+1 digits).
     case UpcA = 'upca';
