@@ -184,6 +184,28 @@ final class TtfFile
         return $this->ligatures;
     }
 
+    /** @var array<string, ?SingleSubstitutions> */
+    private array $singleSubstByFeature = [];
+
+    /**
+     * Phase 143-144: read GSUB Type 1 Single Substitution для произвольного
+     * feature tag (e.g. 'rphf' для Indic reph, 'half'/'init'/'medi'/'fina'
+     * для half-forms и Arabic positional forms).
+     */
+    public function singleSubstitutionsForFeature(string $featureTag): ?SingleSubstitutions
+    {
+        if (array_key_exists($featureTag, $this->singleSubstByFeature)) {
+            return $this->singleSubstByFeature[$featureTag];
+        }
+        $gsubInfo = $this->tableInfo('GSUB');
+        if ($gsubInfo === null) {
+            return $this->singleSubstByFeature[$featureTag] = null;
+        }
+        $result = (new GsubReader)->readByFeature($this->bytes, $gsubInfo, $featureTag);
+
+        return $this->singleSubstByFeature[$featureTag] = $result['single']->isEmpty() ? null : $result['single'];
+    }
+
     /**
      * Резолв Unicode codepoint → glyph ID. Возвращает 0 (.notdef) если char
      * не покрывается font'ом.

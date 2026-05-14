@@ -261,11 +261,10 @@ final class PdfFont
             $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shapeLogical($cps);
         }
 
-        // Phase 137: Indic pre-base matra reordering (Devanagari, Bengali,
-        // Tamil, Telugu, Kannada, Malayalam, Gujarati, Gurmukhi, Oriya,
-        // Sinhala).
+        $indicApplied = false;
         if ($this->indicShapingEnabled && self::containsIndic($cps)) {
             $cps = \Dskripchenko\PhpPdf\Text\IndicShaper::shape($cps);
+            $indicApplied = true;
         }
 
         // Phase 136: Bidi reordering для visual display.
@@ -273,12 +272,59 @@ final class PdfFont
             $cps = \Dskripchenko\PhpPdf\Text\BidiAlgorithm::reorderCodepoints($cps);
         }
 
+        // Phase 144: detect reph positions BEFORE cmap (need codepoint
+        // context: RA+virama preceded by non-virama → reph candidate).
+        $rphfPositions = $indicApplied ? self::detectRphPositions($cps) : [];
+
         $out = [];
         foreach ($cps as $cp) {
             $out[] = ['cp' => $cp, 'gid' => $this->ttf->glyphIdForChar($cp)];
         }
 
+        // Phase 144: apply GSUB 'rphf' single substitution to reph positions.
+        if ($rphfPositions !== []) {
+            $rphf = $this->ttf->singleSubstitutionsForFeature('rphf');
+            if ($rphf !== null) {
+                foreach ($rphfPositions as $idx => $_) {
+                    if (isset($out[$idx]) && $rphf->has($out[$idx]['gid'])) {
+                        $out[$idx]['gid'] = $rphf->substitute($out[$idx]['gid']);
+                    }
+                }
+            }
+        }
+
         return $out;
+    }
+
+    /**
+     * Phase 144: identify codepoint positions where RA + virama forms a reph.
+     * After Indic shaping, reph clusters have RA + virama at end of syllable
+     * (NOT at start). Detection: RA followed by virama, where previous cp
+     * is NOT virama (excluding subscript-RA case "halant + RA").
+     *
+     * @param  list<int>  $cps
+     * @return array<int, true>  Index of RA codepoint that should be rphf-substituted.
+     */
+    /** @internal exposed для unit testing of reph detection */
+    public static function detectRphPositionsForTest(array $cps): array
+    {
+        return self::detectRphPositions($cps);
+    }
+
+    private static function detectRphPositions(array $cps): array
+    {
+        $positions = [];
+        $n = count($cps);
+        for ($i = 1; $i < $n - 1; $i++) {  // i > 0 (skip start) и i+1 < n (need following virama)
+            if (\Dskripchenko\PhpPdf\Text\IndicShaper::isRA($cps[$i])
+                && \Dskripchenko\PhpPdf\Text\IndicShaper::isVirama($cps[$i + 1])
+                && ! \Dskripchenko\PhpPdf\Text\IndicShaper::isVirama($cps[$i - 1])
+            ) {
+                $positions[$i] = true;
+            }
+        }
+
+        return $positions;
     }
 
     /** @param list<int> $cps */
