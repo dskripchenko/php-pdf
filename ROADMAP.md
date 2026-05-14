@@ -770,6 +770,11 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   existing fileId; non-encrypted paths derive deterministic MD5 hash
   от concatenated object bodies (stable per-content, different docs
   → different /ID).
+- ~~/Info dictionary always emitted с defaults~~ ✅ **Phase 213 closed**.
+  PDF reader convention — /Info dict теперь present even если user
+  не вызывает `metadata()`. Default Producer = 'dskripchenko/php-pdf',
+  default CreationDate = current timestamp. User-set fields overlay
+  defaults via array_union semantics.
 
 ### Pragmatic publication strategy
 

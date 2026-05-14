@@ -41,12 +41,16 @@ final class MetadataTest extends TestCase
     }
 
     #[Test]
-    public function no_metadata_no_info_dict(): void
+    public function default_info_dict_has_producer_and_date(): void
     {
+        // Phase 213: /Info теперь всегда emitted с default Producer +
+        // CreationDate even if user-set metadata empty.
         $doc = PdfDocument::new(compressStreams: false);
         $doc->addPage();
         $bytes = $doc->toBytes();
-        self::assertStringNotContainsString('/Info ', $bytes);
+        self::assertStringContainsString('/Info ', $bytes);
+        self::assertStringContainsString('/Producer (dskripchenko/php-pdf)', $bytes);
+        self::assertMatchesRegularExpression('@/CreationDate \(D:\d{14}@', $bytes);
     }
 
     #[Test]

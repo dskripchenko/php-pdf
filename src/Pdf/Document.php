@@ -1443,20 +1443,19 @@ final class Document
 
         $writer->setRoot($catalogId);
 
-        // Phase 20: /Info dictionary (PDF metadata).
-        if ($this->metadata !== []) {
-            // Auto-default Producer + CreationDate.
-            $meta = $this->metadata + [
-                'Producer' => 'dskripchenko/php-pdf',
-                'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
-            ];
-            $entries = [];
-            foreach ($meta as $key => $value) {
-                $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
-            }
-            $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
-            $writer->setInfo($infoId);
+        // Phase 20+213: /Info dictionary всегда emitted с default Producer +
+        // CreationDate (PDF reader convention — most readers expect Info dict
+        // в Properties dialog).
+        $meta = $this->metadata + [
+            'Producer' => 'dskripchenko/php-pdf',
+            'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
+        ];
+        $entries = [];
+        foreach ($meta as $key => $value) {
+            $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
         }
+        $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
+        $writer->setInfo($infoId);
 
         // Phase 41-42: emit /Encrypt object и hook encryption в writer.
         if ($this->encryption !== null) {
