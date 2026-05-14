@@ -46,12 +46,15 @@ final class Code128SetCTest extends TestCase
     }
 
     #[Test]
-    public function set_b_used_for_odd_digit_string(): void
+    public function odd_digit_string_uses_c_for_pairs_b_for_remainder(): void
     {
-        // Odd-length digit-only — falls back к Set B (Set C requires pairs).
-        $enc = new Code128Encoder('12345');
-        // Set B: start + 5 chars + checksum + stop = 8 CW × 11 + 2 = 90.
-        self::assertSame(90, $enc->moduleCount());
+        // Phase 164: auto-mode compresses 4 digits в Set C (=2 CW), trailing
+        // digit '5' → Set B (1 CW). Старое поведение: всё Set B (90 modules).
+        $encAuto = new Code128Encoder('12345');
+        $encLegacy = new Code128Encoder('12345', autoMode: false);
+        // Auto должен быть короче.
+        self::assertLessThan($encLegacy->moduleCount(), $encAuto->moduleCount(),
+            'auto-mode compresses через Set C switching');
     }
 
     #[Test]

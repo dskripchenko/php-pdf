@@ -69,6 +69,25 @@ final class Code128Encoder
 
     private const STOP = 106;
 
+    // Phase 164: code-switch / shift codewords. Different code values per set.
+    private const CODE_SHIFT_BA = 98;   // в Set A: shift к Set B (one char)
+
+    private const CODE_SHIFT_AB = 98;   // в Set B: shift к Set A (one char)
+
+    private const CODE_C_FROM_A = 99;   // в Set A: CODE_C permanent switch
+
+    private const CODE_C_FROM_B = 99;   // в Set B: CODE_C permanent switch
+
+    private const CODE_B_FROM_A = 100;  // в Set A: CODE_B
+
+    private const CODE_B_FROM_C = 100;  // в Set C: CODE_B
+
+    private const CODE_A_FROM_B = 101;  // в Set B: CODE_A
+
+    private const CODE_A_FROM_C = 101;  // в Set C: CODE_A
+
+    private const FNC1 = 102;           // Function 1 (GS1-128 separator, all sets)
+
     /**
      * Resulting modules: each entry true = black, false = white.
      *
@@ -76,12 +95,23 @@ final class Code128Encoder
      */
     private array $modules = [];
 
-    public function __construct(public readonly string $data)
+    public function __construct(public readonly string $data, bool $autoMode = true)
     {
-        // Phase 78: Set A used когда input contains control chars И NO
-        // lowercase letters (Set A covers 0..95; lowercase 97-122 outside).
+        if ($data === '') {
+            throw new \InvalidArgumentException('Code 128 input must be non-empty');
+        }
+        // Phase 164: auto-mode switching — пытаемся optimal encoding с CODE_X
+        // переключениями между sets чтобы минимизировать total codewords.
+        if ($autoMode) {
+            $codes = $this->encodeAuto($data);
+            $this->finalize($codes);
+
+            return;
+        }
+        // Legacy mode (для backward compat / explicit set selection):
+        // Phase 78: Set A used когда input contains control chars И NO lowercase.
         // Phase 57: digit-only ≥4 even → Set C.
-        // Else → Set B (default, ASCII 32..126).
+        // Else → Set B (default).
         $hasControlChars = false;
         $hasLowercase = false;
         for ($i = 0; $i < strlen($data); $i++) {
@@ -99,6 +129,183 @@ final class Code128Encoder
         } else {
             $this->encodeSetB($data);
         }
+    }
+
+    /**
+     * Phase 164: heuristic auto-mode encoder. Returns list<int> data codewords
+     * (включая START codeword первым). Caller добавляет checksum + STOP в finalize.
+     *
+     * Algorithm:
+     *  1. Scan input charwise, классифицируем: DIGIT/CTRL/PRINT (32..95 минус
+     *     digits/lower)/LOWER.
+     *  2. Greedy run detection: contiguous digit runs ≥4 (even length) → Set C.
+     *  3. Ctrl run + no lowercase context → Set A.
+     *  4. Default → Set B.
+     *  5. Между runs emit explicit CODE_X switch (A/B/C codewords 99/100/101).
+     *  6. Start codeword = best initial set based on first run.
+     *
+     * @return list<int>
+     */
+    private function encodeAuto(string $data): array
+    {
+        // Validate all bytes upfront — Code 128 supports ASCII 0..127 only.
+        for ($i = 0; $i < strlen($data); $i++) {
+            $b = ord($data[$i]);
+            if ($b > 126) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Code 128 supports ASCII 0..126 only; got byte 0x%02X',
+                    $b,
+                ));
+            }
+        }
+        $runs = self::splitRunsForMode($data);
+        $codes = [];
+        $currentSet = null;
+        foreach ($runs as $run) {
+            $targetSet = $run['set'];
+            $segment = $run['text'];
+            if ($currentSet === null) {
+                $codes[] = match ($targetSet) {
+                    'A' => self::START_A,
+                    'B' => self::START_B,
+                    'C' => self::START_C,
+                };
+            } elseif ($currentSet !== $targetSet) {
+                // Permanent switch.
+                $codes[] = match ($currentSet.$targetSet) {
+                    'AB', 'CB' => self::CODE_B_FROM_A, // 100
+                    'BA', 'CA' => self::CODE_A_FROM_B, // 101
+                    'AC', 'BC' => self::CODE_C_FROM_A, // 99
+                };
+            }
+            // Encode segment в chosen set.
+            if ($targetSet === 'C') {
+                for ($i = 0; $i < strlen($segment); $i += 2) {
+                    $codes[] = (int) substr($segment, $i, 2);
+                }
+            } elseif ($targetSet === 'A') {
+                $bytes = array_values(unpack('C*', $segment) ?: []);
+                foreach ($bytes as $byte) {
+                    $codes[] = $byte <= 31 ? $byte + 64 : $byte - 32;
+                }
+            } else { // 'B'
+                $bytes = array_values(unpack('C*', $segment) ?: []);
+                foreach ($bytes as $byte) {
+                    $codes[] = $byte - 32;
+                }
+            }
+            $currentSet = $targetSet;
+        }
+
+        return $codes;
+    }
+
+    /**
+     * Split input into mode runs. Greedy heuristic:
+     *  - Digit run длиной ≥4 (даже length) — Set C
+     *  - Run с control chars (ASCII 0..31) — Set A (если можно)
+     *  - Иначе — Set B
+     *
+     * For trailing odd digits в C-run last digit спихиваем в next B run.
+     *
+     * @return list<array{set: string, text: string}>
+     */
+    private static function splitRunsForMode(string $data): array
+    {
+        $n = strlen($data);
+        // Fast path: если string содержит control chars и НЕТ lowercase —
+        // целиком Set A (избегаем B→A switch overhead).
+        $hasControl = false;
+        $hasLowercase = false;
+        $hasDigitRunGE4 = false;
+        for ($k = 0; $k < $n; $k++) {
+            $bk = ord($data[$k]);
+            if ($bk < 32) {
+                $hasControl = true;
+            }
+            if ($bk >= 97 && $bk <= 122) {
+                $hasLowercase = true;
+            }
+        }
+        // Check for ≥4 consecutive digits.
+        if (preg_match('@\d{4,}@', $data)) {
+            $hasDigitRunGE4 = true;
+        }
+        if ($hasControl && ! $hasLowercase && ! $hasDigitRunGE4) {
+            // Pure Set A path.
+            return [['set' => 'A', 'text' => $data]];
+        }
+        $runs = [];
+        $i = 0;
+        while ($i < $n) {
+            // Try Set C run: ≥4 consecutive digits, take even-length max.
+            if (ctype_digit($data[$i])) {
+                $j = $i;
+                while ($j < $n && ctype_digit($data[$j])) {
+                    $j++;
+                }
+                $digitLen = $j - $i;
+                if ($digitLen >= 4) {
+                    // Even length для Set C; if odd, leave last digit к next run.
+                    $cLen = $digitLen - ($digitLen % 2);
+                    $runs[] = ['set' => 'C', 'text' => substr($data, $i, $cLen)];
+                    $i += $cLen;
+
+                    continue;
+                }
+            }
+            // Try Set A: control chars (0..31) — но only если no lowercase в текущем run.
+            $byte = ord($data[$i]);
+            if ($byte < 32) {
+                $j = $i;
+                while ($j < $n) {
+                    $b = ord($data[$j]);
+                    if ($b >= 97 && $b <= 122) {
+                        break; // lowercase forces Set B
+                    }
+                    if ($b > 95) {
+                        break; // out of Set A range
+                    }
+                    $j++;
+                }
+                if ($j > $i) {
+                    $runs[] = ['set' => 'A', 'text' => substr($data, $i, $j - $i)];
+                    $i = $j;
+
+                    continue;
+                }
+            }
+            // Set B: take chars until either digit-run start ≥4 OR control char
+            // forcing switch к A/C.
+            $j = $i;
+            while ($j < $n) {
+                $b = ord($data[$j]);
+                if ($b < 32 || $b > 126) {
+                    break;
+                }
+                // Look-ahead: digit run ≥4 starts here?
+                if (ctype_digit($data[$j])) {
+                    $k = $j;
+                    while ($k < $n && ctype_digit($data[$k])) {
+                        $k++;
+                    }
+                    if (($k - $j) >= 4) {
+                        break; // delegate to next iteration → Set C
+                    }
+                }
+                $j++;
+            }
+            if ($j > $i) {
+                $runs[] = ['set' => 'B', 'text' => substr($data, $i, $j - $i)];
+                $i = $j;
+
+                continue;
+            }
+            // Fail-safe: advance by 1 to avoid infinite loop.
+            $i++;
+        }
+
+        return $runs;
     }
 
     /**

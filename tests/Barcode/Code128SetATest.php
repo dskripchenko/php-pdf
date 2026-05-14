@@ -33,12 +33,12 @@ final class Code128SetATest extends TestCase
     }
 
     #[Test]
-    public function control_with_lowercase_falls_к_set_b(): void
+    public function control_with_lowercase_handled_via_auto_switch(): void
     {
-        // Mixed control + lowercase — must use Set B (no Set A→B switching).
-        // Set B doesn't support 0..31, так что должно throw.
-        $this->expectException(\InvalidArgumentException::class);
-        new Code128Encoder("Hello\x01");
+        // Phase 164: auto-mode handles это через CODE_A switch:
+        // Set B "Hello" → CODE_A → Set A "\x01". Раньше throw'или.
+        $enc = new Code128Encoder("Hello\x01");
+        self::assertGreaterThan(0, $enc->moduleCount());
     }
 
     #[Test]
