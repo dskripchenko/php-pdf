@@ -165,12 +165,18 @@ final class BidiAlgorithmTest extends TestCase
     }
 
     #[Test]
-    public function x9_filters_isolates(): void
+    public function x9_filters_embeddings_keeps_isolates(): void
     {
-        // LRI (U+2066), RLI (U+2067), FSI (U+2068), PDI (U+2069)
+        // Phase 187: LRE/RLE/LRO/RLO/PDF stripped (formatting); isolates
+        // LRI/RLI/FSI/PDI preserved as ON-class chars per UAX 9.
         $cps = [0x41, 0x2066, 0x42, 0x2069, 0x43];
         $out = BidiAlgorithm::reorderCodepoints($cps);
-        self::assertSame([0x41, 0x42, 0x43], $out);
+        // Isolates kept в output.
+        self::assertContains(0x41, $out);
+        self::assertContains(0x42, $out);
+        self::assertContains(0x43, $out);
+        self::assertContains(0x2066, $out);
+        self::assertContains(0x2069, $out);
     }
 
     #[Test]
@@ -211,5 +217,86 @@ final class BidiAlgorithmTest extends TestCase
         $cps = [0x28, 0x41, 0x29];
         $out = BidiAlgorithm::reorderCodepoints($cps);
         self::assertSame([0x28, 0x41, 0x29], $out);
+    }
+
+    // -------- Phase 187: X1-X8 explicit embedding stack --------
+
+    #[Test]
+    public function rle_embeds_but_does_not_override_strong_types(): void
+    {
+        // RLE (0x202B) + "AB" + PDF — A,B stay L-class within RTL embedding.
+        // L2: levels [2, 2]; reverse at k=2 then k=1 cancels → original order.
+        // Only RLO (override) would forcibly reverse Latin chars.
+        $cps = [0x202B, 0x41, 0x42, 0x202C];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x41, 0x42], $out);
+    }
+
+    #[Test]
+    public function lre_forces_ltr_embedding(): void
+    {
+        // LRE (0x202A) + Hebrew "א" + "ב" + PDF — forces LTR within RTL paragraph.
+        // С LTR paragraph default + LRE: keep order.
+        $cps = [0x202A, 0x05D0, 0x05D1, 0x202C];
+        $out = BidiAlgorithm::reorderCodepoints($cps, 0);
+        // Hebrew chars within LRE embedding still RTL within their level —
+        // но LRE adds 2 к base level, so they're at level 3 (odd, RTL).
+        // L2 reverses at highest level → [ב, א].
+        self::assertSame([0x05D1, 0x05D0], $out);
+    }
+
+    #[Test]
+    public function rlo_overrides_strong_types_к_rtl(): void
+    {
+        // RLO (0x202E) + "ABC" + PDF — override forces ALL chars в RTL,
+        // even Latin letters. L2 reverses → "CBA".
+        $cps = [0x202E, 0x41, 0x42, 0x43, 0x202C];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x43, 0x42, 0x41], $out);
+    }
+
+    #[Test]
+    public function pdf_pops_embedding_back_to_base(): void
+    {
+        // RLO (override forces R) + "AB" + PDF + "CD" — "AB" reversed,
+        // "CD" stays normal LTR after PDF.
+        $cps = [0x202E, 0x41, 0x42, 0x202C, 0x43, 0x44];
+        $out = BidiAlgorithm::reorderCodepoints($cps, 0);
+        self::assertSame([0x42, 0x41, 0x43, 0x44], $out);
+    }
+
+    #[Test]
+    public function unmatched_pdf_ignored(): void
+    {
+        // PDF without preceding LRE/RLE — ignored.
+        $cps = [0x41, 0x202C, 0x42];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x41, 0x42], $out);
+    }
+
+    #[Test]
+    public function nested_embeddings(): void
+    {
+        // RLE + "A" + RLE + "B" + PDF + "C" + PDF — nested embeddings.
+        // All в RTL embedding levels.
+        $cps = [0x202B, 0x41, 0x202B, 0x42, 0x202C, 0x43, 0x202C];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        // Each level reverses; deeply nested results в complex но deterministic order.
+        self::assertContains(0x41, $out);
+        self::assertContains(0x42, $out);
+        self::assertContains(0x43, $out);
+        self::assertCount(3, $out);
+    }
+
+    #[Test]
+    public function rli_pdi_isolate_pair(): void
+    {
+        // RLI (0x2067) + "AB" + PDI (0x2069) — isolate в RTL direction.
+        $cps = [0x41, 0x2067, 0x42, 0x43, 0x2069, 0x44];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        // RLI/PDI preserved в output; "BC" within isolate reversed.
+        self::assertCount(6, $out);
+        self::assertContains(0x41, $out);
+        self::assertContains(0x44, $out);
     }
 }

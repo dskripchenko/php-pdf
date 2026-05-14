@@ -16,14 +16,20 @@ namespace Dskripchenko\PhpPdf\Text;
  *  - L2 reordering (reverse RTL runs)
  *
  * Phase 148 additions:
- *  - X9 filter: drop bidi formatting characters (LRE/RLE/LRO/RLO/PDF +
- *    LRI/RLI/FSI/PDI) before processing — these don't render
+ *  - X9 filter: drop bidi formatting characters (LRE/RLE/LRO/RLO/PDF)
  *  - L3 mirroring: paired bracket/punctuation chars в RTL runs swapped
  *    с их Unicode mirror counterparts
  *
+ * Phase 187: X1-X10 explicit embedding/override stack (UAX 9 §3.3):
+ *  - LRE/RLE push embedding level
+ *  - LRO/RLO push level + override (force L or R type)
+ *  - PDF pop level
+ *  - LRI/RLI/FSI push isolate
+ *  - PDI pop isolate
+ *  - 125-level max stack depth
+ *  - FSI direction = first strong char before matching PDI
+ *
  * Не реализовано:
- *  - X1-X8 stack-based explicit embedding/override level tracking — rarely
- *    used в plain text; full implementation requires ≤125-deep level stack
  *  - L4 (combining marks reordering) — handled implicitly via NSM class
  *
  * Use case: mixed Latin + Arabic/Hebrew text где исходная Bidi
@@ -87,20 +93,26 @@ final class BidiAlgorithm
         if ($cps === []) {
             return [];
         }
-        // Phase 148: X9 — drop Bidi formatting characters (LRE/RLE/LRO/RLO/PDF
-        // + LRI/RLI/FSI/PDI) before processing. Full X1-X8 stack-based level
-        // override is deferred — практически embeddings rare в plain text.
-        $cps = self::filterFormattingChars($cps);
+        $types = array_map([self::class, 'bidiClass'], $cps);
+        $paragraphLevel ??= self::detectParagraphLevel($types);
+
+        // Phase 187: X1-X8 explicit embedding + override stack processing
+        // per UAX 9 §3.3. Sets per-char explicit levels; outputs filtered cps
+        // (formatting chars removed по X9) и parallel level array.
+        $explicitResult = self::applyExplicitLevels($cps, $types, $paragraphLevel);
+        $cps = $explicitResult['cps'];
+        $explicitLevels = $explicitResult['levels'];
+        $types = $explicitResult['types'];
         if ($cps === []) {
             return [];
         }
-        $types = array_map([self::class, 'bidiClass'], $cps);
-        $paragraphLevel ??= self::detectParagraphLevel($types);
 
         $resolved = $types;
         self::applyW($resolved, $paragraphLevel);
         self::applyN($resolved, $paragraphLevel);
-        $levels = self::applyI($resolved, $paragraphLevel);
+        // Phase 187: implicit levels (I rules) use base levels = explicit levels
+        // from X-step, не paragraph level uniformly.
+        $levels = self::applyIWithExplicitBase($resolved, $explicitLevels);
 
         // Phase 148: L3 mirroring BEFORE L2 reorder — mirror chars at odd
         // (RTL) levels using levels still aligned к original cps.
@@ -312,6 +324,199 @@ final class BidiAlgorithm
      *
      * @param  list<string>  $types  modified in-place
      */
+    /**
+     * Phase 187: UAX 9 §3.3 X1-X10 — explicit embedding/override stack.
+     *
+     * Processes:
+     *   LRE U+202A — Left-to-Right Embedding (push even level)
+     *   RLE U+202B — Right-to-Left Embedding (push odd level)
+     *   LRO U+202D — Left-to-Right Override (push even level + override)
+     *   RLO U+202E — Right-to-Left Override (push odd level + override)
+     *   PDF U+202C — Pop Directional Formatting
+     *   LRI U+2066 — Left-to-Right Isolate
+     *   RLI U+2067 — Right-to-Left Isolate
+     *   FSI U+2068 — First Strong Isolate
+     *   PDI U+2069 — Pop Directional Isolate
+     *
+     * Stack depth limit: 125 levels (max embedding level). Overflow → ignore.
+     *
+     * Output: filtered cps (X9 removes formatting chars) с per-char explicit
+     * level + post-X type (overrides change strong types).
+     *
+     * @param  list<int>  $cps
+     * @param  list<string>  $types
+     * @return array{cps: list<int>, types: list<string>, levels: list<int>}
+     */
+    private static function applyExplicitLevels(array $cps, array $types, int $paragraphLevel): array
+    {
+        $maxLevel = 125;
+        // Stack entry: ['level' => int, 'override' => null|'L'|'R', 'isolate' => bool]
+        $stack = [['level' => $paragraphLevel, 'override' => null, 'isolate' => false]];
+        $overflowEmbedding = 0;
+        $overflowIsolate = 0;
+        $validIsolateCount = 0;
+
+        $outCps = [];
+        $outTypes = [];
+        $outLevels = [];
+
+        foreach ($cps as $i => $cp) {
+            $cls = $types[$i];
+            $top = $stack[count($stack) - 1];
+
+            // X2..X5: explicit embedding/override push.
+            if ($cp === 0x202A || $cp === 0x202B || $cp === 0x202D || $cp === 0x202E) {
+                $isRtl = ($cp === 0x202B || $cp === 0x202E);
+                $override = ($cp === 0x202D) ? 'L' : (($cp === 0x202E) ? 'R' : null);
+                // Next greater (even for LTR, odd for RTL) level.
+                $newLevel = $isRtl
+                    ? ($top['level'] + 1) | 1
+                    : ($top['level'] + 2) & ~1;
+                if ($newLevel <= $maxLevel && $overflowIsolate === 0 && $overflowEmbedding === 0) {
+                    $stack[] = ['level' => $newLevel, 'override' => $override, 'isolate' => false];
+                } else {
+                    $overflowEmbedding++;
+                }
+
+                continue; // X9: формат-char removed from output
+            }
+            // X5a..X5c: isolate push.
+            if ($cp === 0x2066 || $cp === 0x2067 || $cp === 0x2068) {
+                $isRtl = ($cp === 0x2067);
+                // FSI (0x2068): scan ahead first strong → L or R.
+                if ($cp === 0x2068) {
+                    $isRtl = self::fsiDirection($cps, $i, $types);
+                }
+                // Output isolate char itself с current level (UAX 9: isolates get level).
+                $outCps[] = $cp;
+                $outTypes[] = $isRtl ? self::R : self::L;
+                $outLevels[] = $top['level'];
+                $newLevel = $isRtl
+                    ? ($top['level'] + 1) | 1
+                    : ($top['level'] + 2) & ~1;
+                if ($newLevel <= $maxLevel && $overflowIsolate === 0 && $overflowEmbedding === 0) {
+                    $stack[] = ['level' => $newLevel, 'override' => null, 'isolate' => true];
+                    $validIsolateCount++;
+                } else {
+                    $overflowIsolate++;
+                }
+
+                continue;
+            }
+            // X6a: PDI — pop к last isolate.
+            if ($cp === 0x2069) {
+                if ($overflowIsolate > 0) {
+                    $overflowIsolate--;
+                } elseif ($validIsolateCount > 0) {
+                    $overflowEmbedding = 0;
+                    while (count($stack) > 1 && ! $stack[count($stack) - 1]['isolate']) {
+                        array_pop($stack);
+                    }
+                    if (count($stack) > 1) {
+                        array_pop($stack);
+                        $validIsolateCount--;
+                    }
+                }
+                $top = $stack[count($stack) - 1];
+                // Output PDI itself.
+                $outCps[] = $cp;
+                $outTypes[] = self::ON;
+                $outLevels[] = $top['level'];
+
+                continue;
+            }
+            // X7: PDF — pop one embedding level.
+            if ($cp === 0x202C) {
+                if ($overflowIsolate > 0) {
+                    // nothing — outer isolate has overflowed embeddings
+                } elseif ($overflowEmbedding > 0) {
+                    $overflowEmbedding--;
+                } elseif (count($stack) > 1 && ! $stack[count($stack) - 1]['isolate']) {
+                    array_pop($stack);
+                }
+
+                continue;
+            }
+            // X6: regular char.
+            $top = $stack[count($stack) - 1];
+            $effectiveCls = $cls;
+            if ($top['override'] !== null && in_array($cls, [self::L, self::R, self::AL, self::EN, self::AN], true)) {
+                $effectiveCls = $top['override'];
+            }
+            $outCps[] = $cp;
+            $outTypes[] = $effectiveCls;
+            $outLevels[] = $top['level'];
+        }
+
+        return ['cps' => $outCps, 'types' => $outTypes, 'levels' => $outLevels];
+    }
+
+    /**
+     * FSI direction detection — scan forward к first strong char before
+     * matching PDI или end of input.
+     *
+     * @param  list<int>  $cps
+     * @param  list<string>  $types
+     */
+    private static function fsiDirection(array $cps, int $startIdx, array $types): bool
+    {
+        $depth = 0;
+        $n = count($cps);
+        for ($j = $startIdx + 1; $j < $n; $j++) {
+            $cp = $cps[$j];
+            if ($cp === 0x2066 || $cp === 0x2067 || $cp === 0x2068) {
+                $depth++;
+            } elseif ($cp === 0x2069) {
+                if ($depth === 0) {
+                    break;
+                }
+                $depth--;
+            } elseif ($depth === 0) {
+                $cls = $types[$j];
+                if ($cls === self::L) {
+                    return false; // LTR
+                }
+                if ($cls === self::R || $cls === self::AL) {
+                    return true; // RTL
+                }
+            }
+        }
+
+        return false; // default LTR if no strong char
+    }
+
+    /**
+     * Phase 187: implicit level assignment using explicit base levels
+     * (post-X step) instead of single paragraph level.
+     *
+     * @param  list<string>  $types
+     * @param  list<int>  $baseLevels  per-char explicit level from X-step
+     * @return list<int>
+     */
+    private static function applyIWithExplicitBase(array $types, array $baseLevels): array
+    {
+        $levels = [];
+        foreach ($types as $i => $t) {
+            $base = $baseLevels[$i] ?? 0;
+            if (($base & 1) === 0) {
+                $levels[] = match ($t) {
+                    self::L => $base,
+                    self::R => $base + 1,
+                    self::AN, self::EN => $base + 2,
+                    default => $base,
+                };
+            } else {
+                $levels[] = match ($t) {
+                    self::R => $base,
+                    self::L, self::AN, self::EN => $base + 1,
+                    default => $base,
+                };
+            }
+        }
+
+        return $levels;
+    }
+
     private static function applyW(array &$types, int $paragraphLevel): void
     {
         $n = count($types);

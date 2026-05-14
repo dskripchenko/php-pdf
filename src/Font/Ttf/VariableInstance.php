@@ -18,19 +18,13 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  *     с deltas.
  *  4. Re-serialize glyph bytes.
  *
- * Composite glyph behavior (Phase 149 clarification):
- *  - Composite glyphs are NOT directly transformed here, BUT their
- *    referenced component glyphs (which are simple glyphs themselves)
- *    ARE transformed individually. When the PDF reader renders a
- *    composite glyph, it pulls в the already-transformed component
- *    outlines — so composite shapes interpolate transitively.
- *  - The ONLY thing NOT interpolated is per-component anchor offsets
- *    (dx/dy) и transform matrices encoded in the composite header.
- *    Per-component deltas via gvar are rare в variable fonts; most
- *    variable fonts encode all variation in simple glyph outlines.
- *  - Full per-component delta application would require composite glyph
- *    re-serialization (parse flags, dx/dy ints, optional scale matrices,
- *    rewrite with modified anchors) — deferred.
+ * Composite glyph behavior:
+ *  - Component glyph outlines transformed individually (Phase 149).
+ *  - Per-component (dx, dy) anchor offsets transformed via gvar deltas
+ *    on composite glyph's point space (Phase 186). Point N = component N's
+ *    anchor. Plus 4 phantom points for advance metrics (handled separately).
+ *  - Transform matrices (scale, x/y scale, 2x2) preserved as-is — variation
+ *    affects only anchor positions, not scale factors.
  */
 final class VariableInstance
 {
@@ -57,9 +51,14 @@ final class VariableInstance
         if (! $this->isVariable() || $glyphBytes === '') {
             return $glyphBytes;
         }
+        // Phase 186: composite glyph — apply gvar deltas к component anchor offsets.
+        $composite = CompositeGlyph::parse($glyphBytes);
+        if ($composite !== null) {
+            return $this->transformComposite($glyphId, $composite);
+        }
         $glyph = SimpleGlyph::parse($glyphBytes);
         if ($glyph === null) {
-            return $glyphBytes; // composite или empty — skip
+            return $glyphBytes; // unknown или empty — skip
         }
 
         $gvar = $this->ttf->gvar();
@@ -109,6 +108,46 @@ final class VariableInstance
      * @param  list<int>  $origCoords original coords (read-only)
      * @param  array<int, bool>  $hasDelta  points that have explicit delta
      */
+    /**
+     * Phase 186: apply gvar deltas к composite glyph component anchor offsets.
+     *
+     * For composite glyphs, gvar point indices map к component anchors:
+     * Point 0 = component 0's anchor (dx, dy)
+     * Point 1 = component 1's anchor
+     * ...
+     * Plus 4 phantom points for advance metrics (skipped here).
+     */
+    private function transformComposite(int $glyphId, CompositeGlyph $composite): string
+    {
+        $gvar = $this->ttf->gvar();
+        $norm = $this->ttf->normalizeCoordinates($this->userCoords);
+        $componentCount = count($composite->components);
+        // Composite glyph has componentCount + 4 phantom points в gvar.
+        $deltas = $gvar->glyphDeltas($glyphId, $norm, $componentCount + 4);
+        if ($deltas === []) {
+            return $composite->originalBytes;
+        }
+        $newOffsets = [];
+        foreach ($composite->components as $idx => $comp) {
+            if (! $comp['isXY']) {
+                continue; // anchor-point alignment, not (dx, dy) — skip
+            }
+            $delta = $deltas[$idx] ?? null;
+            if ($delta === null) {
+                continue;
+            }
+            $newOffsets[$idx] = [
+                'dx' => (int) round($comp['arg1'] + $delta['x']),
+                'dy' => (int) round($comp['arg2'] + $delta['y']),
+            ];
+        }
+        if ($newOffsets === []) {
+            return $composite->originalBytes;
+        }
+
+        return $composite->serialize($newOffsets);
+    }
+
     private static function iupContour(array &$newCoords, array $origCoords, array $hasDelta, int $start, int $end): void
     {
         $length = $end - $start + 1;
