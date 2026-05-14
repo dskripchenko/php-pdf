@@ -1,0 +1,174 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Dskripchenko\PhpPdf\Font\Ttf;
+
+/**
+ * Phase 134: Apply gvar deltas + IUP к glyph outlines для chosen instance.
+ *
+ * Given user-space axis coordinates (e.g., ['wght' => 700]), produces
+ * modified glyf table bytes с interpolated outlines.
+ *
+ * Algorithm per glyph:
+ *  1. Parse simple glyph contours (composite glyphs → skip variation).
+ *  2. Get gvar deltas для normalized coords.
+ *  3. Apply IUP (Interpolation of Unreferenced Points): для each contour,
+ *     points без explicit delta interpolate proportionally from neighbors
+ *     с deltas.
+ *  4. Re-serialize glyph bytes.
+ */
+final class VariableInstance
+{
+    /**
+     * @param  array<string, float>  $userCoords  axis tag → user value
+     */
+    public function __construct(
+        private readonly TtfFile $ttf,
+        public readonly array $userCoords,
+    ) {}
+
+    public function isVariable(): bool
+    {
+        return $this->ttf->isVariable() && $this->ttf->gvar() !== null;
+    }
+
+    /**
+     * Apply variation deltas к raw glyph bytes (one glyph). Returns
+     * modified bytes — or original $glyphBytes если glyph is composite/
+     * empty/non-variable.
+     */
+    public function transformGlyph(int $glyphId, string $glyphBytes): string
+    {
+        if (! $this->isVariable() || $glyphBytes === '') {
+            return $glyphBytes;
+        }
+        $glyph = SimpleGlyph::parse($glyphBytes);
+        if ($glyph === null) {
+            return $glyphBytes; // composite или empty — skip
+        }
+
+        $gvar = $this->ttf->gvar();
+        $norm = $this->ttf->normalizeCoordinates($this->userCoords);
+        $pointCount = count($glyph->xCoords);
+        $deltas = $gvar->glyphDeltas($glyphId, $norm, $pointCount);
+
+        if ($deltas === []) {
+            return $glyphBytes;
+        }
+
+        // Apply explicit deltas + IUP для unreferenced points.
+        $newX = $glyph->xCoords;
+        $newY = $glyph->yCoords;
+        $hasDelta = [];
+        foreach ($deltas as $idx => $d) {
+            if ($idx < $pointCount) {
+                $newX[$idx] = (int) round($newX[$idx] + $d['x']);
+                $newY[$idx] = (int) round($newY[$idx] + $d['y']);
+                $hasDelta[$idx] = true;
+            }
+        }
+
+        // IUP per contour.
+        $contourStart = 0;
+        foreach ($glyph->endPts as $end) {
+            self::iupContour($newX, $glyph->xCoords, $hasDelta, $contourStart, $end);
+            self::iupContour($newY, $glyph->yCoords, $hasDelta, $contourStart, $end);
+            $contourStart = $end + 1;
+        }
+
+        return $glyph->serialize($newX, $newY);
+    }
+
+    /**
+     * IUP (Interpolation of Unreferenced Points) per OpenType spec §11.7.
+     *
+     * For each contiguous range of unreferenced points между referenced
+     * points P_a и P_b на contour:
+     *   - Если P_a и P_b have same original coord: shift unreferenced
+     *     points by same delta as P_a (= P_b).
+     *   - Если original coord of unreferenced point is между P_a и P_b:
+     *     linearly interpolate based on position ratio.
+     *   - Else: shift by closer referenced point's delta.
+     *
+     * @param  list<int>  $newCoords  modified coords (modified in-place)
+     * @param  list<int>  $origCoords original coords (read-only)
+     * @param  array<int, bool>  $hasDelta  points that have explicit delta
+     */
+    private static function iupContour(array &$newCoords, array $origCoords, array $hasDelta, int $start, int $end): void
+    {
+        $length = $end - $start + 1;
+        if ($length === 0) {
+            return;
+        }
+        // Find all referenced points в contour.
+        $refs = [];
+        for ($i = $start; $i <= $end; $i++) {
+            if (isset($hasDelta[$i])) {
+                $refs[] = $i;
+            }
+        }
+        if ($refs === []) {
+            return; // No referenced points — leave contour untouched.
+        }
+
+        // For each unreferenced point, find next ref forward и prev ref backward
+        // (wrapping around contour boundary).
+        $numRefs = count($refs);
+        for ($i = 0; $i < $numRefs; $i++) {
+            $r1 = $refs[$i];
+            $r2 = $refs[($i + 1) % $numRefs];
+            // Range from r1+1 .. r2-1 (wrapping inside contour).
+            self::iupRange($newCoords, $origCoords, $r1, $r2, $start, $end);
+        }
+    }
+
+    /**
+     * Interpolate points в range (r1, r2) exclusive endpoints. Range wraps
+     * within contour [$start, $end].
+     *
+     * @param  list<int>  $newCoords
+     * @param  list<int>  $origCoords
+     */
+    private static function iupRange(array &$newCoords, array $origCoords, int $r1, int $r2, int $start, int $end): void
+    {
+        if ($r1 === $r2) {
+            return;
+        }
+        $length = $end - $start + 1;
+        $oa = $origCoords[$r1];
+        $ob = $origCoords[$r2];
+        $deltaA = $newCoords[$r1] - $oa;
+        $deltaB = $newCoords[$r2] - $ob;
+
+        // Iterate through points между r1 и r2 (exclusive), wrapping around contour.
+        $i = $r1 + 1;
+        while (true) {
+            if ($i > $end) {
+                $i = $start;
+            }
+            if ($i === $r2) {
+                break;
+            }
+            $oi = $origCoords[$i];
+            $oMin = min($oa, $ob);
+            $oMax = max($oa, $ob);
+            if ($oi >= $oMin && $oi <= $oMax) {
+                // Linear interpolation.
+                if ($oa === $ob) {
+                    // Both refs equal — shift по deltaA (== deltaB likely).
+                    $newCoords[$i] = (int) round($oi + ($deltaA + $deltaB) / 2);
+                } else {
+                    $t = ($oi - $oa) / ($ob - $oa);
+                    $delta = $deltaA + $t * ($deltaB - $deltaA);
+                    $newCoords[$i] = (int) round($oi + $delta);
+                }
+            } else {
+                // Use closer endpoint's delta.
+                $useDelta = (abs($oi - $oa) < abs($oi - $ob)) ? $deltaA : $deltaB;
+                $newCoords[$i] = (int) round($oi + $useDelta);
+            }
+            $i++;
+        }
+    }
+}

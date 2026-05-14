@@ -73,9 +73,17 @@ final class PdfFont
      *                        Если false — full TTF (backward-compat для
      *                        корнер-кейсов где subset причинит проблем).
      */
+    /**
+     * @param  array<string, float>  $axes  Phase 134: variable font axis coords
+     *                                       (e.g., ['wght' => 700]). При embedding
+     *                                       glyph outlines pre-interpolate'ятся
+     *                                       и static subset emit'ится.
+     *                                       Empty array = default instance.
+     */
     public function __construct(
         private readonly TtfFile $ttf,
         private readonly bool $subset = true,
+        private readonly array $axes = [],
     ) {
         $this->writerRegistrations = new \SplObjectStorage;
     }
@@ -108,8 +116,13 @@ final class PdfFont
 
         // 1. Embed TTF binary как FontFile2 stream object. С FlateDecode
         //    font subsets ~50-70% меньше (typical 30-70KB → 15-35KB).
+        // Phase 134: variation instance, если font is variable и axes заданы.
+        $variableInstance = null;
+        if ($this->axes !== [] && $this->ttf->isVariable()) {
+            $variableInstance = new \Dskripchenko\PhpPdf\Font\Ttf\VariableInstance($this->ttf, $this->axes);
+        }
         $fontBytes = $this->subset
-            ? (new \Dskripchenko\PhpPdf\Font\Ttf\TtfSubsetter)->subset($this->ttf, array_keys($this->usedGlyphs))
+            ? (new \Dskripchenko\PhpPdf\Font\Ttf\TtfSubsetter)->subset($this->ttf, array_keys($this->usedGlyphs), $variableInstance)
             : $this->ttf->rawBytes();
         if ($compressStreams) {
             $compressed = (string) gzcompress($fontBytes, 6);

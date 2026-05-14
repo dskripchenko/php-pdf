@@ -38,11 +38,15 @@ final class TtfSubsetter
     /**
      * Subset full TTF в minimal version с only указанными glyph IDs.
      *
+     * Phase 134: если задан $variableInstance, glyph outlines preinterpolate
+     * via gvar deltas (FontFile2 stream становится "frozen" к chosen axis
+     * values — variation tables не embed'ятся в subset).
+     *
      * @param  array<int, bool>|list<int>  $usedGlyphIds  Если list — преобразуется
      *                                            во flipped map для O(1) lookup.
      * @return string  Subset TTF bytes (для embedding'а как FontFile2 stream).
      */
-    public function subset(TtfFile $source, array $usedGlyphIds): string
+    public function subset(TtfFile $source, array $usedGlyphIds, ?VariableInstance $variableInstance = null): string
     {
         // Normalize input в lookup map.
         $used = $this->normalizeUsedGlyphs($usedGlyphIds);
@@ -74,6 +78,7 @@ final class TtfSubsetter
             $tables['glyf']['offset'],
             $locaOffsets,
             $used,
+            $variableInstance,
         );
         $newLoca = $this->packLoca($newLocaOffsets, $indexToLocFormat);
 
@@ -252,6 +257,7 @@ final class TtfSubsetter
         int $glyfBaseOffset,
         array $locaOffsets,
         array $used,
+        ?VariableInstance $variableInstance = null,
     ): array {
         $newGlyf = '';
         $newOffsets = [];
@@ -267,8 +273,12 @@ final class TtfSubsetter
             if ($length === 0) {
                 continue;
             }
-            // Pad до 2-byte alignment (TTF requirement для glyf entries).
             $glyphBytes = substr($sourceBytes, $start, $length);
+            // Phase 134: apply variation deltas если instance задан.
+            if ($variableInstance !== null) {
+                $glyphBytes = $variableInstance->transformGlyph($gid, $glyphBytes);
+            }
+            // Pad до 2-byte alignment (TTF requirement для glyf entries).
             if (strlen($glyphBytes) % 2 !== 0) {
                 $glyphBytes .= "\x00";
             }
@@ -322,9 +332,15 @@ final class TtfSubsetter
         //
         // cmap и name оставляем — formally needed для TTF-validity
         // (некоторые tools требуют, плюс наш собственный parser).
+        // Phase 134: variation tables dropped в subset — outlines frozen
+        // to specific instance (или to default если no variation applied).
+        // PDF readers cannot apply variations dynamically; они expect static
+        // glyph outlines в embedded font.
         $dropTables = ['GPOS', 'GSUB', 'GDEF', 'DSIG',
             'kern', 'hdmx', 'VDMX', 'vhea', 'vmtx', 'BASE', 'JSTF',
-            'LTSH', 'PCLT', 'gasp', 'FFTM'];
+            'LTSH', 'PCLT', 'gasp', 'FFTM',
+            'fvar', 'avar', 'gvar', 'HVAR', 'MVAR', 'VVAR',
+            'CFF2', 'STAT', 'cvar'];
 
         $newTableData = [];
         foreach ($tables as $tag => $info) {
