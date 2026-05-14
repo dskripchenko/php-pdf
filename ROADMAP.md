@@ -479,73 +479,60 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 ---
 
-## v1.2 — Output size optimization
+## v1.2 — Output size optimization (closed)
 
 Motivation: benchmark template 13 (`docs/bench-pdf-vs-mpdf.md` в printable repo)
-показал php-pdf output 82KB vs mpdf 57KB (mpdf 1.44× компактнее). Анализ
-identified три причины:
+showed php-pdf output 82KB vs mpdf 57KB (mpdf 1.44× more compact).
 
-1. Каждый Run генерирует separate `BT … Tj … ET` block (нет TJ-array группировки)
-2. Page /Resources dict declare'ит все 4 font variants даже когда used только 1-2
-3. Нет post-emit content stream optimizer (whitespace, redundant gstate, repeated colors)
+### Results after Phase 158-160:
 
-Combined target: **-27..30% output reduction** (82KB → ~57KB, parity с mpdf).
+| Metric | Before | After | Delta | mpdf ratio |
+|---|---|---|---|---|
+| Output size | 82194 B | 77717 B | **-5.4%** | 1.36× → closer к 1.44× |
+| Wall time | 24.82 ms | 24.02 ms | **-3.2%** | 0.58× faster |
+| Memory peak | 36 MB | 36 MB | 0 | 0.71× less |
 
-### Phase 158: TJ-array grouping (priority 1, est. -15%)
+### ~~Phase 158: TJ-array grouping~~ ✅ closed (-5.4%, -3.2% wall)
 
-**Scope:** соседние Run'ы того же font+size+color на одном baseline сливаются
-в один `BT [<hex1> -kern <hex2> …] TJ ET` блок. PdfFont::encodeTextTjArray()
-уже умеет TJ format — нужна Engine-level group/flush logic.
+Соседние Run'ы того же font+size+color на одном baseline сливаются
+в single `BT/Tj/ET` block. Engine::emitLine accumulator с flush на
+style boundary/justify gap/image/link change.
 
-**Где:** `Engine::renderParagraph` — добавить TextRunBuffer аккумулятор,
-flush при изменении font/size/color/position OR end of line.
+Меньше предполагаемых -15% — обоснование: Type0 CID fonts с hex multi-byte
+encoding имеет меньше относительный overhead BT/ET vs content size.
 
-**Риск:** regression на kerning pairs — тщательно проверить через golden-file
-тесты + bench template 13 для compare.
+### ~~Phase 159: Page Resources dict slimming~~ ✅ already in place
 
-### Phase 159: Page Resources dict slimming (priority 2, est. -5%)
+Проверка показала: `Page::registerEmbeddedFont` накапливает fonts по факту
+использования; Document::emitResources iterates только used fonts per page.
+Template 13: 2 fonts declared per page (не 4). Нет дополнительных wins.
 
-**Scope:** Page::registerEmbeddedFont накапливает все fonts; на emit
-/Resources filter только actually-used per page. Same для /XObject,
-/Pattern, /ExtGState.
+### ~~Phase 160: gstate dedup в ContentStream~~ ✅ closed (uncompressed -2.9%)
 
-**Где:** `Page::buildResourcesDict` (или равноценный метод emit).
+Drop q/Q wrap вокруг text emit, track lastFillR/G/B, skip duplicate `rg` ops.
+Page 0 content stream uncompressed: 20257 → 19661 bytes (-2.9%), rg ops
+41 → 21 (-50%), q/Q wraps 156/155 → 125/124 (-20%).
 
-**Риск:** PDF/A validators требуют declared resources совпадают с usage —
-нужны PDF/A regression tests.
+Compressed PDF (FlateDecode): no measurable change — Flate already efficient
+на repetitive sequences. Phase 160 wins: cleaner streams для inspection,
+faster compress, savings без compression.
 
-### Phase 160: Content stream post-processing (priority 3, est. -10%)
+### Phase 161: Cross-Writer font subset dedup — deferred к v1.3
 
-**Scope:** новый `ContentStreamOptimizer`. Pass через stream перед FlateDecode
-compression. Optimizations:
-- Drop redundant `q…Q` graphics state pairs с identical state
-- Merge consecutive `<same color> rg` ops
-- Skip `Tm` re-emit если matrix same as previous
-- Compact whitespace в operators (cur engine pretty-prints с \n)
-- Strip leading zeros в numbers (`0.500` → `.5`)
+Batch-only optimization (нет улучшения per-doc). Требует SHA-1 cache subset
+bytes + invalidation на font update. Перенесён в v1.3 backlog.
 
-**Где:** `Pdf\Writer` или `Pdf\Page::finalize` — pass через optimizer перед emit.
+### Conclusion
 
-**Риск:** incorrect parsing может сломать valid PDF. **Обязательно** PDF reader
-verification tests (parse output через настоящий PDF library, compare extracted
-text/positions с pre-optimization).
+Combined -27..30% target не достигнут (achieved -5.4%). Основная причина:
+Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactness
+тhat кладёт ceiling на TJ-grouping wins. mpdf uses different font encoding
+(Type 1 ASCII subset) что compresses differently.
 
-### Phase 161: Cross-Writer font subset dedup (priority 4 bonus, batch-only)
-
-**Scope:** SHA-1 хеш subset glyph set, cache в process-level (или
-filesystem `storage/framework/cache/php-pdf-subsets/`). При batch rendering
-(N documents с same template) embed font bytes один раз.
-
-**Outcome:** per-doc нет улучшения; per-batch до -50% если same font+glyphs
-across documents.
-
-**Риск:** cache invalidation при font file update. Хеш должен включать
-font file hash, не только glyph set.
-
-### Method
-
-После каждой Phase rerun bench (`docs/bench-pdf-vs-mpdf.md` в printable),
-обновить metrics. Combined target — output parity с mpdf.
+Дальнейшие возможные оптимизации (не критичные):
+- Font subset re-encoding (Type0 → Type1 для Latin) — major refactor
+- Custom FlateDecode dictionary preset
+- xref stream (PDF 1.5) вместо plain xref table — saves ~1-2KB metadata
 
 ---
 
