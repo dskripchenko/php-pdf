@@ -703,6 +703,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   gaps), mandatory dual check digits C (weight cycle 1..20) и K (1..15).
   Module count = 9·(N+4) + 1 (включая termination bar). Denser successor
   Code 39 — больше data density + automatic error detection.
+- ~~MSI Plessey (Modified Plessey) — retail shelving~~ ✅ **Phase 206 closed**.
+  Numeric only, variable length. Each digit = 4 bits BCD (MSB first),
+  each bit = 3 modules (`0`→`100`, `1`→`110`). Start `110` + N×12 +
+  stop `1001` = 12·N + 7 modules. Optional Mod-10 check digit (Luhn-style
+  variant) via `withCheckDigit: true`. `BarcodeFormat::MsiPlessey` +
+  Engine dispatch.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.
