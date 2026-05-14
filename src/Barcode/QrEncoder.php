@@ -152,11 +152,78 @@ final class QrEncoder
      */
     private array $modules;
 
+    /**
+     * Phase 183: Structured Append factory. Splits payload across multiple
+     * QR symbols. Each symbol gets 20-bit header: mode 0011 + position (4 bits,
+     * 0-based) + total (4 bits, 1-based-1) + parity (8 bits = XOR of all data
+     * bytes across all segments).
+     *
+     * Per ISO/IEC 18004 §7.4.7. Up to 16 symbols.
+     *
+     * Caller responsible для splitting data + computing global parity:
+     *   $parity = QrEncoder::computeStructuredAppendParity($fullData);
+     *   $sym1 = QrEncoder::structuredAppend('part1', 0, 3, $parity);
+     *   $sym2 = QrEncoder::structuredAppend('part2', 1, 3, $parity);
+     *   $sym3 = QrEncoder::structuredAppend('part3', 2, 3, $parity);
+     */
+    public static function structuredAppend(
+        string $data,
+        int $position,
+        int $total,
+        int $parity,
+        ?QrEccLevel $eccLevel = null,
+        ?QrEncodingMode $mode = null,
+    ): self {
+        if ($total < 2 || $total > 16) {
+            throw new \InvalidArgumentException('QR Structured Append total must be 2..16');
+        }
+        if ($position < 0 || $position >= $total) {
+            throw new \InvalidArgumentException(sprintf(
+                'QR Structured Append position %d not в range 0..%d', $position, $total - 1
+            ));
+        }
+        if ($parity < 0 || $parity > 255) {
+            throw new \InvalidArgumentException('QR Structured Append parity must be 0..255');
+        }
+
+        return new self($data, $eccLevel, $mode, structuredAppend: [
+            'position' => $position,
+            'total' => $total,
+            'parity' => $parity,
+        ]);
+    }
+
+    /**
+     * Phase 183: compute parity for Structured Append — XOR of all data bytes
+     * across all symbol segments в concatenated original order.
+     */
+    public static function computeStructuredAppendParity(string $fullData): int
+    {
+        $parity = 0;
+        for ($i = 0; $i < strlen($fullData); $i++) {
+            $parity ^= ord($fullData[$i]);
+        }
+
+        return $parity;
+    }
+
+    /** @var array{position: int, total: int, parity: int}|null */
+    private readonly ?array $structuredAppend;
+
+    public readonly ?int $eciDesignator;
+
     public function __construct(
         public readonly string $data,
         ?QrEccLevel $eccLevel = null,
         ?QrEncodingMode $mode = null,
+        ?array $structuredAppend = null,
+        ?int $eciDesignator = null,
     ) {
+        $this->structuredAppend = $structuredAppend;
+        if ($eciDesignator !== null && ($eciDesignator < 0 || $eciDesignator > 999999)) {
+            throw new \InvalidArgumentException('QR ECI designator must be 0..999999');
+        }
+        $this->eciDesignator = $eciDesignator;
         if ($data === '') {
             throw new \InvalidArgumentException('QR input must be non-empty');
         }
@@ -192,7 +259,14 @@ final class QrEncoder
             }
             $dataCodewords = $perLevel[$eccKey][0];
             $capacityBits = $dataCodewords * 8;
-            $needed = 4 + $this->mode->charCountIndicatorBits($v) + $this->mode->dataBitsFor($charCount);
+            // Phase 183: structured append adds 20-bit header.
+            $structAppendBits = $this->structuredAppend !== null ? 20 : 0;
+            // Phase 184: ECI adds 4-bit mode + 8/16/24-bit designator.
+            $eciBits = 0;
+            if ($this->eciDesignator !== null) {
+                $eciBits = 4 + ($this->eciDesignator <= 127 ? 8 : ($this->eciDesignator <= 16383 ? 16 : 24));
+            }
+            $needed = $structAppendBits + $eciBits + 4 + $this->mode->charCountIndicatorBits($v) + $this->mode->dataBitsFor($charCount);
             if ($needed <= $capacityBits) {
                 $version = $v;
                 break;
@@ -266,6 +340,26 @@ final class QrEncoder
     private function encodeData(string $data, int $version): string
     {
         $bits = '';
+        // Phase 183: Structured Append header — prepended до regular mode indicator.
+        // Mode 0011 + position (4 bits) + (total - 1) (4 bits) + parity (8 bits) = 20 bits.
+        if ($this->structuredAppend !== null) {
+            $bits .= '0011';
+            $bits .= str_pad(decbin($this->structuredAppend['position']), 4, '0', STR_PAD_LEFT);
+            $bits .= str_pad(decbin($this->structuredAppend['total'] - 1), 4, '0', STR_PAD_LEFT);
+            $bits .= str_pad(decbin($this->structuredAppend['parity']), 8, '0', STR_PAD_LEFT);
+        }
+        // Phase 184: ECI header — Mode 0111 + designator (8/16/24 bits depending on value).
+        if ($this->eciDesignator !== null) {
+            $bits .= '0111';
+            $eci = $this->eciDesignator;
+            if ($eci <= 127) {
+                $bits .= '0'.str_pad(decbin($eci), 7, '0', STR_PAD_LEFT);
+            } elseif ($eci <= 16383) {
+                $bits .= '10'.str_pad(decbin($eci), 14, '0', STR_PAD_LEFT);
+            } else { // up to 999999
+                $bits .= '110'.str_pad(decbin($eci), 21, '0', STR_PAD_LEFT);
+            }
+        }
         // Mode indicator — 4 bits.
         $bits .= str_pad(decbin($this->mode->indicatorBits()), 4, '0', STR_PAD_LEFT);
         // Character count indicator. Phase 101: для Kanji char count =
