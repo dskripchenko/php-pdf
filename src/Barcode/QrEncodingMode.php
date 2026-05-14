@@ -19,6 +19,8 @@ enum QrEncodingMode: int
     case Numeric = 0b0001;
     case Alphanumeric = 0b0010;
     case Byte = 0b0100;
+    /** Phase 101: Kanji (Shift_JIS) — 13 bits per char. */
+    case Kanji = 0b1000;
 
     /**
      * 4-bit mode indicator (по ISO/IEC 18004 Table 2).
@@ -38,16 +40,19 @@ enum QrEncodingMode: int
                 self::Numeric => 10,
                 self::Alphanumeric => 9,
                 self::Byte => 8,
+                self::Kanji => 8,
             },
             $version <= 26 => match ($this) {
                 self::Numeric => 12,
                 self::Alphanumeric => 11,
                 self::Byte => 16,
+                self::Kanji => 10,
             },
             default => match ($this) {
                 self::Numeric => 14,
                 self::Alphanumeric => 13,
                 self::Byte => 16,
+                self::Kanji => 12,
             },
         };
     }
@@ -63,6 +68,7 @@ enum QrEncodingMode: int
             self::Alphanumeric => intdiv($charCount, 2) * 11
                 + (($charCount % 2 === 1) ? 6 : 0),
             self::Byte => $charCount * 8,
+            self::Kanji => $charCount * 13,
         };
     }
 

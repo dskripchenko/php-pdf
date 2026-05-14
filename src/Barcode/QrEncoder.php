@@ -138,7 +138,10 @@ final class QrEncoder
         }
 
         $eccKey = $this->eccLevel->value;
-        $charCount = strlen($data);
+        // Phase 101: для Kanji input, char count = bytes / 2.
+        $charCount = $this->mode === QrEncodingMode::Kanji
+            ? intdiv(strlen($data), 2)
+            : strlen($data);
 
         // Phase 38: capacity check теперь bit-based, не byte-based:
         // total bits available = data_codewords * 8.
@@ -226,15 +229,20 @@ final class QrEncoder
         $bits = '';
         // Mode indicator — 4 bits.
         $bits .= str_pad(decbin($this->mode->indicatorBits()), 4, '0', STR_PAD_LEFT);
-        // Character count indicator.
+        // Character count indicator. Phase 101: для Kanji char count =
+        // bytes / 2 (each Kanji char encoded в 2 Shift_JIS bytes).
         $charCountBits = $this->mode->charCountIndicatorBits($version);
-        $bits .= str_pad(decbin(strlen($data)), $charCountBits, '0', STR_PAD_LEFT);
+        $charCount = $this->mode === QrEncodingMode::Kanji
+            ? intdiv(strlen($data), 2)
+            : strlen($data);
+        $bits .= str_pad(decbin($charCount), $charCountBits, '0', STR_PAD_LEFT);
 
-        // Phase 38: data encoding по mode.
+        // Phase 38+101: data encoding по mode.
         $bits .= match ($this->mode) {
             QrEncodingMode::Numeric => self::encodeNumeric($data),
             QrEncodingMode::Alphanumeric => self::encodeAlphanumeric($data),
             QrEncodingMode::Byte => self::encodeByte($data),
+            QrEncodingMode::Kanji => self::encodeKanji($data),
         };
 
         // Terminator: up to 4 zeros (or fewer if at capacity).
@@ -301,6 +309,43 @@ final class QrEncoder
         $bits = '';
         for ($i = 0; $i < strlen($data); $i++) {
             $bits .= str_pad(decbin(ord($data[$i])), 8, '0', STR_PAD_LEFT);
+        }
+
+        return $bits;
+    }
+
+    /**
+     * Phase 101: Kanji mode (Shift_JIS, 13 bits per char).
+     *
+     * Algorithm per ISO/IEC 18004 §7.4.6:
+     *  - Each Kanji char = 2 Shift_JIS bytes.
+     *  - First byte 0x81..0x9F → subtract 0x8140.
+     *  - First byte 0xE0..0xEB → subtract 0xC140.
+     *  - delta MSB × 0xC0 + LSB = 13-bit value.
+     *
+     * Caller pre-converts UTF-8 → Shift_JIS bytes.
+     */
+    public static function encodeKanji(string $shiftJisData): string
+    {
+        $bits = '';
+        $len = strlen($shiftJisData);
+        for ($i = 0; $i + 1 < $len; $i += 2) {
+            $hi = ord($shiftJisData[$i]);
+            $lo = ord($shiftJisData[$i + 1]);
+            $combined = ($hi << 8) | $lo;
+            if ($combined >= 0x8140 && $combined <= 0x9FFC) {
+                $delta = $combined - 0x8140;
+            } elseif ($combined >= 0xE040 && $combined <= 0xEBBF) {
+                $delta = $combined - 0xC140;
+            } else {
+                throw new \InvalidArgumentException(sprintf(
+                    'Kanji codepoint 0x%04X out of supported Shift_JIS range', $combined,
+                ));
+            }
+            $hiByte = ($delta >> 8) & 0xFF;
+            $loByte = $delta & 0xFF;
+            $value = $hiByte * 0xC0 + $loByte;
+            $bits .= str_pad(decbin($value), 13, '0', STR_PAD_LEFT);
         }
 
         return $bits;
