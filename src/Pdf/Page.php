@@ -51,6 +51,11 @@ final class Page
 
     private int $patternCounter = 0;
 
+    /** @var array<string, PdfFormXObject> name → form (Phase 107) */
+    private array $formXObjects = [];
+
+    private int $formXObjectCounter = 0;
+
     /** Phase 85: Page transition (slideshow effect) — emitted as /Trans dict. */
     private ?array $transition = null;
 
@@ -322,6 +327,54 @@ final class Page
         $this->stream->fillRectWithPattern($x, $y, $w, $h, $patternName);
 
         return $this;
+    }
+
+    /**
+     * Phase 107: draw a reusable Form XObject at (x, y) scaled к (w, h).
+     *
+     * Emits `q sx 0 0 sy tx ty cm /Name Do Q`.
+     * sx, sy chosen так что form's /BBox maps в requested rect.
+     */
+    public function useFormXObject(
+        PdfFormXObject $form,
+        float $x,
+        float $y,
+        float $widthPt,
+        float $heightPt,
+    ): self {
+        $name = $this->registerFormXObject($form);
+        $bw = $form->bboxWidth();
+        $bh = $form->bboxHeight();
+        $sx = $widthPt / $bw;
+        $sy = $heightPt / $bh;
+        $tx = $x - $form->bboxLlx * $sx;
+        $ty = $y - $form->bboxLly * $sy;
+        $this->stream->useFormXObject($name, $sx, $sy, $tx, $ty);
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, PdfFormXObject>
+     *
+     * @internal
+     */
+    public function formXObjects(): array
+    {
+        return $this->formXObjects;
+    }
+
+    private function registerFormXObject(PdfFormXObject $form): string
+    {
+        foreach ($this->formXObjects as $name => $f) {
+            if ($f === $form) {
+                return $name;
+            }
+        }
+        $name = 'Fm'.(++$this->formXObjectCounter);
+        $this->formXObjects[$name] = $form;
+
+        return $name;
     }
 
     /**

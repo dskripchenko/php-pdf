@@ -544,6 +544,37 @@ final class Document
             }
         }
 
+        // Phase 107: Form XObjects — shared content streams referenced by
+        // /Do. Identity-dedup per instance (same PdfFormXObject used on
+        // multiple pages → один XObject в output).
+        /** @var \SplObjectStorage<PdfFormXObject, int> */
+        $formXObjectIds = new \SplObjectStorage;
+        foreach ($this->pages as $page) {
+            foreach ($page->formXObjects() as $form) {
+                if (isset($formXObjectIds[$form])) {
+                    continue;
+                }
+                $body = $form->contentStream;
+                if ($this->compressStreams && $body !== '') {
+                    $compressed = (string) gzcompress($body, 6);
+                    $formId = $writer->addObject(sprintf(
+                        "<< %s /Resources << >> /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                        $form->dictHead(),
+                        strlen($compressed),
+                        $compressed,
+                    ));
+                } else {
+                    $formId = $writer->addObject(sprintf(
+                        "<< %s /Resources << >> /Length %d >>\nstream\n%s\nendstream",
+                        $form->dictHead(),
+                        strlen($body),
+                        $body,
+                    ));
+                }
+                $formXObjectIds[$form] = $formId;
+            }
+        }
+
         // 3. Reserve page IDs upfront (needed для internal-link Dest references,
         //    т.к. annotation объекты могут ссылаться на pages до их emission).
         $pageIds = [];
@@ -586,6 +617,10 @@ final class Document
             $resourcesXObj = '';
             foreach ($page->images() as $name => $img) {
                 $resourcesXObj .= sprintf(' /%s %d 0 R', $name, $imageObjectIds[$img]);
+            }
+            // Phase 107: Form XObjects share /XObject namespace на page.
+            foreach ($page->formXObjects() as $name => $form) {
+                $resourcesXObj .= sprintf(' /%s %d 0 R', $name, $formXObjectIds[$form]);
             }
 
             // Phase 31: ExtGState objects (opacity и др.). Каждая ExtGState

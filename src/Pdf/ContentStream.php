@@ -397,6 +397,24 @@ final class ContentStream
     }
 
     /**
+     * Phase 107: paint a Form XObject через scale+translate CTM + `/Name Do`.
+     */
+    public function useFormXObject(string $name, float $sx, float $sy, float $tx, float $ty): self
+    {
+        $this->body .= "q\n";
+        $this->body .= sprintf("%s 0 0 %s %s %s cm\n",
+            $this->formatNumber($sx),
+            $this->formatNumber($sy),
+            $this->formatNumber($tx),
+            $this->formatNumber($ty),
+        );
+        $this->body .= sprintf("/%s Do\n", $name);
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *
