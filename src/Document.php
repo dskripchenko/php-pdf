@@ -96,6 +96,54 @@ final readonly class Document
     }
 
     /**
+     * Phase 223: Merge multiple Documents в single output (batch use case).
+     *
+     * Sections concatenated в order (с natural section breaks → new page
+     * per section's PageSetup). Metadata inherited от first non-empty
+     * source; Document-level flags (tagged, useXrefStream, encryption etc.)
+     * также от first document.
+     *
+     * Use case: generate per-invoice/per-record Documents в loop, then
+     * concat для single combined PDF.
+     *
+     * Example:
+     *   $combined = Document::concat([\$doc1, \$doc2, \$doc3]);
+     *   \$combined->toFile('combined.pdf');
+     */
+    public static function concat(array $documents): self
+    {
+        if ($documents === []) {
+            throw new \InvalidArgumentException('Document::concat requires at least one document');
+        }
+        $first = $documents[0];
+        $sections = [];
+        foreach ($documents as $doc) {
+            if (! $doc instanceof self) {
+                throw new \InvalidArgumentException('All elements must be Document instances');
+            }
+            foreach ($doc->sections() as $s) {
+                $sections[] = $s;
+            }
+        }
+        $primarySection = $sections[0];
+        $additional = array_slice($sections, 1);
+
+        return new self(
+            section: $primarySection,
+            metadata: $first->metadata,
+            additionalSections: $additional,
+            tagged: $first->tagged,
+            lang: $first->lang,
+            useXrefStream: $first->useXrefStream,
+            pdfVersion: $first->pdfVersion,
+            useObjectStreams: $first->useObjectStreams,
+            encryption: $first->encryption,
+            signature: $first->signature,
+            pdfA: $first->pdfA,
+        );
+    }
+
+    /**
      * Phase 219: Convenience factory — parse HTML и wrap в Document.
      *
      * Supports HTML5 subset:
