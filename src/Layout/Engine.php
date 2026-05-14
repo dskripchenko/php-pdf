@@ -2017,7 +2017,11 @@ final class Engine
         $ctx->cursorY -= $bc->spaceBeforePt;
 
         if ($bc->format->is2D()) {
-            $this->renderQrBarcode($bc, $ctx);
+            if ($bc->format === \Dskripchenko\PhpPdf\Element\BarcodeFormat::DataMatrix) {
+                $this->renderDataMatrixBarcode($bc, $ctx);
+            } else {
+                $this->renderQrBarcode($bc, $ctx);
+            }
 
             return;
         }
@@ -2109,6 +2113,86 @@ final class Engine
                     $captionText, $captionX, $captionY,
                     $this->fallbackStandard, $bc->textSizePt,
                 );
+            }
+        }
+
+        $ctx->cursorY -= $totalHeight;
+        $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 104: DataMatrix 2D barcode (ECC 200). Modules — 2D bool matrix;
+     * рендерим through общий 2D matrix path с quiet zone 1 module.
+     */
+    private function renderDataMatrixBarcode(Barcode $bc, LayoutContext $ctx): void
+    {
+        $enc = new \Dskripchenko\PhpPdf\Barcode\DataMatrixEncoder($bc->value);
+        $this->render2DMatrix(
+            $enc->modules(), $enc->size(), $bc, $ctx,
+            quietZone: 1,
+        );
+    }
+
+    /**
+     * Phase 36+104: общий 2D matrix render (QR + DataMatrix).
+     *
+     * @param  list<list<bool>>  $matrix
+     */
+    private function render2DMatrix(array $matrix, int $matrixSize, Barcode $bc, LayoutContext $ctx, int $quietZone): void
+    {
+        $gridSize = $matrixSize + 2 * $quietZone;
+        $totalSizePt = $bc->widthPt ?? 80.0;
+        $totalSizePt = min($totalSizePt, $ctx->contentWidth);
+        $moduleSize = $totalSizePt / $gridSize;
+
+        $captionHeight = $bc->showText ? $bc->textSizePt + 2.0 : 0;
+        $totalHeight = $totalSizePt + $captionHeight;
+        $this->ensureRoomFor($ctx, $totalHeight);
+
+        $blockX = match ($bc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalSizePt) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalSizePt,
+            default => $ctx->leftX,
+        };
+
+        $yTop = $ctx->cursorY;
+        $matrixOffset = $quietZone * $moduleSize;
+        for ($row = 0; $row < $matrixSize; $row++) {
+            $rowYBottom = $yTop - $matrixOffset - ($row + 1) * $moduleSize;
+            $runStart = null;
+            for ($col = 0; $col < $matrixSize; $col++) {
+                if ($matrix[$row][$col]) {
+                    if ($runStart === null) {
+                        $runStart = $col;
+                    }
+                } elseif ($runStart !== null) {
+                    $w = ($col - $runStart) * $moduleSize;
+                    $ctx->currentPage->fillRect(
+                        $blockX + $matrixOffset + $runStart * $moduleSize,
+                        $rowYBottom, $w, $moduleSize, 0, 0, 0,
+                    );
+                    $runStart = null;
+                }
+            }
+            if ($runStart !== null) {
+                $w = ($matrixSize - $runStart) * $moduleSize;
+                $ctx->currentPage->fillRect(
+                    $blockX + $matrixOffset + $runStart * $moduleSize,
+                    $rowYBottom, $w, $moduleSize, 0, 0, 0,
+                );
+            }
+        }
+
+        if ($bc->showText) {
+            $captionY = $yTop - $totalSizePt - $bc->textSizePt - 1.0;
+            $captionWidth = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($bc->value)
+                : mb_strlen($bc->value, 'UTF-8') * $bc->textSizePt * 0.5;
+            $captionX = $blockX + ($totalSizePt - $captionWidth) / 2;
+            if ($this->defaultFont !== null) {
+                $ctx->currentPage->showEmbeddedText($bc->value, $captionX, $captionY, $this->defaultFont, $bc->textSizePt);
+            } else {
+                $ctx->currentPage->showText($bc->value, $captionX, $captionY, $this->fallbackStandard, $bc->textSizePt);
             }
         }
 
