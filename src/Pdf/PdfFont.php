@@ -204,8 +204,11 @@ final class PdfFont
         return true;
     }
 
-    /** Phase 135: enable Arabic contextual shaping (init/medi/fina/isol + RTL). */
+    /** Phase 135: enable Arabic contextual shaping (init/medi/fina/isol). */
     private bool $arabicShapingEnabled = true;
+
+    /** Phase 136: enable Unicode Bidi reordering (UAX 9). */
+    private bool $bidiEnabled = true;
 
     /**
      * Phase 135: disable Arabic shaping (для debug или если font handles
@@ -217,13 +220,24 @@ final class PdfFont
     }
 
     /**
+     * Phase 136: disable Bidi reordering. Useful когда caller предоставляет
+     * pre-ordered visual text (e.g., from external Bidi pipeline).
+     */
+    public function disableBidi(): void
+    {
+        $this->bidiEnabled = false;
+    }
+
+    /**
      * Decode UTF-8 в list (codepoint, glyphId) — низкоуровневый decoder.
      * НЕ применяет ligature substitution. Side-effect: НЕ накапливает в
      * usedGlyphs (это делает shapedGlyphs/encodeText).
      *
-     * Phase 135: если text содержит Arabic chars, runs through ArabicShaper
-     * BEFORE cmap lookup. Shaper produces visually-ordered Presentation
-     * Forms B codepoints, looked up в cmap as usual.
+     * Pipeline (Phase 135 + 136):
+     *  1. UTF-8 → codepoints (logical order)
+     *  2. ArabicShaper::shapeLogical — contextual shaping в logical order
+     *  3. BidiAlgorithm::reorderCodepoints — UAX 9 visual reordering
+     *  4. Cmap lookup per visual codepoint
      *
      * @return list<array{cp: int, gid: int}>
      */
@@ -231,11 +245,14 @@ final class PdfFont
     {
         $cps = self::utf8ToCps($utf8);
 
-        // Phase 135: Arabic shaping (codepoint-level, before cmap).
+        // Phase 135: Arabic contextual shaping в logical order.
         if ($this->arabicShapingEnabled && self::containsArabic($cps)) {
-            $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::utf8ToCodepoints($utf8);
-            // Re-run через shaper using public API (also reverses RTL runs).
-            $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shape($utf8);
+            $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shapeLogical($cps);
+        }
+
+        // Phase 136: Bidi reordering для visual display.
+        if ($this->bidiEnabled && self::containsRtl($cps)) {
+            $cps = \Dskripchenko\PhpPdf\Text\BidiAlgorithm::reorderCodepoints($cps);
         }
 
         $out = [];
@@ -244,6 +261,21 @@ final class PdfFont
         }
 
         return $out;
+    }
+
+    /** @param list<int> $cps */
+    private static function containsRtl(array $cps): bool
+    {
+        foreach ($cps as $cp) {
+            // Hebrew + Arabic blocks.
+            if (($cp >= 0x0590 && $cp <= 0x08FF)
+                || ($cp >= 0xFB1D && $cp <= 0xFDFF)
+                || ($cp >= 0xFE70 && $cp <= 0xFEFF)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

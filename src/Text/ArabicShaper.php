@@ -183,6 +183,20 @@ final class ArabicShaper
     }
 
     /**
+     * Phase 136: Shape Arabic chars в LOGICAL order (без RTL reversal).
+     * Used by Bidi-aware pipeline: shape first, then Bidi handles reorder.
+     *
+     * @param  list<int>  $cps
+     * @return list<int>
+     */
+    public static function shapeLogical(array $cps): array
+    {
+        $shaped = self::shapeCodepoints($cps);
+
+        return self::applyLamAlefLigatures($shaped);
+    }
+
+    /**
      * @param  list<int>  $cps
      * @return list<int>
      */
