@@ -692,6 +692,11 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   `1010`, stop wide-bar + narrow-space + narrow-bar. 8 + 7·N modules.
   Optional GTIN-style Mod-10 right-to-left weighted check digit. Поддержка
   GTIN-8/12/13/14 через `computeCheckDigit()`. `BarcodeFormat::Itf` + Engine.
+- ~~Codabar (NW-7 / USS Codabar)~~ ✅ **Phase 204 closed**. Numeric + 6
+  punctuation (`-$:/.+`) + 4 start/stop chars (A/B/C/D). 7 elements/char
+  (4 bars + 3 spaces), 2 wide chars = 9 mod, 3 wide chars = 10 mod @ 2:1
+  ratio. Custom start/stop via constructor params. `BarcodeFormat::Codabar`
+  + Engine dispatch. Used by libraries, blood banks, FedEx ground.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.
