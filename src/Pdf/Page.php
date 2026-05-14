@@ -529,6 +529,33 @@ final class Page
     }
 
     /**
+     * Phase 116: clip subsequent drawing к a rectangle. Helper wraps
+     * push/clip/draw/pop в одну операцию.
+     */
+    public function withClipRect(float $x, float $y, float $w, float $h, callable $draw): self
+    {
+        $this->stream->clipRect($x, $y, $w, $h);
+        $draw($this);
+        $this->stream->endClip();
+
+        return $this;
+    }
+
+    /**
+     * Phase 116: clip subsequent drawing к arbitrary polygon.
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     */
+    public function withClipPolygon(array $points, callable $draw): self
+    {
+        $this->stream->clipPolygon($points);
+        $draw($this);
+        $this->stream->endClip();
+
+        return $this;
+    }
+
+    /**
      * Phase 112: begin Optional Content section. Content emitted между
      * beginLayer/endLayer wrap'ится в `/OC /MCn BDC ... EMC` so layer
      * visibility from /OCProperties toggles its rendering.

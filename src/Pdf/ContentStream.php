@@ -491,6 +491,56 @@ final class ContentStream
     }
 
     /**
+     * Phase 116: установить clipping rect для последующих ops.
+     *
+     * Emits `q x y w h re W n` — pushes graphics state, builds rect,
+     * marks как clip path (nonzero winding), discards stroke/fill.
+     * Subsequent drawing is masked к rect. End с popGraphicsState().
+     */
+    public function clipRect(float $x, float $y, float $w, float $h): self
+    {
+        $this->body .= "q\n";
+        $this->body .= sprintf("%s %s %s %s re\nW n\n",
+            $this->formatNumber($x), $this->formatNumber($y),
+            $this->formatNumber($w), $this->formatNumber($h),
+        );
+
+        return $this;
+    }
+
+    /**
+     * Phase 116: установить clipping polygon. Uses non-zero winding rule.
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     */
+    public function clipPolygon(array $points): self
+    {
+        if (count($points) < 3) {
+            throw new \InvalidArgumentException('Clip polygon needs ≥3 points');
+        }
+        $this->body .= "q\n";
+        $first = true;
+        foreach ($points as [$x, $y]) {
+            $this->body .= sprintf("%s %s %s\n",
+                $this->formatNumber($x), $this->formatNumber($y),
+                $first ? 'm' : 'l',
+            );
+            $first = false;
+        }
+        $this->body .= "h W n\n";
+
+        return $this;
+    }
+
+    /** Phase 116: emit Q — restore graphics state (ends clip + всё). */
+    public function endClip(): self
+    {
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *
