@@ -737,6 +737,12 @@ final class QrEncoder
         //    bits возле TR/BL finder'ов).
         $this->reserveFormatInfo($reserved, $size);
 
+        // Phase 195: Version info pattern (V7+). 18 bits BCH(18,6) encoded,
+        // placed в two 3×6 regions near TR + BL finders. Per ISO 18004 §8.10.
+        if ($version >= 7) {
+            $this->placeVersionInfo($matrix, $reserved, $version, $size);
+        }
+
         // 7. Place data bits using zigzag pattern.
         $this->placeData($matrix, $reserved, $codewords);
 
@@ -1025,6 +1031,48 @@ final class QrEncoder
      *
      * @param  array<int, array<int, bool>>  $matrix
      */
+    /**
+     * Phase 195: Version info pattern для V7+ (ISO 18004 §8.10).
+     *
+     * 18 bits = 6 bits version (7..40) + 12 bits BCH(18,6,3) ECC.
+     * Generator polynomial: 0x1F25 = x^12 + x^11 + x^10 + x^9 + x^8 + x^5 + x^2 + 1.
+     *
+     * Placed в two 3×6 regions:
+     *  - Top-right: cols size-11..size-9, rows 0..5
+     *  - Bottom-left: cols 0..5, rows size-11..size-9
+     *
+     * @param  array<int, array<int, bool>>  $matrix
+     * @param  array<int, array<int, bool>>  $reserved
+     */
+    private function placeVersionInfo(array &$matrix, array &$reserved, int $version, int $size): void
+    {
+        // 6-bit version + 12-bit BCH(18,6) ECC.
+        $bits = $version << 12;
+        $remainder = $bits;
+        for ($i = 5; $i >= 0; $i--) {
+            if ($remainder & (1 << ($i + 12))) {
+                $remainder ^= 0x1F25 << $i;
+            }
+        }
+        $versionBits = ($version << 12) | $remainder;
+
+        // Place 18 bits в top-right region: cols [size-11..size-9] × rows [0..5].
+        // Bit order: bit 0 = (col=size-11, row=0), bit 1 = (col=size-10, row=0),
+        // bit 2 = (col=size-9, row=0), bit 3 = (col=size-11, row=1), etc.
+        // Actually spec: bit i placed at (row = i / 3, col = size - 11 + i % 3).
+        // Bit 17 (MSB = version high bit) at first position, bit 0 last.
+        for ($i = 0; $i < 18; $i++) {
+            $bit = (($versionBits >> $i) & 1) === 1;
+            $row = (int) ($i / 3);
+            $col = $size - 11 + ($i % 3);
+            $matrix[$row][$col] = $bit;
+            $reserved[$row][$col] = true;
+            // Mirror placement: bottom-left region.
+            $matrix[$col][$row] = $bit;
+            $reserved[$col][$row] = true;
+        }
+    }
+
     private function writeFormatInfo(array &$matrix, int $size, int $mask = 0): void
     {
         // ECC level (2 bits) + mask (3 bits) = 5 bits.
