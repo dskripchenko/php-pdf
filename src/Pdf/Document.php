@@ -73,6 +73,9 @@ final class Document
     /** @var list<PdfLayer> Phase 112: Optional Content Groups (layers). */
     private array $layers = [];
 
+    /** @var array<string, string> Phase 119: Document-level /AA actions (event → JS). */
+    private array $documentActions = [];
+
     /** Phase 108: reserved sig dict ID, set transient during emit(). */
     private ?int $signatureDictId = null;
 
@@ -356,6 +359,27 @@ final class Document
         $this->layers[] = $layer;
 
         return $layer;
+    }
+
+    /**
+     * Phase 119: register a document-level Additional Action.
+     *
+     * Events (PDF spec §12.6.3 Table 197):
+     *  - WillClose (WC), WillSave (WS), DidSave (DS),
+     *    WillPrint (WP), DidPrint (DP).
+     *  Note: DocumentOpen — use {@see setOpenAction()} (separate /OpenAction entry).
+     *
+     * Emits /AA << /WC <<...>> /WS <<...>> ... >> в Catalog.
+     */
+    public function setDocumentAction(string $event, string $script): self
+    {
+        $valid = ['WC', 'WS', 'DS', 'WP', 'DP'];
+        if (! in_array($event, $valid, true)) {
+            throw new \InvalidArgumentException('Document action event must be one of: ' . implode(', ', $valid));
+        }
+        $this->documentActions[$event] = $script;
+
+        return $this;
     }
 
     /**
@@ -1287,6 +1311,19 @@ final class Document
             }
         }
 
+        // Phase 119: Document-level /AA additional actions (Will*/Did*).
+        $documentAARef = '';
+        if ($this->documentActions !== []) {
+            $aaParts = [];
+            foreach ($this->documentActions as $event => $script) {
+                $aaParts[] = sprintf(
+                    '/%s << /Type /Action /S /JavaScript /JS %s >>',
+                    $event, $this->pdfString($script),
+                );
+            }
+            $documentAARef = ' /AA << ' . implode(' ', $aaParts) . ' >>';
+        }
+
         // Phase 112: /OCProperties для Optional Content Groups (layers).
         $ocPropertiesRef = '';
         if ($this->layers !== []) {
@@ -1315,7 +1352,7 @@ final class Document
             );
         }
 
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef$langRef$ocPropertiesRef >>");
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef$langRef$ocPropertiesRef$documentAARef >>");
 
         $writer->setRoot($catalogId);
 
