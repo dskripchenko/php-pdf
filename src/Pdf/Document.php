@@ -820,8 +820,9 @@ final class Document
             $kidsRefs, count($pageIds),
         ));
 
-        // Phase 43+97: AcroForm reference в Catalog. /CO entry — fields
-        // с calculateScript (Phase 67), in calculation order.
+        // Phase 43+97+99: AcroForm reference в Catalog.
+        // /CO — calc field order (Phase 97).
+        // /DA + /DR — default appearance string + font resources (Phase 99).
         $acroFormRef = '';
         if ($this->collectedFormFieldIds !== []) {
             $fieldsArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->collectedFormFieldIds));
@@ -830,9 +831,16 @@ final class Document
                 $coArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->calculatedFieldIds));
                 $coRef = " /CO [$coArray]";
             }
+            // Phase 99: default appearance — Helvetica 11pt black.
+            $defaultFontId = $writer->addObject(
+                '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica '
+                .'/Encoding /WinAnsiEncoding >>',
+            );
+            $daPart = ' /DA (/Helv 11 Tf 0 g)';
+            $drPart = sprintf(' /DR << /Font << /Helv %d 0 R >> >>', $defaultFontId);
             $acroFormId = $writer->addObject(sprintf(
-                '<< /Fields [%s] /NeedAppearances true%s >>',
-                $fieldsArray, $coRef,
+                '<< /Fields [%s] /NeedAppearances true%s%s%s >>',
+                $fieldsArray, $coRef, $daPart, $drPart,
             ));
             $acroFormRef = " /AcroForm $acroFormId 0 R";
         }
