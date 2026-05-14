@@ -210,6 +210,9 @@ final class PdfFont
     /** Phase 136: enable Unicode Bidi reordering (UAX 9). */
     private bool $bidiEnabled = true;
 
+    /** Phase 137: enable Indic pre-base matra reordering. */
+    private bool $indicShapingEnabled = true;
+
     /**
      * Phase 135: disable Arabic shaping (для debug или если font handles
      * shaping itself через GSUB rather than Presentation Forms B).
@@ -226,6 +229,14 @@ final class PdfFont
     public function disableBidi(): void
     {
         $this->bidiEnabled = false;
+    }
+
+    /**
+     * Phase 137: disable Indic pre-base matra reordering.
+     */
+    public function disableIndicShaping(): void
+    {
+        $this->indicShapingEnabled = false;
     }
 
     /**
@@ -250,6 +261,13 @@ final class PdfFont
             $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shapeLogical($cps);
         }
 
+        // Phase 137: Indic pre-base matra reordering (Devanagari, Bengali,
+        // Tamil, Telugu, Kannada, Malayalam, Gujarati, Gurmukhi, Oriya,
+        // Sinhala).
+        if ($this->indicShapingEnabled && self::containsIndic($cps)) {
+            $cps = \Dskripchenko\PhpPdf\Text\IndicShaper::shape($cps);
+        }
+
         // Phase 136: Bidi reordering для visual display.
         if ($this->bidiEnabled && self::containsRtl($cps)) {
             $cps = \Dskripchenko\PhpPdf\Text\BidiAlgorithm::reorderCodepoints($cps);
@@ -261,6 +279,22 @@ final class PdfFont
         }
 
         return $out;
+    }
+
+    /** @param list<int> $cps */
+    private static function containsIndic(array $cps): bool
+    {
+        foreach ($cps as $cp) {
+            // Indic blocks: Devanagari (0900-097F), Bengali (0980-09FF),
+            // Gurmukhi (0A00-0A7F), Gujarati (0A80-0AFF), Oriya (0B00-0B7F),
+            // Tamil (0B80-0BFF), Telugu (0C00-0C7F), Kannada (0C80-0CFF),
+            // Malayalam (0D00-0D7F), Sinhala (0D80-0DFF).
+            if ($cp >= 0x0900 && $cp <= 0x0DFF) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param list<int> $cps */
