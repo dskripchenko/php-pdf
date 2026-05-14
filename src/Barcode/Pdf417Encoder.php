@@ -52,6 +52,13 @@ final class Pdf417Encoder
     /** Numeric compaction mode latch. */
     private const MODE_LATCH_NUMERIC = 902;
 
+    // Phase 185: Macro PDF417 control codewords (ISO/IEC 15438 §5.5).
+    private const MACRO_INDICATOR = 928;
+
+    private const MACRO_TERMINATOR = 922;
+
+    private const MACRO_FIELD_MARK = 923;
+
     public readonly int $rows;
 
     public readonly int $cols;
@@ -74,6 +81,7 @@ final class Pdf417Encoder
         ?int $eccLevel = null,
         float $aspectRatio = 2.0,
         string $mode = self::MODE_BYTE,
+        ?array $macroSegment = null,
     ) {
         if ($data === '') {
             throw new \InvalidArgumentException('PDF417 input must be non-empty');
@@ -87,6 +95,38 @@ final class Pdf417Encoder
             self::MODE_AUTO => self::autoCompaction($data),
             default => throw new \InvalidArgumentException("Unknown PDF417 mode: $mode"),
         };
+
+        // Phase 185: prepend Macro control block (если macroSegment задан).
+        if ($macroSegment !== null) {
+            $macroHeader = [self::MACRO_INDICATOR];
+            // Segment index — encoded as 5-digit numeric via numericCompaction inline.
+            $segStr = str_pad((string) $macroSegment['index'], 5, '0', STR_PAD_LEFT);
+            // Append digits в numeric mode (без mode latch — already в macro context).
+            $segNumeric = self::convertBaseBigInt('1'.$segStr, 10, 900);
+            foreach ($segNumeric as $v) {
+                $macroHeader[] = $v;
+            }
+            // File ID — also numeric, 3-digit.
+            $fileStr = str_pad((string) $macroSegment['fileId'], 3, '0', STR_PAD_LEFT);
+            $fileNumeric = self::convertBaseBigInt('1'.$fileStr, 10, 900);
+            foreach ($fileNumeric as $v) {
+                $macroHeader[] = $v;
+            }
+            // Optional field marker 923 + tag 1 + total_segments numeric.
+            $macroHeader[] = self::MACRO_FIELD_MARK;
+            $macroHeader[] = 1; // tag = total segment count
+            $totalStr = str_pad((string) $macroSegment['total'], 5, '0', STR_PAD_LEFT);
+            $totalNumeric = self::convertBaseBigInt('1'.$totalStr, 10, 900);
+            foreach ($totalNumeric as $v) {
+                $macroHeader[] = $v;
+            }
+            // Last segment: append 922 terminator.
+            $isLast = $macroSegment['index'] === $macroSegment['total'] - 1;
+            if ($isLast) {
+                $macroHeader[] = self::MACRO_TERMINATOR;
+            }
+            $codewords = array_merge($macroHeader, $codewords);
+        }
         $numDataCw = count($codewords);
 
         // 2. Select ECC level (auto): scale с data size per ISO §5.3.6.
@@ -243,6 +283,62 @@ final class Pdf417Encoder
         }
 
         return array_reverse($ecc);
+    }
+
+    /**
+     * Phase 185: Macro PDF417 segment factory.
+     *
+     * Per ISO/IEC 15438 §5.5 — used когда data exceeds single-symbol capacity
+     * (~ 925 codewords). Каждый segment encodes как separate Pdf417Encoder
+     * с Macro control block prepended.
+     *
+     * Macro control structure:
+     *   928 (indicator) + segment_index_5_digits_numeric + file_id_numeric +
+     *   [optional fields] + user data + [922 terminator на last segment]
+     *
+     * Simple API: caller splits data, creates one segment per call.
+     *
+     * @param  string  $data  segment user data (chunk of total)
+     * @param  int     $segmentIndex  0-based segment number (0..99998)
+     * @param  int     $totalSegments  total segments (used to determine last)
+     * @param  int     $fileId  numeric file identifier (0..899)
+     * @param  string  $mode    compaction mode для user data
+     * @param  ?int    $eccLevel
+     */
+    public static function macroSegment(
+        string $data,
+        int $segmentIndex,
+        int $totalSegments,
+        int $fileId,
+        string $mode = self::MODE_BYTE,
+        ?int $eccLevel = null,
+    ): self {
+        if ($segmentIndex < 0 || $segmentIndex > 99998) {
+            throw new \InvalidArgumentException('Macro PDF417 segment index must be 0..99998');
+        }
+        if ($totalSegments < 1 || $totalSegments > 99999) {
+            throw new \InvalidArgumentException('Macro PDF417 total segments must be 1..99999');
+        }
+        if ($segmentIndex >= $totalSegments) {
+            throw new \InvalidArgumentException(sprintf(
+                'segment index %d не в range 0..%d', $segmentIndex, $totalSegments - 1
+            ));
+        }
+        if ($fileId < 0 || $fileId > 899) {
+            throw new \InvalidArgumentException('Macro PDF417 file ID must be 0..899');
+        }
+
+        return new self(
+            data: $data,
+            eccLevel: $eccLevel,
+            aspectRatio: 2.0,
+            mode: $mode,
+            macroSegment: [
+                'index' => $segmentIndex,
+                'total' => $totalSegments,
+                'fileId' => $fileId,
+            ],
+        );
     }
 
     /**

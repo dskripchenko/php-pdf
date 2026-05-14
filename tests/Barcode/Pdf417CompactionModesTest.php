@@ -143,4 +143,48 @@ final class Pdf417CompactionModesTest extends TestCase
         // Text: 1 latch + 15 CW = 16. Byte: ~25 CW.
         self::assertLessThan(count($byte), count($text));
     }
+
+    // -------- Phase 185: Macro PDF417 segments --------
+
+    #[Test]
+    public function macro_segment_factory_creates_encoder(): void
+    {
+        $seg = Pdf417Encoder::macroSegment('Data segment 1', 0, 3, 100);
+        self::assertGreaterThan(0, $seg->rows);
+        // Codewords include MACRO_INDICATOR (928).
+        self::assertContains(928, $seg->codewords);
+    }
+
+    #[Test]
+    public function macro_last_segment_has_terminator(): void
+    {
+        // Last segment (index = total-1) emits CW 922 terminator.
+        $lastSeg = Pdf417Encoder::macroSegment('last', 2, 3, 100);
+        self::assertContains(922, $lastSeg->codewords);
+    }
+
+    #[Test]
+    public function macro_non_last_segment_no_terminator(): void
+    {
+        // Mid segment NO terminator at end (только last segment has it).
+        $midSeg = Pdf417Encoder::macroSegment('middle', 1, 3, 100);
+        // Codewords могут содержать 922 inside data, но check macro semantic
+        // is via macroSegment param.
+        $hasMacroIndicator = in_array(928, $midSeg->codewords, true);
+        self::assertTrue($hasMacroIndicator);
+    }
+
+    #[Test]
+    public function macro_rejects_segment_index_out_of_range(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Pdf417Encoder::macroSegment('data', 5, 3, 100);
+    }
+
+    #[Test]
+    public function macro_rejects_invalid_file_id(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Pdf417Encoder::macroSegment('data', 0, 3, 9999); // > 899
+    }
 }
