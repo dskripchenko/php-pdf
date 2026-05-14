@@ -58,6 +58,11 @@ final class Writer
 
     private ?int $encryptId = null;
 
+    /** Phase 108: PKCS#7 signing config (null = no signature). */
+    private ?SignatureConfig $signature = null;
+
+    private ?int $signatureDictId = null;
+
     public function __construct(
         private readonly string $version = '1.7',
     ) {}
@@ -69,6 +74,16 @@ final class Writer
     {
         $this->encryption = $encryption;
         $this->encryptId = $encryptObjectId;
+    }
+
+    /**
+     * Phase 108: enable PKCS#7 detached signing — patches /ByteRange и
+     * /Contents placeholders в the signature dictionary post-emission.
+     */
+    public function setSignature(SignatureConfig $sig, int $sigDictId): void
+    {
+        $this->signature = $sig;
+        $this->signatureDictId = $sigDictId;
     }
 
     /**
@@ -180,7 +195,144 @@ final class Writer
         $out .= $xrefOffset.self::LINE_ENDING;
         $out .= '%%EOF'.self::LINE_ENDING;
 
+        // Phase 108: post-emit patch — fill /ByteRange и /Contents
+        // placeholders, sign hash через PKCS#7.
+        if ($this->signature !== null) {
+            $out = $this->applyPkcs7Signature($out);
+        }
+
         return $out;
+    }
+
+    /**
+     * Phase 108: locate placeholders in assembled bytes, compute byte
+     * range, sign data outside /Contents, patch dictionary в-place.
+     */
+    private function applyPkcs7Signature(string $bytes): string
+    {
+        // Locate /ByteRange [<digits> <digits> <digits> <digits>] placeholder.
+        // The placeholder values are all zeros, padded с trailing spaces к
+        // 10 digits each для room под actual integers up to ~10 GB files.
+        if (! preg_match(
+            '@/ByteRange \[(\d+ +\d+ +\d+ +\d+) +\]@',
+            $bytes,
+            $brMatch,
+            PREG_OFFSET_CAPTURE,
+        )) {
+            throw new \RuntimeException('Phase 108: /ByteRange placeholder not found in PDF stream');
+        }
+        $brStart = (int) $brMatch[0][1];
+        $brLen = strlen((string) $brMatch[0][0]);
+
+        // Locate /Contents <000...000> placeholder.
+        if (! preg_match(
+            '@/Contents <0+>@',
+            $bytes,
+            $cMatch,
+            PREG_OFFSET_CAPTURE,
+        )) {
+            throw new \RuntimeException('Phase 108: /Contents placeholder not found');
+        }
+        $cStart = (int) $cMatch[0][1];
+        $cLen = strlen((string) $cMatch[0][0]);
+
+        // Byte ranges: [0, gapStart] и [gapEnd, EOF].
+        // gapStart = '<' position; gapEnd = position right after '>'.
+        $gapStart = $cStart + strlen('/Contents ');
+        $gapEnd = $cStart + $cLen;
+        $a = 0;
+        $b = $gapStart;
+        $c = $gapEnd;
+        $d = strlen($bytes) - $gapEnd;
+
+        // Compute ByteRange string padded к original length.
+        $brContent = sprintf('/ByteRange [%d %d %d %d]', $a, $b, $c, $d);
+        if (strlen($brContent) > $brLen) {
+            throw new \RuntimeException('Phase 108: /ByteRange replacement exceeds placeholder');
+        }
+        $brContent = str_pad($brContent, $brLen, ' ', STR_PAD_RIGHT);
+        $bytes = substr_replace($bytes, $brContent, $brStart, $brLen);
+
+        // Build hashable data: bytes[0..b] + bytes[c..].
+        $signedData = substr($bytes, 0, $b) . substr($bytes, $c);
+
+        // Sign through openssl_pkcs7_sign — requires input file.
+        $infile = tempnam(sys_get_temp_dir(), 'phppdf-sig-in-');
+        $outfile = tempnam(sys_get_temp_dir(), 'phppdf-sig-out-');
+        if ($infile === false || $outfile === false) {
+            throw new \RuntimeException('Phase 108: failed to create temp files for signing');
+        }
+        file_put_contents($infile, $signedData);
+
+        $signKey = $this->signature->privateKeyPassphrase !== null
+            ? [$this->signature->privateKeyPem, $this->signature->privateKeyPassphrase]
+            : $this->signature->privateKeyPem;
+
+        $ok = openssl_pkcs7_sign(
+            $infile,
+            $outfile,
+            $this->signature->certPem,
+            $signKey,
+            [],
+            PKCS7_BINARY | PKCS7_DETACHED,
+        );
+        $smime = $ok ? (string) file_get_contents($outfile) : '';
+        @unlink($infile);
+        @unlink($outfile);
+        if (! $ok) {
+            throw new \RuntimeException('Phase 108: openssl_pkcs7_sign failed: ' . openssl_error_string());
+        }
+
+        // Extract DER PKCS#7 bytes из S/MIME envelope.
+        $der = self::extractPkcs7FromSmime($smime);
+        $sigHex = strtoupper(bin2hex($der));
+
+        $placeholderHexLen = $cLen - strlen('/Contents <') - 1; // minus '>'
+        if (strlen($sigHex) > $placeholderHexLen) {
+            throw new \RuntimeException(sprintf(
+                'Phase 108: PKCS#7 signature %d hex chars exceeds placeholder %d',
+                strlen($sigHex), $placeholderHexLen,
+            ));
+        }
+        $sigHex = str_pad($sigHex, $placeholderHexLen, '0', STR_PAD_RIGHT);
+
+        // Patch /Contents <...>.
+        $hexStart = $cStart + strlen('/Contents <');
+
+        return substr_replace($bytes, $sigHex, $hexStart, $placeholderHexLen);
+    }
+
+    /**
+     * Parse openssl_pkcs7_sign output (S/MIME multipart/signed) → raw DER.
+     *
+     * Structure (simplified):
+     *   MIME headers...
+     *   --boundary
+     *   <signed message body>
+     *   --boundary
+     *   Content-Type: application/x-pkcs7-signature; ...
+     *   Content-Transfer-Encoding: base64
+     *   Content-Disposition: attachment; filename="smime.p7s"
+     *   <empty>
+     *   <base64-encoded PKCS#7>
+     *   --boundary--
+     */
+    private static function extractPkcs7FromSmime(string $smime): string
+    {
+        if (! preg_match(
+            '@Content-Disposition:[^\r\n]+(?:\r?\n[^\r\n]*)*?\r?\n\r?\n([A-Za-z0-9+/=\s]+?)\r?\n--@s',
+            $smime,
+            $m,
+        )) {
+            throw new \RuntimeException('Phase 108: PKCS#7 base64 portion not found в S/MIME');
+        }
+        $b64 = (string) preg_replace('@\s+@', '', $m[1]);
+        $der = base64_decode($b64, true);
+        if ($der === false || $der === '') {
+            throw new \RuntimeException('Phase 108: base64_decode failed for PKCS#7 envelope');
+        }
+
+        return $der;
     }
 
     /**

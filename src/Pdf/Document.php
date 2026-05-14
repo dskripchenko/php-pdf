@@ -67,6 +67,15 @@ final class Document
      */
     private ?Encryption $encryption = null;
 
+    /** Phase 108: PKCS#7 signing config (PDF signed at toBytes). */
+    private ?SignatureConfig $signatureConfig = null;
+
+    /** Phase 108: reserved sig dict ID, set transient during emit(). */
+    private ?int $signatureDictId = null;
+
+    /** Phase 108: tracks whether /V was already attached to one widget. */
+    private bool $signatureFieldLinked = false;
+
     /** @var list<int> Phase 43: form field object IDs (filled во время toBytes). */
     private array $collectedFormFieldIds = [];
 
@@ -317,6 +326,24 @@ final class Document
     }
 
     /**
+     * Phase 108: enable PKCS#7 detached signing.
+     *
+     * Requires at least one form field of type 'signature' to be added
+     * (will receive /V referencing the actual signature dictionary).
+     *
+     * The PDF bytes are patched in toBytes() after assembly:
+     *   1. /ByteRange [a b c d] computed from actual /Contents position.
+     *   2. Bytes outside /Contents hashed + signed via openssl_pkcs7_sign.
+     *   3. /Contents placeholder filled с hex-encoded DER PKCS#7 envelope.
+     */
+    public function sign(SignatureConfig $config): self
+    {
+        $this->signatureConfig = $config;
+
+        return $this;
+    }
+
+    /**
      * @param  array{0: float, 1: float}|null  $defaultCustomDimensionsPt
      */
     public function __construct(
@@ -491,6 +518,14 @@ final class Document
         // 1. Резервируем top-level IDs.
         $catalogId = $writer->reserveObject();
         $pagesId = $writer->reserveObject();
+
+        // Phase 108: reserve signature dictionary ID upfront so widget /V
+        // can reference it during field emission.
+        $this->signatureDictId = null;
+        $this->signatureFieldLinked = false;
+        if ($this->signatureConfig !== null) {
+            $this->signatureDictId = $writer->reserveObject();
+        }
 
         // 2. Регистрируем все unique fonts/images через identity-dedupe.
         //    Standard fonts: один PDF object per unique StandardFont enum.
@@ -881,11 +916,29 @@ final class Document
             );
             $daPart = ' /DA (/Helv 11 Tf 0 g)';
             $drPart = sprintf(' /DR << /Font << /Helv %d 0 R >> >>', $defaultFontId);
+            // Phase 108: /SigFlags 3 (SignaturesExist | AppendOnly) when signing.
+            $sigFlagsPart = ($this->signatureConfig !== null && $this->signatureFieldLinked)
+                ? ' /SigFlags 3'
+                : '';
             $acroFormId = $writer->addObject(sprintf(
-                '<< /Fields [%s] /NeedAppearances true%s%s%s >>',
-                $fieldsArray, $coRef, $daPart, $drPart,
+                '<< /Fields [%s] /NeedAppearances true%s%s%s%s >>',
+                $fieldsArray, $coRef, $daPart, $drPart, $sigFlagsPart,
             ));
             $acroFormRef = " /AcroForm $acroFormId 0 R";
+        }
+
+        // Phase 108: emit signature dictionary body + hook writer для post-emit
+        // patching. Validates at least one signature widget received /V.
+        if ($this->signatureConfig !== null) {
+            if (! $this->signatureFieldLinked) {
+                throw new \LogicException(
+                    'Document::sign() requires at least one form field of type "signature"',
+                );
+            }
+            $cfg = $this->signatureConfig;
+            $sigDictBody = $this->buildSignatureDictBody($cfg);
+            $writer->setObject($this->signatureDictId, $sigDictBody);
+            $writer->setSignature($cfg, $this->signatureDictId);
         }
 
         // Phase 48: Tagged PDF — StructTreeRoot + StructElem children +
@@ -1422,10 +1475,19 @@ final class Document
             );
         }
         if ($type === 'signature') {
+            // Phase 108: signature widget references signature dictionary
+            // через /V; only first signature widget receives /V (subsequent
+            // widgets remain unsigned placeholders).
+            $vPart = '';
+            if ($this->signatureDictId !== null && ! $this->signatureFieldLinked) {
+                $vPart = sprintf(' /V %d 0 R', $this->signatureDictId);
+                $this->signatureFieldLinked = true;
+            }
+
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Sig /Rect %s '
-                .'%s%s /Ff %d /P %d 0 R%s >>',
-                $rect, $namePart, $tooltipPart, $flags, $pageId, $aaPart,
+                .'%s%s%s /Ff %d /P %d 0 R%s >>',
+                $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId, $aaPart,
             );
         }
         if ($type === 'submit' || $type === 'reset' || $type === 'push') {
@@ -1576,6 +1638,41 @@ final class Document
     private function pdfString(string $s): string
     {
         return '('.strtr($s, ['\\' => '\\\\', '(' => '\\(', ')' => '\\)']).')';
+    }
+
+    /**
+     * Phase 108: build PKCS#7 signature dictionary body с placeholders
+     * для /ByteRange (4×10-digit zero fields, padded с spaces) и /Contents
+     * (16384 hex zeros = room для 8KB DER PKCS#7 envelope).
+     */
+    private function buildSignatureDictBody(SignatureConfig $cfg): string
+    {
+        $optionalParts = '';
+        if ($cfg->signerName !== null) {
+            $optionalParts .= ' /Name ' . $this->pdfString($cfg->signerName);
+        }
+        if ($cfg->reason !== null) {
+            $optionalParts .= ' /Reason ' . $this->pdfString($cfg->reason);
+        }
+        if ($cfg->location !== null) {
+            $optionalParts .= ' /Location ' . $this->pdfString($cfg->location);
+        }
+        if ($cfg->contactInfo !== null) {
+            $optionalParts .= ' /ContactInfo ' . $this->pdfString($cfg->contactInfo);
+        }
+        $signedAt = ' /M ' . $this->pdfString($cfg->pdfSignedAt());
+
+        // ByteRange: 4 entries padded к 10 digits each + единичный pad
+        // space, чтобы post-emit substr_replace fit обновлённые values.
+        $byteRange = '/ByteRange [0          0          0          0         ]';
+        // Contents: 16384 hex zeros (room для ~8KB PKCS#7 DER blob).
+        $contents = '/Contents <' . str_repeat('0', 16384) . '>';
+
+        return sprintf(
+            '<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached '
+            .'%s%s%s %s >>',
+            $byteRange, $contents, $signedAt, $optionalParts,
+        );
     }
 
     /**
