@@ -1915,16 +1915,39 @@ final class Engine
         $effectiveLeftX = $setup->leftXForPage($pageNum);
         $effectiveContentWidth = $setup->contentWidthPtForPage($pageNum);
 
+        // Phase 156: adaptive header/footer zones. mpdf-style behavior —
+        // если header/footer высота превышает margins.topPt/.bottomPt,
+        // расширить zone и сдвинуть body topY/bottomY. Иначе header rendered
+        // over body content (overlap visible).
+        $headerPaddingPt = 8.0;  // gap между header и body content
+        $footerPaddingPt = 8.0;
+
         $headerBlocks = $section->effectiveHeaderBlocksFor($pageNum);
         if ($headerBlocks !== []) {
+            $headerHeight = 0.0;
+            foreach ($headerBlocks as $block) {
+                $headerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
+            }
+            // Header zone goes from pageHeight-4 (близко к top edge) вниз;
+            // bottom of zone = pageHeight - max(margins.topPt, headerHeight + headerPaddingPt).
+            $effectiveTopMargin = max($setup->margins->topPt, $headerHeight + $headerPaddingPt);
+            $headerZoneBottomY = $pageHeight - $effectiveTopMargin + $headerPaddingPt / 2;
+            // Push body topY down если header overflowит default margin.
+            $adaptiveBodyTopY = $pageHeight - $effectiveTopMargin;
+            if ($adaptiveBodyTopY < $ctx->topY) {
+                $ctx->topY = $adaptiveBodyTopY;
+                if ($ctx->cursorY > $adaptiveBodyTopY) {
+                    $ctx->cursorY = $adaptiveBodyTopY;
+                }
+            }
             $headerArea = new LayoutContext(
                 pdf: $ctx->pdf,
                 currentPage: $ctx->currentPage,
-                cursorY: $pageHeight - 8.0,    // 8pt от top edge
+                cursorY: $pageHeight - 4.0,
                 leftX: $effectiveLeftX,
                 contentWidth: $effectiveContentWidth,
-                bottomY: $pageHeight - $setup->margins->topPt + 4.0,
-                topY: $pageHeight - 8.0,
+                bottomY: $headerZoneBottomY,
+                topY: $pageHeight - 4.0,
                 pageSetup: $setup,
                 skipParagraphTag: $ctx->skipParagraphTag,
                 inHeaderFooterRender: true,
@@ -1940,14 +1963,22 @@ final class Engine
             foreach ($footerBlocks as $block) {
                 $footerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
             }
+            // Footer zone goes from y=margins.bottomPt up или больше если footer
+            // overflowит default bottom margin.
+            $effectiveBottomMargin = max($setup->margins->bottomPt, $footerHeight + $footerPaddingPt);
+            $footerZoneTopY = $effectiveBottomMargin - $footerPaddingPt / 2;
+            // Push body bottomY up если footer overflowит default margin.
+            if ($effectiveBottomMargin > $ctx->bottomY) {
+                $ctx->bottomY = $effectiveBottomMargin;
+            }
             $footerArea = new LayoutContext(
                 pdf: $ctx->pdf,
                 currentPage: $ctx->currentPage,
-                cursorY: $setup->margins->bottomPt - 4.0 + $footerHeight,
+                cursorY: $footerZoneTopY,
                 leftX: $effectiveLeftX,
                 contentWidth: $effectiveContentWidth,
                 bottomY: 4.0,
-                topY: $setup->margins->bottomPt - 4.0 + $footerHeight,
+                topY: $footerZoneTopY,
                 pageSetup: $setup,
                 skipParagraphTag: $ctx->skipParagraphTag,
                 inHeaderFooterRender: true,

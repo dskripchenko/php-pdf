@@ -161,4 +161,41 @@ final class HeaderFooterTest extends TestCase
         self::assertLessThan(5.0, $elapsed, "Render took {$elapsed}s — likely infinite loop");
         self::assertStringContainsString('%PDF-', substr($bytes, 0, 8));
     }
+
+    /**
+     * Phase 156: header overflow должен push body topY вниз (mpdf-style
+     * adaptive top margin). Иначе header renders OVER body content.
+     */
+    #[Test]
+    public function tall_header_pushes_body_below(): void
+    {
+        // Tall header — multi-row table that exceeds default 20mm top margin.
+        $tallHeader = new Table(
+            rows: [
+                new Row([new Cell([new Paragraph([new Run('Line 1: company info')])])]),
+                new Row([new Cell([new Paragraph([new Run('Line 2: address line')])])]),
+                new Row([new Cell([new Paragraph([new Run('Line 3: contact info')])])]),
+                new Row([new Cell([new Paragraph([new Run('Line 4: registration data')])])]),
+                new Row([new Cell([new Paragraph([new Run('Line 5: license details')])])]),
+            ],
+            style: new TableStyle(widthPercent: 100),
+        );
+        $doc = new Document(new Section(
+            body: [new Paragraph([new Run('BODY_MARKER_TEXT')])],
+            headerBlocks: [$tallHeader],
+        ));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+
+        // Extract Y-positions of text snippets via PDF stream inspection.
+        // Header content "Line 1" should be HIGHER on page (larger Y) than body marker.
+        if (! preg_match('/(\d+(?:\.\d+)?) Td.*?\(Line 1: company info\) Tj/s', $bytes, $matchHeader)
+            || ! preg_match('/(\d+(?:\.\d+)?) Td.*?\(BODY_MARKER_TEXT\) Tj/s', $bytes, $matchBody)
+        ) {
+            // Streams may be compressed/reordered; falls back на pdftotext.
+            self::markTestIncomplete('Cannot extract Y positions via regex; needs pdftotext for layout verification');
+        }
+        $headerY = (float) $matchHeader[1];
+        $bodyY = (float) $matchBody[1];
+        self::assertGreaterThan($bodyY, $headerY, 'Header content должен быть выше body на page');
+    }
 }
