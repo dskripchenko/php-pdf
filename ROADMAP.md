@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 128 фаз закрыты (1161 + 194 printable = 1355 тестов).
+**Текущий статус:** v1.1-dev — 132 фазы закрыты (1186 + 194 printable = 1380 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-130 closed (106 фаз):
+**v1.1 progress:** 25-134 closed (110 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -99,7 +99,14 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 129 streaming PDF output (Writer::toStream + Document::toStream
    + Document::toFile рефакторен к streaming),
  - 130 lazy font subset (per-Writer registration cache + reset() API,
-   fixes multi-Document PdfFont reuse bug).
+   fixes multi-Document PdfFont reuse bug),
+ - 131 variable fonts: fvar discovery (axes + named instances),
+ - 132 variable fonts: avar + HVAR + MVAR metric interpolation
+   (Item Variation Store, per-glyph advance, font-level metrics),
+ - 133 variable fonts: gvar glyph shape delta computation
+   (tuple variation headers, packed point numbers, packed deltas),
+ - 134 variable fonts: PDF integration — frozen subset
+   (SimpleGlyph parser/serializer + IUP + axes param на PdfFont).
 
 ---
 
@@ -261,7 +268,11 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 - ~~Subscript/superscript visual sizing~~ ✅ **Phase 26 closed** (b3426a5).
 - ~~Font fallback chain~~ ✅ **Phase 76 closed** (0834e38).
-- Variable fonts (OpenType variations).
+- ~~Variable fonts (OpenType variations)~~ ✅ **Phase 131-134 closed** (4 phases).
+  fvar discovery + avar/HVAR/MVAR metric interp + gvar glyph deltas + IUP
+  + frozen subset embedding via `new PdfFont(\$ttf, axes: ['wght' => 700])`.
+  Known limitations: composite glyphs не interpolate (use default outlines);
+  CFF2 variation не supported (только TrueType glyf-based).
 - ~~Vertical text (Asian scripts)~~ ✅ **Phase 128 closed** (6a5e605).
   Char stacking API (font-agnostic). Spec-compliant Type 0 CIDFont +
   UniJIS-UTF16-V CMap + /WMode 1 + vmtx — deferred.
