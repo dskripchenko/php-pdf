@@ -2,6 +2,24 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
+## v1.6.0-dev (unreleased) — Phases 214-217
+
+PDF output optimization + top-level API integration.
+
+### Output optimization
+- Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
+  в single FlateDecode stream. ~15-30% additional output reduction.
+- Phase 215: Cross-Writer font subset dedup LRU cache — saves subsetting
+  compute time на batch scenarios.
+
+### API ergonomics
+- Phase 216: `Document::toStream()` + true-streaming `toFile()` на
+  top-level API.
+- Phase 217: declarative encryption/signing/PDF-A via constructor params.
+  New `EncryptionParams` VO + Engine auto-tagged for PDF/A-1a.
+
+**Tests:** 1711 → 1719 (+36 new tests across batch).
+
 ## v1.5.0 — 2026-05-14
 
 Barcode coverage + PDF output improvements. 15 phases (199-213).

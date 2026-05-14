@@ -45,8 +45,20 @@ Production-ready. Active backlog: v1.6+ scope items.
 
 ### Output optimization (bonus, not critical)
 
-- **Cross-Writer font subset dedup** — batch scenario only. Нужен LRU cache
-  + invalidation strategy. ~10-15% saving для multi-doc batches.
+- ~~Cross-Writer font subset dedup~~ ✅ **Phase 215 closed**. Static LRU
+  cache в TtfSubsetter, keyed по (spl_object_id, sorted glyphs, variation
+  axes). Limit 32 entries. Saves subsetting compute time на batch
+  scenarios.
+- ~~Object Streams (PDF 1.5+)~~ ✅ **Phase 214 closed**. Pack uncompressed
+  dict objects в single FlateDecode-compressed stream. ~15-30% output
+  reduction beyond XRef streams. Auto-disabled с encryption/signing.
+- ~~Document::toStream() top-level convenience~~ ✅ **Phase 216 closed**.
+  Streaming output на top-level Document API; `toFile()` refactored к
+  use true streaming.
+- ~~Top-level Document encryption/signing/PDF-A integration~~ ✅
+  **Phase 217 closed**. Declarative configuration via constructor params
+  (`EncryptionParams`, `SignatureConfig`, `PdfAConfig`); больше не нужно
+  drop'ить в low-level API.
 - **Type0 → Type1 Latin re-encoding** — biggest potential output-size win
   (~20-25% per-doc для Latin-heavy text). Major font subsetter refactor.
 
