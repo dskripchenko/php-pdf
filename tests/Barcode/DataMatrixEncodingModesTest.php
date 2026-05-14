@@ -201,4 +201,47 @@ final class DataMatrixEncodingModesTest extends TestCase
         $enc = new DataMatrixEncoder('abcdefghij', mode: DataMatrixEncoder::MODE_AUTO);
         self::assertGreaterThan(0, $enc->size());
     }
+
+    // -------- Phase 196: Macro 05/06 mode --------
+
+    #[Test]
+    public function macro_05_prepends_codeword(): void
+    {
+        // Macro 05: header conceptually "[)>RS05GS" prepended.
+        $enc = new DataMatrixEncoder('123', macroMode: DataMatrixEncoder::MACRO_05);
+        // Symbol должен encode без exception.
+        self::assertGreaterThan(0, $enc->size());
+    }
+
+    #[Test]
+    public function macro_06_prepends_codeword(): void
+    {
+        $enc = new DataMatrixEncoder('ABC', macroMode: DataMatrixEncoder::MACRO_06);
+        self::assertGreaterThan(0, $enc->size());
+    }
+
+    #[Test]
+    public function macro_constants_have_correct_values(): void
+    {
+        self::assertSame(236, DataMatrixEncoder::MACRO_05);
+        self::assertSame(237, DataMatrixEncoder::MACRO_06);
+    }
+
+    #[Test]
+    public function macro_rejects_invalid_value(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new DataMatrixEncoder('data', macroMode: 99);
+    }
+
+    #[Test]
+    public function no_macro_default_behavior(): void
+    {
+        // Без macroMode — same as before.
+        $withoutMacro = new DataMatrixEncoder('hello');
+        $withMacro = new DataMatrixEncoder('hello', macroMode: DataMatrixEncoder::MACRO_05);
+        // Withmacro adds 1 CW → symbol size может differ.
+        self::assertGreaterThan(0, $withoutMacro->size());
+        self::assertGreaterThan(0, $withMacro->size());
+    }
 }

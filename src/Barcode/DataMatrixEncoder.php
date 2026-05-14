@@ -128,13 +128,28 @@ final class DataMatrixEncoder
 
     public const MODE_BASE256 = 'base256';
 
+    /**
+     * Phase 196: Macro 05/06 mode markers per ISO/IEC 16022 §5.2.4.6.
+     *   Macro 05 (CW 236) — header structure "[)>RS05GS" prepended conceptually
+     *   Macro 06 (CW 237) — same но "[)>RS06GS"
+     * Decoder reconstructs full string на decode. Used для compact transit
+     * applications: AIM TID и similar.
+     */
+    public const MACRO_05 = 236;
+
+    public const MACRO_06 = 237;
+
     public function __construct(
         public readonly string $data,
         bool $allowRectangular = true,
         string $mode = self::MODE_ASCII,
+        ?int $macroMode = null,
     ) {
         if ($data === '') {
             throw new \InvalidArgumentException('DataMatrix input must be non-empty');
+        }
+        if ($macroMode !== null && $macroMode !== self::MACRO_05 && $macroMode !== self::MACRO_06) {
+            throw new \InvalidArgumentException('Macro mode must be MACRO_05 (236) or MACRO_06 (237)');
         }
 
         // 1. Encode data per chosen mode (or auto-pick best).
@@ -148,6 +163,11 @@ final class DataMatrixEncoder
             self::MODE_AUTO => self::encodeAuto($data),
             default => throw new \InvalidArgumentException("Unknown mode: $mode"),
         };
+
+        // Phase 196: Macro 05/06 prefix codeword (если задан).
+        if ($macroMode !== null) {
+            array_unshift($codewords, $macroMode);
+        }
 
         // 2. Pick smallest symbol fitting codewords.
         $symbol = null;
