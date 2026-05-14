@@ -113,7 +113,38 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
    L2 reordering, integrated в PdfFont для mixed LTR/RTL text),
  - 137 Indic basic shaping (pre-base matra reorder для Devanagari,
    Bengali, Tamil, Telugu, Kannada, Malayalam, Gujarati, Gurmukhi,
-   Oriya, Sinhala — handles conjuncts через halant traversal).
+   Oriya, Sinhala — handles conjuncts через halant traversal),
+ - 138 Reph reorder (RA + virama at syllable start moved к end of
+   syllable per OpenType USE — codepoint-level reordering для 11
+   Indic scripts; GSUB rphf application defers к font),
+ - 139 Two-part Indic matras (Unicode NFD decomposition: Bengali ো,
+   Tamil ொ/ோ/ௌ, Malayalam ൊ/ോ/ൌ, Oriya ୋ/ୌ/ୈ, Kannada ೊ/ೋ three-part,
+   Sinhala ො/ෞ — 18 entries across 6 scripts),
+ - 140 X-axis label rotation для BarChart (matplotlib-style angle
+   parameter; end-anchor positioning via shared chartTextRotated helper
+   reusable для других charts в будущих фазах),
+ - 141 X-axis label rotation на 5 charts (LineChart/AreaChart/MultiLine/
+   GroupedBar/StackedBar),
+ - 142 Axis titles на 4 charts (GroupedBar/StackedBar/MultiLine/Scatter),
+ - 143 GSUB Type 1 Single Substitution support (SingleSubstitutions data
+   class + GsubReader::readByFeature(tag) API + Format 1 delta-based +
+   Format 2 explicit-array; foundation для rphf/half/init/medi/fina),
+ - 144 rphf substitution application в PdfFont (post-Indic-shaping
+   reph detection + TtfFile::singleSubstitutionsForFeature('rphf') +
+   per-position GSUB Type 1 apply; finalizes Indic reph visual support
+   for fonts shipping 'rphf' as single-sub lookup),
+ - 148 Bidi X9 filter (drop LRE/RLE/LRO/RLO/PDF/LRI/RLI/FSI/PDI) +
+   L3 mirroring (22 ASCII/Unicode bracket pairs swapped в RTL spans),
+ - 149 Composite glyph variation behavior clarified (transitive
+   inheritance через transformed simple components; per-component
+   anchor deltas deferred — rare в variable fonts),
+ - 151 Tagged PDF /Link /StructParent wiring (Link annotations теперь
+   resolve back к /Link StructElem через ParentTree number tree —
+   completes PDF/UA Link-role roundtrip),
+ - 153 Cross-row border "thicker wins" priority в table collapse mode
+   (renderRow tracks prevRowBottomByCol ref-param; top edge of current
+   row compares с stored bottom from prior row through moreProminent;
+   per-cell columnSpan propagation. Resets на page-break header repeat).
 
 ---
 
@@ -264,7 +295,11 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Section breaks (явная смена pageSetup mid-document)~~ ✅ **Phase 34 closed** (b57ddb4).
 - ~~Footnotes / endnotes~~ ✅ **Phase 40 closed** (a18a70c).
 - ~~Multi-column layout (CSS `column-count`)~~ ✅ **Phase 39 closed** (5180a42).
-- ~~Border priority resolution в collapse mode~~ ✅ **Phase 28 closed** (f680192).
+- ~~Border priority resolution в collapse mode (within-row)~~ ✅ **Phase 28 closed** (f680192).
+- ~~Border priority cross-row (thicker bottom/top wins on shared edge)~~ ✅ **Phase 153 closed**.
+  renderRow теперь принимает `&$prevRowBottomByCol` ref-param с per-column
+  bottom borders предыдущей row; top edge для current row сравнивает их
+  с current top через moreProminent(). Reset при page-break (header repeat).
 - ~~Hyphenation (soft-hyphen `&shy;`)~~ ✅ **Phase 33 closed** (309f5d8).
 - ~~Paragraph padding + background~~ ✅ **Phase 25 closed** (ee907af + fb8580e).
 - ~~Inline letter-spacing через `<span>`~~ ✅ **Phase 27 closed** (6209791).
@@ -273,11 +308,28 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
     Joining classes + Pres Forms B + lam-alef ligature.
   - ~~Unicode Bidi Algorithm~~ ✅ **Phase 136 closed** (c02b27b).
     UAX 9 implicit levels (W/N/I rules + L2). Mixed LTR/RTL paragraphs.
-    X explicit/isolate rules + L3 mirroring deferred.
+  - ~~Bidi X9 filter + L3 mirroring~~ ✅ **Phase 148 closed**.
+    Drop LRE/RLE/LRO/RLO/PDF + LRI/RLI/FSI/PDI formatting chars (X9).
+    L3 mirroring 22 ASCII+Unicode bracket pairs в RTL runs.
+    X1-X8 stack-based explicit embeddings deferred (rare в plain text).
   - ~~Indic combining marks (pre-base matra reorder)~~ ✅ **Phase 137 closed** (f4778b5).
     Devanagari/Bengali/Tamil/Telugu/Kannada/Malayalam/Gujarati/Gurmukhi/
-    Oriya/Sinhala. Two-part matras + reph + conjunct GSUB substitution
-    deferred (typical font handles conjunct rendering, two-part rare).
+    Oriya/Sinhala. Two-part matras + conjunct GSUB substitution deferred.
+  - ~~Reph reorder (RA + virama at syllable start)~~ ✅ **Phase 138 closed**.
+    Codepoint-level reorder per OpenType USE intermediate state: trailing
+    RA + virama moved к end of syllable (after base + matras + conjuncts).
+  - ~~GSUB 'rphf' application~~ ✅ **Phase 144 closed** (depends on Phase 143).
+    После reph reorder, RA glyph substituted с reph glyph via GSUB Type 1
+    Single Substitution. GPOS mark positioning (reph как attached mark above
+    base) deferred — fonts с simple Type 1 rphf place reph visually корректно
+    через width=0 glyph; fonts с Type 6 chained context defer полностью.
+  - ~~Two-part matras decomposition~~ ✅ **Phase 139 closed**.
+    Unicode NFD-style decomposition для Bengali ো/ৌ, Tamil ொ/ோ/ௌ,
+    Malayalam ൊ/ോ/ൌ, Oriya ୋ/ୌ/ୈ, Kannada ೊ/ೋ (three-part), Sinhala ො/ෞ.
+    18 entries across 6 scripts. Sinhala matras containing virama (U+0DDA,
+    U+0DDD) deferred — virama в middle of decomp confuses syllable-end
+    detection. Bonus: corrected Sinhala consonant range к 0x0D9A-0x0DC6
+    (was 0x0DA0-0x0DC6, missing first 6 consonants incl. ක).
 - ~~Line-height absolute (`line-height: 18pt`)~~ ✅ **Phase 79 closed** (9a33ed7).
 
 ### Typography
@@ -287,15 +339,24 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Variable fonts (OpenType variations)~~ ✅ **Phase 131-134 closed** (4 phases).
   fvar discovery + avar/HVAR/MVAR metric interp + gvar glyph deltas + IUP
   + frozen subset embedding via `new PdfFont(\$ttf, axes: ['wght' => 700])`.
-  Known limitations: composite glyphs не interpolate (use default outlines);
-  CFF2 variation не supported (только TrueType glyf-based).
+- ~~Composite glyph behavior clarification~~ ✅ **Phase 149 closed** (no code).
+  Composites inherit transformed component outlines transitively (because
+  referenced simple glyphs ARE individually transformed). Only per-component
+  anchor offset (dx/dy) gvar deltas are unhandled — rare в variable fonts.
+  Full composite re-serialization deferred — documented limitation.
+- CFF2 variable fonts — moved к **v1.3 backlog**.
 - ~~Vertical text (Asian scripts)~~ ✅ **Phase 128 closed** (6a5e605).
-  Char stacking API (font-agnostic). Spec-compliant Type 0 CIDFont +
-  UniJIS-UTF16-V CMap + /WMode 1 + vmtx — deferred.
+  Char stacking API (font-agnostic). Spec-compliant CIDFont vertical
+  writing — moved к **v1.3 backlog**.
 
 ### PDF features
 
-- PDF/A-1b / PDF/A-2u compliance (для архивных требований).
+- ~~PDF/A-1b / PDF/A-2u compliance~~ ✅ **Phase 47/103 closed**.
+  PdfAConfig с configurable `part` (1/2/3) и `conformance` (A/B/U).
+  XMP metadata stream + sRGB ICC profile в /OutputIntents + /Lang +
+  encryption disable enforcement. PDF/A-1a (accessible, requires correct
+  semantic Tagged PDF) deferred — passes Tagged PDF requirements but не
+  enforces semantic conformance automatically.
 - ~~Encryption (password-protected PDFs) — RC4-128~~ ✅ **Phase 41 closed** (c3d7743).
 - ~~Encryption — AES-128 (V4 R4)~~ ✅ **Phase 42 closed** (2d18542).
 - ~~AES-256 (V5 R5, Adobe Supplement)~~ ✅ **Phase 50 closed** (2040bfd).
@@ -309,7 +370,11 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Image alt-text для PDF/UA~~ ✅ **Phase 62 closed** (38ccc36).
 - ~~Tagged PDF /Table /TR /TD~~ ✅ **Phase 65 closed** (ae22478).
 - ~~Tagged PDF /L /LI~~ ✅ **Phase 66 closed** (fdf8117).
-- Tagged PDF /Link, reading order /StructParents tree, role mapping.
+- ~~Tagged PDF /Link annotation /StructParent linking~~ ✅ **Phase 151 closed**.
+  Link annotations теперь emit /StructParent N → ParentTree maps N к Link
+  StructElem object reference. Completes PDF/UA roundtrip for /Link role
+  (already закрыто как struct element class в Phase 72). Reading-order +
+  custom role mapping уже implemented в earlier phases.
 - ~~PDF/A-1b compliance mode~~ ✅ **Phase 47 closed** (25884b1).
 - ~~AcroForm signature field placeholder~~ ✅ **Phase 56 closed** (b93c6c8).
 - ~~AcroForm signature actual signing (PKCS#7 two-pass byte range)~~ ✅ **Phase 108 closed** (757e1e7).
@@ -359,7 +424,15 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Chart axis titles (BarChart/LineChart/AreaChart)~~ ✅ **Phase 70 closed** (08cc18c).
 - ~~Chart grid lines на 5 more charts~~ ✅ **Phase 71 closed** (0236048).
 - ~~Chart smoothed splines (Catmull-Rom)~~ ✅ **Phase 98 closed** (808858f).
-- Chart extensions: x-axis label rotation, axis titles на остальных charts.
+- ~~X-axis label rotation (BarChart)~~ ✅ **Phase 140 closed**.
+  `xLabelRotationDeg` parameter (matplotlib-style: +45 CCW, -45 CW, 90 vertical).
+  End-anchor convention via new `chartTextRotated` helper.
+- ~~X-axis label rotation на остальные charts~~ ✅ **Phase 141 closed**.
+  LineChart, AreaChart, MultiLineChart, GroupedBarChart, StackedBarChart все
+  поддерживают `xLabelRotationDeg`.
+- ~~Axis titles на остальных charts~~ ✅ **Phase 142 closed**.
+  GroupedBarChart, StackedBarChart, MultiLineChart, ScatterChart все
+  поддерживают xAxisTitle/yAxisTitle через общий drawChartAxisTitles helper.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
 - ~~QR Code (Reed-Solomon ECC L V1-10 byte mode)~~ ✅ **Phase 36 closed** (b6521aa).
@@ -384,21 +457,100 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   Ported ZXing DefaultPlacement + ErrorCorrection + SymbolInfo. 29 sizes
   (9 small + 6 rect + 14 multi-region). ZXing decoder verified 12×12,
   36×36, 52×52 interleaved RS, 80×80 16-region.
-- QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
-  auto best-mask selection.
+- ~~QR V5-V10 ECC M/Q/H mixed-block~~ ✅ **Phase 146 closed**.
+  ECC_PARAMS extended c 6-element form для mixed-group cases (V5-Q = 2×15+2×16,
+  V7-Q = 2×14+4×15, V8-M = 2×38+2×39, V9-M/Q/H, V10-L/M/Q/H mixed). Refactored
+  splitDataBlocks() + interleaveBlocks() для two-group support. CAPACITY table
+  extended для все 4 ECC levels на V5-V10. Kanji mode + V11-40 + auto best-mask
+  деferred (separate phases).
+- QR V11-V40 — moved к **v1.3 backlog**.
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
 - ~~Watermark opacity через ExtGState `/ca`~~ ✅ **Phase 31 closed** (5d588b9).
 
 ### Performance
 
 - ~~Streaming output (избежать full-document в memory)~~ ✅ **Phase 129 closed** (3fbe51d).
-  Writer::toStream / Document::toStream API. PKCS#7 signature path still
-  requires internal buffer (post-emit patching). Per-object content
-  stream incremental emission — deferred (deeper API rewrite).
+  Writer::toStream / Document::toStream API. Streaming PKCS#7 signing +
+  per-object incremental content stream emission — moved к **v1.3 backlog**.
 - ~~Lazy font subset~~ ✅ **Phase 130 closed** (347bf8b).
   Per-Writer registration (fixes multi-Document PdfFont reuse bug) +
   reset() API для per-doc minimal subsets.
 - ~~Image deduplication by content hash~~ ✅ **Phase 29 closed** (f47c1f9).
+
+---
+
+## v1.3 — Backlog (substantively deferred)
+
+Категории по типу работы. Каждый пункт — separate phase с research+impl+tests scope.
+
+### Font / text shaping
+
+- **CIDFont vertical writing** — Type 0 + UniJIS-UTF16-V CMap + /WMode 1 + vmtx.
+  Requires bundling Adobe-Japan1 CMap data (~50KB), new vmtx parser в TtfFile,
+  reworking ResourceWriter для Type 0 composite fonts с CIDFontType2.
+- **CFF2 variable fonts** — currently only TrueType glyf-based supported.
+  Requires full CFF Type 2 interpreter (CharString operators, blend operator,
+  Item Variation Store integration, CIDKeyed CFFs). Scope similar к Phase 131-134.
+- **Bidi X1-X8 explicit embedding/override stack** — LRE/RLE/LRO/RLO/PDF
+  + LRI/RLI/FSI/PDI processing с до 125-deep level stack. UAX 9 §3.3.
+- **Composite glyph per-component dx/dy gvar deltas** — currently transforms
+  inherit транзитивно от simple components, но per-component anchor offsets
+  не interpolate. Rare в variable fonts.
+- **Sinhala two-part matras с virama component** (U+0DDA, U+0DDD) — virama
+  в middle of decomposed sequence interferes с syllable-end detection.
+
+### Barcodes
+
+- **QR V11-V40 large versions** — ~120 additional ECC_PARAMS entries, extended
+  ALIGN_POSITIONS, version-info BCH(18,6) encoding near BL/TR finders.
+  Recommend separate phase с real QR decoder verification per version.
+- **QR ECI / Structured Append** — multi-symbol concatenation, extended
+  channel interpretation.
+- **DataMatrix 144×144** — special interleaved layout (different from
+  standard square sizes); needs custom ZXing-spec placement.
+- **DataMatrix encoding modes** — C40 / Text / X12 / EDIFACT / Base 256
+  (currently ASCII only). Each mode requires separate encoding table.
+- **PDF417 Text/Numeric compaction** (codewords 900/902) — denser encoding
+  для alphanumeric и digit-only payloads.
+- **PDF417 Macro PDF417** — multi-symbol concatenation.
+- **Aztec Rune mode** — single-character symbol variant.
+- **Aztec Structured Append / ECI / FLG(n)** — extended channel interpretation.
+- **Code 128 auto-mode switching** — automatic optimal A/B/C selection per
+  substring для shortest encoding.
+- **Code 128 GS1-128** — Application Identifiers (FNC1 + AI parsing).
+
+### Layout / typography
+
+- **Footnote true page-bottom positioning** — per-page reserved zone (currently
+  inline at end of body). Requires multi-pass layout or content reservation.
+- **LineBreaker Knuth-Plass optimal** — backtracking с boxes-glues-penalties.
+- **LineBreaker hanging punctuation** — punctuation extending past margins
+  for visual alignment.
+- **LineBreaker tab-stops** — explicit tab positioning beyond simple horizontal
+  advance.
+- **PieChart true Bezier arc rendering** — currently polygon approximation
+  (60 segments). Cubic Bezier approximation для precise arcs.
+- **PieChart exploded slices** — radial offset per slice для emphasis.
+- **PieChart perimeter labels** — label placement along arc midpoints
+  с leader lines для small slices.
+- **MathExpression nested fractions в superscripts** — multi-level recursion
+  в layout engine.
+- **MathExpression custom font / styling** — currently single hardcoded font.
+- **MathExpression LaTeX environments** — begin{}/end{} blocks (align,
+  cases, etc.) beyond direct command syntax.
+
+### PDF features
+
+- **Public-key encryption** — /Filter /PubSec (currently /Standard only).
+  X.509 certificate-based access control.
+- **PDF/A-1a (accessible)** — requires semantic Tagged PDF conformance
+  enforcement: H1-H6 hierarchy, Figure/Caption, Table headers, etc.
+  Currently PDF/A-1b (basic) и PDF/A-2u (Unicode) supported.
+- **Streaming PKCS#7 signing** — currently requires internal buffer для
+  post-emit byte-range patching. Streaming variant requires placeholder
+  reservation + offset back-patching без full buffer.
+- **Per-object content stream incremental emission** — currently each Page
+  content stream materializes fully before emission. Deeper API rewrite.
 
 ---
 

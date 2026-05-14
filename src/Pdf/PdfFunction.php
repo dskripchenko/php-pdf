@@ -10,7 +10,7 @@ namespace Dskripchenko\PhpPdf\Pdf;
  * Type 2 — exponential interpolation между двумя color values.
  * Used by axial/radial shadings для 2-stop linear gradients.
  *
- * Multi-stop gradients требуют Type 3 (stitching) — TODO.
+ * Multi-stop gradients support — см. PdfStitchingFunction (Type 3, Phase 90).
  */
 final readonly class PdfFunction
 {

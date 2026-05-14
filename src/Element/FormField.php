@@ -17,9 +17,12 @@ namespace Dskripchenko\PhpPdf\Element;
  *  - list (Ch без Combo — listbox)
  *
  * Не реализовано:
- *  - Signature fields (/Sig).
- *  - JavaScript calculation/validation actions.
- *  - Custom appearance streams (полагаемся на reader default rendering).
+ *  - Custom appearance streams (полагаемся на reader default rendering) —
+ *    out of scope; PDF readers handle widget rendering universally.
+ *
+ * Closed в later phases:
+ *  - Signature fields (/Sig placeholder + PKCS#7 signing) → Phase 56/108
+ *  - JavaScript calculation/validation/format/keystroke actions → Phase 67
  */
 final readonly class FormField implements BlockElement
 {

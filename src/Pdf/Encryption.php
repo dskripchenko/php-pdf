@@ -17,9 +17,11 @@ namespace Dskripchenko\PhpPdf\Pdf;
  *  - Permissions bits (printing, copying, modification, ...).
  *
  * Не реализовано:
- *  - V5 R6 (PDF 2.0 hash iteration 64 rounds).
- *  - Public-key encryption (/Filter /PubSec).
- *  - String encryption (currently /Identity для strings — V1-V4).
+ *  - Public-key encryption (/Filter /PubSec) — moved к v1.3 backlog.
+ *
+ * Closed в later phases:
+ *  - V5 R6 (PDF 2.0 hash 64 rounds) → Phase 106
+ *  - String encryption (literal strings → encrypted hex) → Phase 77
  */
 final class Encryption
 {

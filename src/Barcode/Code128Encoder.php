@@ -18,11 +18,13 @@ namespace Dskripchenko\PhpPdf\Barcode;
  * Каждый character = 11 modules (3 bars + 3 spaces). Bars alternate
  * starting with black. Stop pattern имеет 13 modules.
  *
- * Не реализовано в этой фазе (deferred):
- *  - Code A (control chars 00..31, специальные функции FNC).
- *  - Code C (numeric pairs — 2× compression для digit-only).
- *  - Auto-mode switching между A/B/C для оптимальной длины.
- *  - GS1-128 (Application Identifiers).
+ * Не реализовано:
+ *  - Auto-mode switching между A/B/C для оптимальной длины — v1.3 backlog.
+ *  - GS1-128 (Application Identifiers) — v1.3 backlog.
+ *
+ * Closed в later phases:
+ *  - Code A (control chars 00..31, FNC functions) → Phase 78
+ *  - Code C (numeric pairs, 2× compression для digit-only) → Phase 57
  *
  * Использование:
  *   $enc = new Code128Encoder('ABC-123');

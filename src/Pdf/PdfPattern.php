@@ -13,7 +13,8 @@ namespace Dskripchenko\PhpPdf\Pdf;
  * Optional /Matrix transform applied к pattern coordinate system —
  * used для SVG gradientTransform attribute.
  *
- * Type 1 (tiling pattern) — для repeated tiles. TODO.
+ * Type 1 (tiling pattern) — для repeated tiles. Not implemented — use case
+ * rare; SVG patterns mostly cover gradient needs.
  */
 final readonly class PdfPattern
 {

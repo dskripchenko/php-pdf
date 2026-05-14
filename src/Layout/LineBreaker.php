@@ -17,13 +17,15 @@ namespace Dskripchenko\PhpPdf\Layout;
  *
  * Возвращает list<string> — каждая запись = одна строка для рендера.
  *
- * Не реализовано в v0.1:
- *  - Knuth-Plass optimal (требует backtracking + boxes-glues-penalties)
- *  - Hyphenation
- *  - Soft-hyphen (U+00AD) handling
- *  - Justification (это уже layout-stage, не breaking)
- *  - Hanging punctuation
- *  - Tab-stops
+ * Не реализовано:
+ *  - Knuth-Plass optimal (требует backtracking + boxes-glues-penalties) — v1.3
+ *  - Hanging punctuation — v1.3
+ *  - Tab-stops — v1.3
+ *
+ * Closed в later phases:
+ *  - Soft-hyphen (U+00AD) handling → Phase 33
+ *  - Justification (text-align: justify) → Phase 15
+ *  - Hyphenation (basic syllable rules) → Phase 33
  *
  * Соответствует ADR-выбору «typography v0.1: kerning + basic ligatures
  * только; line breaking — greedy».

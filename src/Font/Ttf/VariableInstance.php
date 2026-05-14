@@ -10,13 +10,27 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  * Given user-space axis coordinates (e.g., ['wght' => 700]), produces
  * modified glyf table bytes с interpolated outlines.
  *
- * Algorithm per glyph:
- *  1. Parse simple glyph contours (composite glyphs → skip variation).
+ * Algorithm per simple glyph:
+ *  1. Parse simple glyph contours.
  *  2. Get gvar deltas для normalized coords.
  *  3. Apply IUP (Interpolation of Unreferenced Points): для each contour,
  *     points без explicit delta interpolate proportionally from neighbors
  *     с deltas.
  *  4. Re-serialize glyph bytes.
+ *
+ * Composite glyph behavior (Phase 149 clarification):
+ *  - Composite glyphs are NOT directly transformed here, BUT their
+ *    referenced component glyphs (which are simple glyphs themselves)
+ *    ARE transformed individually. When the PDF reader renders a
+ *    composite glyph, it pulls в the already-transformed component
+ *    outlines — so composite shapes interpolate transitively.
+ *  - The ONLY thing NOT interpolated is per-component anchor offsets
+ *    (dx/dy) и transform matrices encoded in the composite header.
+ *    Per-component deltas via gvar are rare в variable fonts; most
+ *    variable fonts encode all variation in simple glyph outlines.
+ *  - Full per-component delta application would require composite glyph
+ *    re-serialization (parse flags, dx/dy ints, optional scale matrices,
+ *    rewrite with modified anchors) — deferred.
  */
 final class VariableInstance
 {

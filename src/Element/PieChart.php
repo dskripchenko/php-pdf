@@ -13,10 +13,13 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  * Default 60 chord segments per slice — visually смотрится gladkim.
  *
  * Не реализовано:
- *  - True Bezier arc rendering.
- *  - Donut / exploded slices.
- *  - Slice labels по периметру.
- *  - 3D effects.
+ *  - True Bezier arc rendering — v1.3 backlog.
+ *  - Exploded slices — v1.3 backlog.
+ *  - Slice labels по периметру — v1.3 backlog.
+ *  - 3D effects — out of scope (PDF static format).
+ *
+ * Closed в later phases:
+ *  - Donut variant → Phase 55 (DonutChart)
  */
 final readonly class PieChart implements BlockElement
 {

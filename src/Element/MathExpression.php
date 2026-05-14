@@ -20,11 +20,14 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  *    `\neq`, `\approx`, `\infty`, `\sum`, `\int`.
  *
  * Не реализовано:
- *  - Nested fractions внутри superscripts.
- *  - Multi-line equations.
- *  - Matrices / arrays.
- *  - Custom font / styling.
- *  - LaTeX environments (begin/end).
+ *  - Nested fractions внутри superscripts — v1.3 backlog.
+ *  - Custom font / styling — v1.3 backlog.
+ *  - LaTeX environments (begin{} / end{}) — v1.3 backlog.
+ *
+ * Closed в later phases:
+ *  - Multi-line equations → Phase 96
+ *  - Matrices / arrays (matrix, pmatrix, bmatrix, vmatrix) → Phase 75
+ *  - Big operators с limits → Phase 80
  *
  * Rendered как block с centered alignment по умолчанию. Font derived
  * from default Engine font; sup/sub use 70% size + baseline shift

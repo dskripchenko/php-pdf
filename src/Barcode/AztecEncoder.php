@@ -17,11 +17,13 @@ namespace Dskripchenko\PhpPdf\Barcode;
  *    data, GF(256) для 3-4L data.
  *  - Auto layer selection с ~23% ECC redundancy (per ISO рекомендация).
  *
- * Не реализовано в этой версии:
- *  - Full Aztec (15×15..151×151, layers 5-32) — отдельный phase.
- *  - Rune mode (single-character symbol).
- *  - Structured Append (multi-symbol concatenation).
- *  - ECI / FLG(n) extended channel interpretation.
+ * Не реализовано:
+ *  - Rune mode (single-character symbol) — v1.3 backlog.
+ *  - Structured Append (multi-symbol concatenation) — v1.3 backlog.
+ *  - ECI / FLG(n) extended channel interpretation — v1.3 backlog.
+ *
+ * Closed в later phases:
+ *  - Full Aztec (15×15..151×151, layers 5-32) → Phase 125-126
  *
  * Output via {@see modules()} — 2D bool matrix; true = black module.
  */
