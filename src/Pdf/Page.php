@@ -1001,6 +1001,85 @@ final class Page
     }
 
     /**
+     * Phase 120: Square (rectangle) annotation — outlines a region.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $strokeColor  /C border
+     * @param  array{0:float,1:float,2:float}|null  $fillColor    /IC interior
+     */
+    public function addSquareAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        ?array $strokeColor = null,
+        ?array $fillColor = null,
+        float $borderWidth = 1.0,
+    ): self {
+        $this->markupAnnotations[] = [
+            'kind' => 'square',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'contents' => '',
+            'color' => $strokeColor,
+            'fillColor' => $fillColor,
+            'borderWidth' => $borderWidth,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Phase 120: Circle (ellipse) annotation — outlines an oval inscribed
+     * within (x, y, width, height) rect.
+     */
+    public function addCircleAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        ?array $strokeColor = null,
+        ?array $fillColor = null,
+        float $borderWidth = 1.0,
+    ): self {
+        $this->markupAnnotations[] = [
+            'kind' => 'circle',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'contents' => '',
+            'color' => $strokeColor,
+            'fillColor' => $fillColor,
+            'borderWidth' => $borderWidth,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Phase 120: Line annotation — emits a thin line between two endpoints.
+     */
+    public function addLineAnnotation(
+        float $x1,
+        float $y1,
+        float $x2,
+        float $y2,
+        ?array $strokeColor = null,
+        float $borderWidth = 1.0,
+    ): self {
+        $this->markupAnnotations[] = [
+            'kind' => 'line',
+            'x1' => min($x1, $x2), 'y1' => min($y1, $y2),
+            'x2' => max($x1, $x2), 'y2' => max($y1, $y2),
+            'contents' => '',
+            'color' => $strokeColor,
+            'lineX1' => $x1, 'lineY1' => $y1,
+            'lineX2' => $x2, 'lineY2' => $y2,
+            'borderWidth' => $borderWidth,
+        ];
+
+        return $this;
+    }
+
+    /**
      * Phase 109: FreeText annotation — text rendered directly на page surface.
      */
     public function addFreeTextAnnotation(

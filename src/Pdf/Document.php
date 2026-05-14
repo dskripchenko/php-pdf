@@ -1904,6 +1904,32 @@ final class Document
                     '<< /Type /Annot /Subtype /FreeText /Rect %s%s /DA %s >>',
                     $rect, $contentsPart, $da,
                 );
+            case 'square':
+            case 'circle':
+                $subtype = $ann['kind'] === 'square' ? 'Square' : 'Circle';
+                $bs = sprintf(' /BS << /Type /Border /W %s /S /S >>', $this->fmt((float) $ann['borderWidth']));
+                $icPart = '';
+                if (! empty($ann['fillColor'])) {
+                    $fc = $ann['fillColor'];
+                    $icPart = sprintf(' /IC [%s %s %s]',
+                        $this->fmt((float) $fc[0]), $this->fmt((float) $fc[1]), $this->fmt((float) $fc[2]));
+                }
+
+                return sprintf(
+                    '<< /Type /Annot /Subtype /%s /Rect %s%s%s%s%s >>',
+                    $subtype, $rect, $colorPart, $icPart, $bs, $contentsPart,
+                );
+            case 'line':
+                $linePart = sprintf(' /L [%s %s %s %s]',
+                    $this->fmt((float) $ann['lineX1']), $this->fmt((float) $ann['lineY1']),
+                    $this->fmt((float) $ann['lineX2']), $this->fmt((float) $ann['lineY2']),
+                );
+                $bs = sprintf(' /BS << /Type /Border /W %s /S /S >>', $this->fmt((float) $ann['borderWidth']));
+
+                return sprintf(
+                    '<< /Type /Annot /Subtype /Line /Rect %s%s%s%s%s >>',
+                    $rect, $linePart, $colorPart, $bs, $contentsPart,
+                );
             default:
                 throw new \LogicException('Unknown markup annotation kind: ' . $ann['kind']);
         }
