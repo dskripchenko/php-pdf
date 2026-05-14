@@ -325,6 +325,69 @@ final class Page
     }
 
     /**
+     * Phase 128: vertical text (CJK/East-Asian writing mode).
+     *
+     * Stacks chars top-to-bottom от (x, y), каждый char placed individually
+     * с y-advance = lineHeightPt (default 1.2 × sizePt). Char x-position
+     * фиксированный — каждый символ остаётся upright (не повёрнут как в
+     * "sideways" labels).
+     *
+     * Suitable для traditional CJK vertical writing где each glyph is
+     * upright и stacked. Mixed Latin/CJK works since chars are placed
+     * individually.
+     *
+     * Note: PDF spec-compliant Type 0 CIDFont vertical (UniJIS-UTF16-V CMap +
+     * /WMode 1 + vmtx table) даёт smoother results, но this API is
+     * font-agnostic и проще для simple labels/certificates.
+     */
+    public function showTextVertical(
+        string $text, float $x, float $y, StandardFont $font, float $sizePt,
+        ?float $lineHeightPt = null,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
+        $lineHeightPt ??= $sizePt * 1.2;
+        $chars = self::splitChars($text);
+        $currentY = $y;
+        foreach ($chars as $ch) {
+            $this->showText($ch, $x, $currentY, $font, $sizePt, $r, $g, $b);
+            $currentY -= $lineHeightPt;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Phase 128: vertical text using embedded TTF font (для CJK / Unicode).
+     */
+    public function showEmbeddedTextVertical(
+        string $text, float $x, float $y, PdfFont $font, float $sizePt,
+        ?float $lineHeightPt = null,
+        ?float $r = null, ?float $g = null, ?float $b = null,
+    ): self {
+        $lineHeightPt ??= $sizePt * 1.2;
+        $chars = self::splitChars($text);
+        $currentY = $y;
+        foreach ($chars as $ch) {
+            $this->showEmbeddedText($ch, $x, $currentY, $font, $sizePt, $r, $g, $b);
+            $currentY -= $lineHeightPt;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Split UTF-8 string into individual characters (multi-byte safe).
+     *
+     * @return list<string>
+     */
+    private static function splitChars(string $text): array
+    {
+        $out = mb_str_split($text, 1, 'UTF-8');
+
+        return $out === false ? [] : $out;
+    }
+
+    /**
      * Show text using embedded TTF font (via PdfFont). Поддерживает Unicode
      * (Cyrillic, Greek, и т.д.).
      *
