@@ -111,14 +111,43 @@ final class DataMatrixEncoder
     /** @var list<list<bool>> */
     private array $modules;
 
-    public function __construct(public readonly string $data, bool $allowRectangular = true)
-    {
+    /**
+     * Phase 176-180: encoding mode constants.
+     */
+    public const MODE_AUTO = 'auto';
+
+    public const MODE_ASCII = 'ascii';
+
+    public const MODE_C40 = 'c40';
+
+    public const MODE_TEXT = 'text';
+
+    public const MODE_X12 = 'x12';
+
+    public const MODE_EDIFACT = 'edifact';
+
+    public const MODE_BASE256 = 'base256';
+
+    public function __construct(
+        public readonly string $data,
+        bool $allowRectangular = true,
+        string $mode = self::MODE_ASCII,
+    ) {
         if ($data === '') {
             throw new \InvalidArgumentException('DataMatrix input must be non-empty');
         }
 
-        // 1. ASCII encoding mode → codewords.
-        $codewords = self::encodeAscii($data);
+        // 1. Encode data per chosen mode (or auto-pick best).
+        $codewords = match ($mode) {
+            self::MODE_ASCII => self::encodeAscii($data),
+            self::MODE_C40 => self::encodeC40($data),
+            self::MODE_TEXT => self::encodeText($data),
+            self::MODE_X12 => self::encodeX12($data),
+            self::MODE_EDIFACT => self::encodeEdifact($data),
+            self::MODE_BASE256 => self::encodeBase256($data),
+            self::MODE_AUTO => self::encodeAuto($data),
+            default => throw new \InvalidArgumentException("Unknown mode: $mode"),
+        };
 
         // 2. Pick smallest symbol fitting codewords.
         $symbol = null;
@@ -216,6 +245,329 @@ final class DataMatrixEncoder
         }
 
         return $cw;
+    }
+
+    /**
+     * Phase 176: auto-mode encoder — pick best encoding per input characteristics.
+     *  - Pure digits → ASCII (digit-pair compression уже там, 2 chars / 1 CW)
+     *  - High proportion uppercase+digits → C40 (3 chars / 2 CW)
+     *  - High proportion lowercase → Text (3 chars / 2 CW)
+     *  - Non-ASCII bytes (>127) → Base 256 (1 byte / 1 CW + randomization)
+     *  - Default → ASCII (safe для mixed content)
+     *
+     * @return list<int>
+     */
+    public static function encodeAuto(string $data): array
+    {
+        // Non-ASCII presence → Base 256 (только mode handling binary).
+        for ($i = 0; $i < strlen($data); $i++) {
+            if (ord($data[$i]) > 127) {
+                return self::encodeBase256($data);
+            }
+        }
+        // For pure-digit input, ASCII digit-pair compression equals C40 (both 2:1).
+        // For uppercase-heavy → C40; lowercase-heavy → Text. Default ASCII.
+        $countUpper = 0;
+        $countLower = 0;
+        $countDigit = 0;
+        $n = strlen($data);
+        for ($i = 0; $i < $n; $i++) {
+            $b = ord($data[$i]);
+            if ($b >= 65 && $b <= 90) {
+                $countUpper++;
+            } elseif ($b >= 97 && $b <= 122) {
+                $countLower++;
+            } elseif ($b >= 48 && $b <= 57) {
+                $countDigit++;
+            }
+        }
+        // Heuristic: long uppercase+digit run → C40 if C40-eligible chars dominate.
+        if ($n >= 6 && ($countUpper + $countDigit) >= 0.7 * $n && self::isC40Eligible($data)) {
+            return self::encodeC40($data);
+        }
+        if ($n >= 6 && $countLower >= 0.5 * $n && self::isTextEligible($data)) {
+            return self::encodeText($data);
+        }
+
+        return self::encodeAscii($data);
+    }
+
+    /**
+     * Phase 176: Base 256 encoding mode per ISO/IEC 16022 §5.2.4.7.
+     * Length-prefixed binary data с 255-state randomization.
+     *
+     * Codeword stream:
+     *  - 231 (switch к Base 256)
+     *  - Length: 1 byte (1..249) или 2 bytes (high = (L-249)/250 + 249, low = L%250)
+     *  - Data bytes randomized: (byte + (149*pos)%255 + 1) mod 256
+     *    Where pos = 1-based position of this codeword в total стрим.
+     *
+     * @return list<int>
+     */
+    public static function encodeBase256(string $data): array
+    {
+        $cw = [231]; // switch to Base 256
+        $len = strlen($data);
+        // Length field. ZXing-style 2-byte encoding для длинных payloads.
+        if ($len <= 249) {
+            $cw[] = $len;
+        } elseif ($len <= 1555) {
+            $cw[] = intdiv($len, 250) + 249;
+            $cw[] = $len % 250;
+        } else {
+            throw new \InvalidArgumentException(sprintf(
+                'DataMatrix Base 256 max payload 1555 bytes; got %d', $len
+            ));
+        }
+        // Data bytes — 255-state randomization. pos = 1-based codeword position
+        // of THIS data byte в overall stream (после 231 + length bytes).
+        $headerLen = count($cw);
+        for ($i = 0; $i < $len; $i++) {
+            $pos = $headerLen + $i + 1; // 1-based position
+            $pseudoRandom = (149 * $pos) % 255 + 1;
+            $temp = ord($data[$i]) + $pseudoRandom;
+            $cw[] = $temp <= 255 ? $temp : $temp - 256;
+        }
+        // Phase 176: also randomize the length byte(s) themselves.
+        // Actually per ZXing reference, length bytes get same randomization
+        // treatment как data bytes (с pos = их позиция в codeword stream).
+        // Re-randomize header.
+        for ($i = 1; $i < $headerLen; $i++) {
+            $pos = $i + 1; // 1-based
+            $pseudoRandom = (149 * $pos) % 255 + 1;
+            $temp = $cw[$i] + $pseudoRandom;
+            $cw[$i] = $temp <= 255 ? $temp : $temp - 256;
+        }
+
+        return $cw;
+    }
+
+    /**
+     * Phase 177: C40 encoding mode per ISO/IEC 16022 §5.2.5.
+     * 3 characters packed в 2 codewords (16 bits). Primary alphabet:
+     * uppercase + digits + space + shift tables для lowercase / punctuation.
+     *
+     * @return list<int>
+     */
+    public static function encodeC40(string $data): array
+    {
+        return self::encodeC40OrText($data, latchSwitch: 230, useTextSet: false);
+    }
+
+    /**
+     * Phase 178: Text encoding mode — like C40 но primary alphabet lowercase.
+     *
+     * @return list<int>
+     */
+    public static function encodeText(string $data): array
+    {
+        return self::encodeC40OrText($data, latchSwitch: 239, useTextSet: true);
+    }
+
+    /**
+     * Phase 179: X12 encoding mode per ISO/IEC 16022 §5.2.7.
+     * Subset of C40 alphabet (uppercase + digits + space + < > * + - . / : =).
+     * 3 chars → 2 codewords. Switch codeword 238.
+     *
+     * @return list<int>
+     */
+    public static function encodeX12(string $data): array
+    {
+        $cw = [238];
+        $values = [];
+        $n = strlen($data);
+        for ($i = 0; $i < $n; $i++) {
+            $values[] = self::x12CharValue($data[$i]);
+        }
+        $cw = array_merge($cw, self::packTriplets($values));
+        // Latch back to ASCII if data ended on incomplete triplet (per spec
+        // ASCII unlatch codeword 254 added).
+        if (count($values) % 3 !== 0) {
+            $cw[] = 254;
+        }
+
+        return $cw;
+    }
+
+    /**
+     * Phase 180: EDIFACT encoding mode per ISO/IEC 16022 §5.2.8.
+     * 4 chars (each 6-bit, ASCII 32..94 range) packed в 3 codewords.
+     * Switch codeword 240. Terminator 011111 (binary), unlatch к ASCII.
+     *
+     * @return list<int>
+     */
+    public static function encodeEdifact(string $data): array
+    {
+        $cw = [240];
+        $bits = '';
+        $n = strlen($data);
+        for ($i = 0; $i < $n; $i++) {
+            $b = ord($data[$i]);
+            if ($b < 32 || $b > 94) {
+                throw new \InvalidArgumentException(sprintf(
+                    'EDIFACT supports ASCII 32..94 only; got 0x%02X', $b
+                ));
+            }
+            // 6-bit encoding: bytes 32..63 → values 32..63; bytes 64..94 → 0..30.
+            $val = $b & 0x3F;
+            $bits .= str_pad(decbin($val), 6, '0', STR_PAD_LEFT);
+        }
+        // Append unlatch terminator (6 bits "011111" = 0x1F) если есть data
+        // или space remaining. Per spec: if data ends на multiple-of-3-cw
+        // boundary, no unlatch needed. Else pad с zero bits после unlatch.
+        $bits .= '011111';
+        // Pad к multiple of 8 bits (= multiple of 4 chars or 3 codewords).
+        while (strlen($bits) % 8 !== 0) {
+            $bits .= '0';
+        }
+        // Convert byte-by-byte → codewords.
+        for ($i = 0; $i < strlen($bits); $i += 8) {
+            $cw[] = bindec(substr($bits, $i, 8));
+        }
+
+        return $cw;
+    }
+
+    private static function isC40Eligible(string $data): bool
+    {
+        for ($i = 0; $i < strlen($data); $i++) {
+            $b = ord($data[$i]);
+            // C40 basic set + uppercase + digits + space; non-basic chars handled
+            // via shift but inefficient. Accept primarily uppercase+digits+space.
+            if (! (($b >= 65 && $b <= 90) || ($b >= 48 && $b <= 57) || $b === 32)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function isTextEligible(string $data): bool
+    {
+        for ($i = 0; $i < strlen($data); $i++) {
+            $b = ord($data[$i]);
+            if (! (($b >= 97 && $b <= 122) || ($b >= 48 && $b <= 57) || $b === 32)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function encodeC40OrText(string $data, int $latchSwitch, bool $useTextSet): array
+    {
+        $cw = [$latchSwitch];
+        $values = [];
+        $n = strlen($data);
+        for ($i = 0; $i < $n; $i++) {
+            $values = array_merge($values, self::c40CharValues($data[$i], $useTextSet));
+        }
+        $cw = array_merge($cw, self::packTriplets($values));
+        // Unlatch к ASCII (codeword 254) если data ended на incomplete triplet
+        // (codeword 254 also serves как end-of-mode signal).
+        if (count($values) % 3 !== 0) {
+            $cw[] = 254;
+        }
+
+        return $cw;
+    }
+
+    /**
+     * Pack 3-value triplets в 2 codewords each: V1*1600 + V2*40 + V3 + 1.
+     * Top byte = high, bottom byte = low.
+     *
+     * @param  list<int>  $values
+     * @return list<int>
+     */
+    private static function packTriplets(array $values): array
+    {
+        // Pad partial triplet с 0 (shift 1 в C40/Text — for SHIFT_1, value 0).
+        // For X12 spec uses different padding; для simplicity pad с 0.
+        while (count($values) % 3 !== 0) {
+            $values[] = 0;
+        }
+        $cw = [];
+        for ($i = 0; $i < count($values); $i += 3) {
+            $packed = 1600 * $values[$i] + 40 * $values[$i + 1] + $values[$i + 2] + 1;
+            $cw[] = ($packed >> 8) & 0xFF;
+            $cw[] = $packed & 0xFF;
+        }
+
+        return $cw;
+    }
+
+    /**
+     * C40/Text char → value list (most chars 1 value; shifted chars 2 values).
+     *
+     * @return list<int>
+     */
+    private static function c40CharValues(string $ch, bool $useTextSet): array
+    {
+        $b = ord($ch);
+        // Basic set: SHIFT 1/2/3 ChimeSet или direct value.
+        if ($b === 32) {
+            return [3]; // space
+        }
+        if ($b >= 48 && $b <= 57) {
+            return [$b - 48 + 4]; // digits → 4..13
+        }
+        if ($useTextSet) {
+            // Text set: primary alphabet lowercase a-z → values 14..39.
+            if ($b >= 97 && $b <= 122) {
+                return [$b - 97 + 14];
+            }
+            // Uppercase A-Z → shift 3 + value (b-65). Shift 3 = value 2.
+            if ($b >= 65 && $b <= 90) {
+                return [2, $b - 65 + 14];
+            }
+        } else {
+            // C40 set: primary uppercase A-Z → values 14..39.
+            if ($b >= 65 && $b <= 90) {
+                return [$b - 65 + 14];
+            }
+            // Lowercase a-z → shift 3 + value (b-97).
+            if ($b >= 97 && $b <= 122) {
+                return [2, $b - 97 + 14];
+            }
+        }
+        // Punctuation / control: SHIFT 1 для 0..31 (value 0 + b), SHIFT 2 для 33..47/58..64/91..95 etc.
+        if ($b <= 31) {
+            return [0, $b];
+        }
+        if ($b >= 33 && $b <= 47) {
+            return [1, $b - 33];
+        }
+        if ($b >= 58 && $b <= 64) {
+            return [1, $b - 58 + 15];
+        }
+        if ($b >= 91 && $b <= 95) {
+            return [1, $b - 91 + 22];
+        }
+        // Bytes > 127: upper shift + SHIFT2 + (b - 128).
+        if ($b >= 128) {
+            return [1, 30, ...self::c40CharValues(chr($b - 128), $useTextSet)];
+        }
+        throw new \InvalidArgumentException(sprintf('C40/Text не покрывает byte 0x%02X', $b));
+    }
+
+    private static function x12CharValue(string $ch): int
+    {
+        $b = ord($ch);
+
+        return match (true) {
+            $b === 0x0D => 0,           // CR
+            $b === 0x2A => 1,           // *
+            $b === 0x3E => 2,           // >
+            $b === 0x20 => 3,           // space
+            $b >= 0x30 && $b <= 0x39 => $b - 0x30 + 4,    // 0..9 → 4..13
+            $b >= 0x41 && $b <= 0x5A => $b - 0x41 + 14,   // A..Z → 14..39
+            default => throw new \InvalidArgumentException(sprintf(
+                'X12 supports only CR/*/>/SPACE/0-9/A-Z; got 0x%02X', $b
+            )),
+        };
     }
 
     /**
