@@ -88,80 +88,63 @@ final class AztecEncoder
     /** @var list<list<bool>> */
     private array $matrix;
 
-    public function __construct(public readonly string $data)
+    public function __construct(public readonly string $data, int $minEccPercent = 23)
     {
         if ($data === '') {
             throw new \InvalidArgumentException('Aztec input must be non-empty');
         }
 
-        // 1. Encode text → bit stream (мay contain unbalanced bits).
+        // 1. High-level encode → bit string.
         $bits = self::encodeToBits($data);
 
-        // 2. Choose layer count fitting data with ECC overhead.
+        // 2. Pick smallest compact size accommodating data + ECC overhead.
+        //    Per ZXing Encoder.java algorithm.
+        $eccBits = intdiv(strlen($bits) * $minEccPercent, 100) + 11;
+        $totalSizeBits = strlen($bits) + $eccBits;
+
         $layers = null;
-        $cwBits = 0;
-        $dataCwCount = 0;
-        $eccCwCount = 0;
+        $wordSize = 0;
+        $totalBitsInLayer = 0;
         $stuffedBits = '';
         foreach ([1, 2, 3, 4] as $L) {
-            $b = self::COMPACT_CW_BITS[$L];
-            $totalCw = intdiv(self::COMPACT_DATA_BITS[$L], $b);
-            // ECC ratio default ~23% per ISO; ensure ECC ≥ 3 codewords minimum.
-            $ecc = max(3, (int) round($totalCw * 0.23));
-            $maxDataCw = $totalCw - $ecc;
-            // Bit stuff bits to ensure no all-0/all-1 codeword.
-            $tryStuffed = self::stuffBits($bits, $b);
-            $bitsNeeded = strlen($tryStuffed);
-            // Pad to multiple of b.
-            $padNeeded = ($b - ($bitsNeeded % $b)) % $b;
-            $cwUsed = intdiv($bitsNeeded + $padNeeded, $b);
-            if ($cwUsed <= $maxDataCw) {
+            $totalBitsInLayerForL = ((88) + 16 * $L) * $L; // compact formula
+            if ($totalSizeBits > $totalBitsInLayerForL) {
+                continue;
+            }
+            $ws = self::COMPACT_CW_BITS[$L];
+            if ($wordSize !== $ws) {
+                $wordSize = $ws;
+                $stuffedBits = self::stuffBits($bits, $ws);
+            }
+            $usable = $totalBitsInLayerForL - ($totalBitsInLayerForL % $ws);
+            // Compact ограничен 64 message words.
+            if (strlen($stuffedBits) > $ws * 64) {
+                continue;
+            }
+            if (strlen($stuffedBits) + $eccBits <= $usable) {
                 $layers = $L;
-                $cwBits = $b;
-                $dataCwCount = $totalCw - $ecc;
-                $eccCwCount = $ecc;
-                $stuffedBits = $tryStuffed;
+                $totalBitsInLayer = $totalBitsInLayerForL;
                 break;
             }
         }
         if ($layers === null) {
-            throw new \InvalidArgumentException('Aztec compact capacity exceeded (>76 codewords); use full Aztec');
+            throw new \InvalidArgumentException('Aztec compact capacity exceeded; use Full Aztec');
         }
 
         $this->layers = $layers;
-        $this->size = 11 + 4 * $layers; // Compact: 15, 19, 23, 27.
-        $this->dataCodewords = $dataCwCount;
-        $this->eccCodewords = $eccCwCount;
+        $this->size = 11 + 4 * $layers; // 15, 19, 23, 27.
 
-        // 3. Pad bit stream к full data capacity (pad with 1s).
-        $totalDataBits = $dataCwCount * $cwBits;
-        $stuffedBits = str_pad($stuffedBits, $totalDataBits, '1', STR_PAD_RIGHT);
-        // After padding, check last codeword isn't all-1 (would be illegal).
-        $lastCw = substr($stuffedBits, -$cwBits);
-        if ($lastCw === str_repeat('1', $cwBits)) {
-            // Flip last bit to avoid all-1 codeword.
-            $stuffedBits = substr($stuffedBits, 0, -1) . '0';
-        }
+        // 3. Generate check (ECC) words filling totalBitsInLayer.
+        $messageBits = self::generateCheckWords($stuffedBits, $totalBitsInLayer, $wordSize);
 
-        // 4. Split bits → integer codewords (GF(64) or GF(256)).
-        $codewords = [];
-        for ($i = 0; $i < $totalDataBits; $i += $cwBits) {
-            $codewords[] = bindec(substr($stuffedBits, $i, $cwBits));
-        }
+        // 4. Generate mode message.
+        $messageSizeInWords = intdiv(strlen($stuffedBits), $wordSize);
+        $this->dataCodewords = $messageSizeInWords;
+        $this->eccCodewords = intdiv($totalBitsInLayer, $wordSize) - $messageSizeInWords;
+        $modeMessage = self::generateCompactModeMessage($layers, $messageSizeInWords);
 
-        // 5. Compute Reed-Solomon ECC.
-        $primPoly = $cwBits === 6 ? 0x43 : 0x12D; // GF(64) x^6+x+1; GF(256) x^8+x^4+x^3+x^2+1.
-        $eccVals = self::reedSolomonEncode($codewords, $eccCwCount, $cwBits, $primPoly);
-        $allCw = array_merge($codewords, $eccVals);
-
-        // 6. Convert codewords к single bit string (MSB-first within each codeword).
-        $bitStream = '';
-        foreach ($allCw as $cw) {
-            $bitStream .= str_pad(decbin($cw), $cwBits, '0', STR_PAD_LEFT);
-        }
-
-        // 7. Build matrix.
-        $this->matrix = $this->buildMatrix($bitStream, $layers);
+        // 5. Build matrix per ZXing algorithm: spiral data, then mode, then bullseye.
+        $this->matrix = $this->buildMatrix($messageBits, $modeMessage, $layers);
     }
 
     /** @return list<list<bool>> */
@@ -419,43 +402,132 @@ final class AztecEncoder
     // ---------------- Bit stuffing ----------------
 
     /**
-     * Bit stuffing per ISO/IEC 24778 §6.4.4 — when a b-bit codeword would
-     * be all-zeros or all-ones, insert a complemented stuff bit.
+     * Bit stuffing per ISO/IEC 24778 §6.4.4, ported from ZXing Encoder.java.
      *
-     * Algorithm: walk bit stream; для every b consecutive bits forming a
-     * codeword, if the first (b-1) bits are all same, insert complement
-     * at position b и shift remaining bits right.
+     * Iterates wordSize bits at a time. If first (wordSize-1) bits are all
+     * same (1...1 or 0...0), modify the last bit of the codeword:
+     *  - All-ones: emit codeword & mask (clear last bit), back up 1 bit.
+     *  - All-zeros: emit codeword | 1 (set last bit), back up 1 bit.
+     * Otherwise emit codeword as-is.
+     *
+     * Pads with all-1s if last input bit short of word boundary.
      */
-    public static function stuffBits(string $bits, int $b): string
+    public static function stuffBits(string $bits, int $wordSize): string
     {
-        $out = '';
-        $i = 0;
         $n = strlen($bits);
-        while ($i + $b <= $n) {
-            $chunk = substr($bits, $i, $b);
-            $first = $chunk[0];
-            $allSame = true;
-            for ($k = 0; $k < $b - 1; $k++) {
-                if ($chunk[$k] !== $first) {
-                    $allSame = false;
-                    break;
+        $mask = (1 << $wordSize) - 2; // all-1s except LSB
+        $out = '';
+        for ($i = 0; $i < $n; $i += $wordSize) {
+            $word = 0;
+            for ($j = 0; $j < $wordSize; $j++) {
+                if ($i + $j >= $n || $bits[$i + $j] === '1') {
+                    $word |= 1 << ($wordSize - 1 - $j);
                 }
             }
-            if ($allSame && substr_count($chunk, $first) === $b) {
-                // Whole codeword same — insert opposite bit at position b-1.
-                $out .= substr($chunk, 0, $b - 1) . ($first === '1' ? '0' : '1');
-                $i += $b - 1; // re-consume the original b-th bit в next codeword.
+            if (($word & $mask) === $mask) {
+                // First wordSize-1 bits all 1: clear last bit, defer 1 input bit.
+                $out .= str_pad(decbin($word & $mask), $wordSize, '0', STR_PAD_LEFT);
+                $i--;
+            } elseif (($word & $mask) === 0) {
+                // First wordSize-1 bits all 0: set last bit, defer 1 input bit.
+                $out .= str_pad(decbin($word | 1), $wordSize, '0', STR_PAD_LEFT);
+                $i--;
             } else {
-                $out .= $chunk;
-                $i += $b;
+                $out .= str_pad(decbin($word), $wordSize, '0', STR_PAD_LEFT);
             }
-        }
-        // Append remaining tail bits unchanged (will be padded later).
-        if ($i < $n) {
-            $out .= substr($bits, $i);
         }
 
         return $out;
+    }
+
+    /**
+     * Generate check (ECC) words via Reed-Solomon ported from ZXing
+     * ReedSolomonEncoder.java + GenericGFPoly.
+     *
+     * Convention: generator polynomial stored MSB-first (leading coef
+     * at index 0). Synthetic division aligns naturally.
+     */
+    public static function generateCheckWords(string $messageBits, int $totalBits, int $wordSize): string
+    {
+        $messageSizeInWords = intdiv(strlen($messageBits), $wordSize);
+        $totalWords = intdiv($totalBits, $wordSize);
+        $eccLen = $totalWords - $messageSizeInWords;
+        $primPoly = match ($wordSize) {
+            4 => 0x13,
+            6 => 0x43,
+            8 => 0x12D,
+            default => throw new \InvalidArgumentException('Unsupported word size: ' . $wordSize),
+        };
+        $size = 1 << $wordSize;
+        [$logTable, $expTable] = self::gfTables($size, $primPoly);
+
+        // Convert message bits → ints (MSB first within each word).
+        $messageWords = [];
+        for ($i = 0; $i < $messageSizeInWords; $i++) {
+            $val = 0;
+            for ($j = 0; $j < $wordSize; $j++) {
+                if ($messageBits[$i * $wordSize + $j] === '1') {
+                    $val |= 1 << ($wordSize - 1 - $j);
+                }
+            }
+            $messageWords[] = $val;
+        }
+
+        // Build generator polynomial — MSB-first: [1, α^1] × [1, α^2] × ...
+        // gen[0] = leading coefficient (highest degree), gen[eccLen] = constant.
+        // For Aztec, generator base is 1 (α^1, α^2, ..., α^eccLen).
+        $gen = [1];
+        for ($d = 1; $d <= $eccLen; $d++) {
+            // Multiply current gen by (x + α^d). Convention: MSB first.
+            // [g0, g1, ..., gk] × [1, α^d] = [g0, g0*α^d + g1, g1*α^d + g2, ..., gk*α^d].
+            $next = array_fill(0, count($gen) + 1, 0);
+            $next[0] = $gen[0];
+            for ($j = 1; $j < count($gen); $j++) {
+                $next[$j] = self::gfMul($gen[$j - 1], $expTable[$d], $logTable, $expTable, $size) ^ $gen[$j];
+            }
+            $next[count($gen)] = self::gfMul($gen[count($gen) - 1], $expTable[$d], $logTable, $expTable, $size);
+            $gen = $next;
+        }
+
+        // Synthetic division: msg × x^eccLen / gen, taking remainder.
+        // Buffer: messageWords (length k) followed by eccLen zeros = (k + eccLen) = totalWords.
+        $buf = array_merge($messageWords, array_fill(0, $eccLen, 0));
+        for ($i = 0; $i < $messageSizeInWords; $i++) {
+            $coef = $buf[$i];
+            if ($coef !== 0) {
+                // gen has length eccLen+1, gen[0]=1 (leading).
+                // For j=0..eccLen: buf[i+j] -= gen[j] × coef.
+                // Since gen[0]=1, buf[i] -= coef → buf[i] = 0.
+                for ($j = 0; $j < count($gen); $j++) {
+                    $buf[$i + $j] ^= self::gfMul($gen[$j], $coef, $logTable, $expTable, $size);
+                }
+            }
+        }
+        $eccWords = array_slice($buf, $messageSizeInWords, $eccLen);
+
+        // Output bits: startPad + message + ecc.
+        $startPad = $totalBits % $wordSize;
+        $bits = str_repeat('0', $startPad);
+        foreach ($messageWords as $w) {
+            $bits .= str_pad(decbin($w), $wordSize, '0', STR_PAD_LEFT);
+        }
+        foreach ($eccWords as $w) {
+            $bits .= str_pad(decbin($w), $wordSize, '0', STR_PAD_LEFT);
+        }
+
+        return $bits;
+    }
+
+    /**
+     * Generate mode message bits для Compact Aztec.
+     * 2 bits layers-1 + 6 bits messageSizeInWords-1 + 20 bits RS ECC = 28 bits.
+     */
+    public static function generateCompactModeMessage(int $layers, int $messageSizeInWords): string
+    {
+        $info = (($layers - 1) << 6) | ($messageSizeInWords - 1);
+        $infoBits = str_pad(decbin($info), 8, '0', STR_PAD_LEFT);
+
+        return self::generateCheckWords($infoBits, 28, 4);
     }
 
     // ---------------- Reed-Solomon ----------------
@@ -546,176 +618,109 @@ final class AztecEncoder
     // ---------------- Matrix layout ----------------
 
     /**
-     * Build Compact Aztec matrix:
-     *  1. Bullseye finder (9×9) at center
-     *  2. Mode message ring (around 9×9 → 11×11)
-     *  3. Orientation marks (4 corners of 11×11)
-     *  4. Data spiral (2-module-thick layers around 11×11)
+     * Build Compact Aztec matrix per ZXing Encoder.java algorithm.
+     *
+     * Order (важно!): data spiral first → mode message → bullseye + orient.
+     *
+     * @param  string  $messageBits  bits для data spiral (incl. RS ECC)
+     * @param  string  $modeBits     28-bit mode message
      */
-    private function buildMatrix(string $bitStream, int $layers): array
+    private function buildMatrix(string $messageBits, string $modeBits, int $layers): array
     {
-        $size = $this->size;
-        $center = intdiv($size, 2);
-        $m = array_fill(0, $size, array_fill(0, $size, false));
+        $matrixSize = $this->size;
+        $center = intdiv($matrixSize, 2);
+        $m = array_fill(0, $matrixSize, array_fill(0, $matrixSize, false));
+        $baseMatrixSize = 11 + 4 * $layers; // compact base size = matrixSize for compact.
 
-        // 1. Bullseye 9×9 (Chebyshev distance pattern).
-        for ($r = $center - 4; $r <= $center + 4; $r++) {
-            for ($c = $center - 4; $c <= $center + 4; $c++) {
-                $d = max(abs($r - $center), abs($c - $center));
-                $m[$r][$c] = ($d % 2 === 0);
+        // 1. Draw data bits — 2-cell dominoes around layers (outermost first).
+        $rowOffset = 0;
+        for ($i = 0; $i < $layers; $i++) {
+            $rowSize = ($layers - $i) * 4 + 9; // compact formula
+            for ($j = 0; $j < $rowSize; $j++) {
+                $columnOffset = $j * 2;
+                for ($k = 0; $k < 2; $k++) {
+                    // Top side
+                    if (self::bitAt($messageBits, $rowOffset + $columnOffset + $k)) {
+                        // matrix.set(x=col, y=row) → $m[row][col] = true
+                        $m[$i * 2 + $j][$i * 2 + $k] = true;
+                    }
+                    // Right side
+                    if (self::bitAt($messageBits, $rowOffset + $rowSize * 2 + $columnOffset + $k)) {
+                        $m[$baseMatrixSize - 1 - $i * 2 - $k][$i * 2 + $j] = true;
+                    }
+                    // Bottom side
+                    if (self::bitAt($messageBits, $rowOffset + $rowSize * 4 + $columnOffset + $k)) {
+                        $m[$baseMatrixSize - 1 - $i * 2 - $j][$baseMatrixSize - 1 - $i * 2 - $k] = true;
+                    }
+                    // Left side
+                    if (self::bitAt($messageBits, $rowOffset + $rowSize * 6 + $columnOffset + $k)) {
+                        $m[$i * 2 + $k][$baseMatrixSize - 1 - $i * 2 - $j] = true;
+                    }
+                }
             }
+            $rowOffset += $rowSize * 8;
         }
 
-        // 2. Mode message — build 8 information bits + RS over GF(16).
-        $modeBits = $this->buildModeMessage($layers);
-        // Place 28 mode bits + 4 orientation cells in 11×11 ring around 9×9.
-        $this->placeModeMessage($m, $modeBits, $center);
+        // 2. Draw mode message (28 bits for compact) в 11×11 ring around 9×9 bullseye.
+        $this->drawCompactModeMessage($m, $center, $modeBits);
 
-        // 3. Data spiral around 11×11 core.
-        $this->placeDataSpiral($m, $bitStream, $center, $layers);
+        // 3. Draw bullseye (compact: size=5, drawn AFTER data + mode).
+        $this->drawBullsEye($m, $center, 5);
 
         return $m;
     }
 
-    /**
-     * Build the 28-bit mode message for compact:
-     *  - 2 bits: layers - 1 (so 1L=00, 2L=01, 3L=10, 4L=11)
-     *  - 6 bits: dataCodewords - 1
-     *  - 20 bits: RS ECC over GF(16), generator built on the fly
-     *
-     * Returns 28-bit string MSB-first.
-     */
-    private function buildModeMessage(int $layers): string
+    private static function bitAt(string $bits, int $i): bool
     {
-        $info = (($layers - 1) << 6) | ($this->dataCodewords - 1);
-        $infoBits = str_pad(decbin($info), 8, '0', STR_PAD_LEFT);
-        // 2 codewords × 4 bits = 8 bits info.
-        $infoCw = [bindec(substr($infoBits, 0, 4)), bindec(substr($infoBits, 4, 4))];
-        // 5 ECC codewords for compact (per ISO §6.3.1).
-        $eccCw = self::reedSolomonEncode($infoCw, 5, 4, 0x13); // GF(16) x^4+x+1.
-        $allCw = array_merge($infoCw, $eccCw);
-        $bits = '';
-        foreach ($allCw as $cw) {
-            $bits .= str_pad(decbin($cw), 4, '0', STR_PAD_LEFT);
-        }
-
-        return $bits;
+        return isset($bits[$i]) && $bits[$i] === '1';
     }
 
     /**
-     * Place 28 mode message bits in the 11×11 ring around the 9×9 bullseye.
-     *
-     * Compact Aztec mode message layout (per ISO §6.3.2):
-     *  - 4 sides of the ring, 7 mode bits per side
-     *  - Reading direction: top→right→bottom→left, each side left-to-right
-     *    либо top-to-bottom
-     *  - Center column/row of each side is скипnut (orientation marker позиции
-     *    в этом упрощённом impl — фиксированные corner cells)
-     *
-     * @param  list<list<bool>>  $m
+     * Draw concentric square frames at distance 0, 2, 4, ..., size-1 from
+     * center. Plus 6 fixed orientation cells at 11×11 corners (compact).
      */
-    private function placeModeMessage(array &$m, string $bits, int $center): void
+    private function drawBullsEye(array &$m, int $center, int $size): void
     {
-        // Inner core extends from (center-5, center-5) to (center+5, center+5) = 11×11.
-        $top = $center - 5;
-        $left = $center - 5;
-        $bot = $center + 5;
-        $right = $center + 5;
-
-        // Orientation: place 4 corner cells of 11×11.
-        // Standard compact orientation pattern (Acrobat-compatible):
-        //   TL: black, TR: black, BR: white, BL: black
-        $m[$top][$left] = true;
-        $m[$top][$right] = true;
-        $m[$bot][$right] = false;
-        $m[$bot][$left] = true;
-
-        $idx = 0;
-        // Top side: row=top, cols from left+1 to right-1 (7 cells, skipping corners).
-        for ($c = $left + 1; $c < $right; $c++) {
-            $m[$top][$c] = ($bits[$idx++] === '1');
-        }
-        // Right side: col=right, rows from top+1 to bot-1.
-        for ($r = $top + 1; $r < $bot; $r++) {
-            $m[$r][$right] = ($bits[$idx++] === '1');
-        }
-        // Bottom side: row=bot, cols from right-1 down to left+1 (reverse).
-        for ($c = $right - 1; $c > $left; $c--) {
-            if ($idx < 28) {
-                $m[$bot][$c] = ($bits[$idx++] === '1');
+        for ($i = 0; $i < $size; $i += 2) {
+            for ($j = $center - $i; $j <= $center + $i; $j++) {
+                $m[$center - $i][$j] = true;
+                $m[$center + $i][$j] = true;
+                $m[$j][$center - $i] = true;
+                $m[$j][$center + $i] = true;
             }
         }
-        // Left side: col=left, rows from bot-1 up to top+1 (reverse).
-        for ($r = $bot - 1; $r > $top; $r--) {
-            if ($idx < 28) {
-                $m[$r][$left] = ($bits[$idx++] === '1');
-            }
-        }
+        // 6 orientation cells (compact-specific positions).
+        // Note: ZXing uses (col, row) but my matrix is [row][col].
+        $m[$center - $size][$center - $size] = true;
+        $m[$center - $size][$center - $size + 1] = true;
+        $m[$center - $size + 1][$center - $size] = true;
+        $m[$center - $size][$center + $size] = true;
+        $m[$center - $size + 1][$center + $size] = true;
+        $m[$center + $size - 1][$center + $size] = true;
     }
 
     /**
-     * Place data spiral around the 11×11 core. Each layer is 2 modules thick.
-     *
-     * Per ISO §6.5, data fills in 2-cell pairs ("domino" patterns) in a
-     * specific spiraling order. Simplified implementation: fill each layer
-     * ring in CCW direction, 2 cells deep per step.
-     *
-     * @param  list<list<bool>>  $m
+     * Place 28-bit compact mode message в 11×11 ring around 9×9 bullseye.
+     * Top edge: bits 0..6 at cols c-3..c+3, row c-5.
+     * Right edge: bits 7..13 at col c+5, rows c-3..c+3.
+     * Bottom edge: bits 14..20 at cols c+3..c-3 (reverse), row c+5.
+     * Left edge: bits 21..27 at col c-5, rows c+3..c-3 (reverse).
      */
-    private function placeDataSpiral(array &$m, string $bits, int $center, int $layers): void
+    private function drawCompactModeMessage(array &$m, int $center, string $modeBits): void
     {
-        $bitIdx = 0;
-        $n = strlen($bits);
-        // Layer L wraps inner (innerHalf-block) с outer extent innerHalf+2.
-        // Sides are partitioned так чтобы не overlap (right covers full height,
-        // others exclude corners уже occupied by right/bottom).
-        for ($L = 1; $L <= $layers; $L++) {
-            $innerHalf = 5 + 2 * ($L - 1);
-            $outerHalf = $innerHalf + 2;
-
-            // Right side (2 cols, full height): rows 0..size-1, cols innerHalf+1, innerHalf+2.
-            for ($r = $center - $outerHalf; $r <= $center + $outerHalf; $r++) {
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$r][$center + $innerHalf + 1] = ($bits[$bitIdx++] === '1');
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$r][$center + $innerHalf + 2] = ($bits[$bitIdx++] === '1');
+        for ($i = 0; $i < 7; $i++) {
+            $offset = $center - 3 + $i;
+            if (self::bitAt($modeBits, $i)) {
+                $m[$center - 5][$offset] = true;
             }
-            // Bottom side (2 rows, excl right corners): rows innerHalf+1, +2; cols -outerHalf..innerHalf.
-            for ($c = $center + $innerHalf; $c >= $center - $outerHalf; $c--) {
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$center + $innerHalf + 1][$c] = ($bits[$bitIdx++] === '1');
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$center + $innerHalf + 2][$c] = ($bits[$bitIdx++] === '1');
+            if (self::bitAt($modeBits, $i + 7)) {
+                $m[$offset][$center + 5] = true;
             }
-            // Left side (2 cols, excl bottom corners): rows -outerHalf..innerHalf; cols -innerHalf-1, -2.
-            for ($r = $center + $innerHalf; $r >= $center - $outerHalf; $r--) {
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$r][$center - $innerHalf - 1] = ($bits[$bitIdx++] === '1');
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$r][$center - $innerHalf - 2] = ($bits[$bitIdx++] === '1');
+            if (self::bitAt($modeBits, 20 - $i)) {
+                $m[$center + 5][$offset] = true;
             }
-            // Top side (2 rows, excl left+right corners): rows -innerHalf-1, -2; cols -innerHalf..innerHalf.
-            for ($c = $center - $innerHalf; $c <= $center + $innerHalf; $c++) {
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$center - $innerHalf - 1][$c] = ($bits[$bitIdx++] === '1');
-                if ($bitIdx >= $n) {
-                    return;
-                }
-                $m[$center - $innerHalf - 2][$c] = ($bits[$bitIdx++] === '1');
+            if (self::bitAt($modeBits, 27 - $i)) {
+                $m[$offset][$center - 5] = true;
             }
         }
     }
