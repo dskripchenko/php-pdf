@@ -714,6 +714,13 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   Module widths 1/3/2 (narrow bar / wide bar / inter-bar space). Max 16 wide
   bars для value=131070 = 78 modules. `BarcodeFormat::Pharmacode` + Engine
   dispatch (string→int conversion).
+- ~~Code 11 (USS Code 11) — telecom labeling~~ ✅ **Phase 209 closed**.
+  11 chars (0-9 + `-`). 5 elements/char (3 bars + 2 spaces) с 1 или 2 wide
+  elements @ 2:1 ratio = 6 or 7 modules per char. Implicit `*` start/stop
+  + 1-narrow inter-char gap. Optional Mod-11 check digits: single C
+  (weight cycle 1..10) via `withCheckDigit: true`, or dual C+K (C weight
+  1..10, K weight 1..9) via `doubleCheck: true`. `BarcodeFormat::Code11`
+  + Engine dispatch.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.

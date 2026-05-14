@@ -23,6 +23,7 @@ namespace Dskripchenko\PhpPdf\Element;
 enum BarcodeFormat: string
 {
     case Code128 = 'code128';
+    case Code11 = 'code11';   // Phase 209: numeric+dash, telecom labeling.
     case Code39 = 'code39';   // Phase 202: alphanumeric self-checking variable-length.
     case Code93 = 'code93';   // Phase 205: denser Code 39 successor с dual Mod-47 check.
     case Codabar = 'codabar'; // Phase 204: NW-7 numeric+punct, libraries/FedEx/blood banks.

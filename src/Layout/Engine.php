@@ -2329,6 +2329,11 @@ final class Engine
                 (new \Dskripchenko\PhpPdf\Barcode\Code128Encoder($bc->value))->modulesWithQuietZone(10),
                 $bc->value,
             ],
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::Code11 => (function () use ($bc): array {
+                $e = new \Dskripchenko\PhpPdf\Barcode\Code11Encoder($bc->value);
+
+                return [$e->modulesWithQuietZone(10), $e->canonical];
+            })(),
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::Code39 => (function () use ($bc): array {
                 $e = new \Dskripchenko\PhpPdf\Barcode\Code39Encoder($bc->value);
 
