@@ -144,7 +144,27 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 153 Cross-row border "thicker wins" priority в table collapse mode
    (renderRow tracks prevRowBottomByCol ref-param; top edge of current
    row compares с stored bottom from prior row through moreProminent;
-   per-cell columnSpan propagation. Resets на page-break header repeat).
+   per-cell columnSpan propagation. Resets на page-break header repeat),
+ - 154 LRU cache в PdfFont::decodeUtf8 (Phase 144 reph + Phase 137 Indic
+   shaping pipeline переизмерялись на каждом widthPt call → OOM),
+ - 155 forcePageBreak guard для header/footer rendering (re-entrance
+   detection через LayoutContext::inHeaderFooterRender flag),
+ - 156 Adaptive header/footer zones — push body topY вниз если header
+   overflowит default margins.topPt (mpdf-style auto-margin),
+ - 157 Watermark post-pass — рендер ПОВЕРХ body content через
+   sectionPageRanges tracking + per-page late draw (mpdf-style stamp),
+ - 158 TJ-array grouping — batch consecutive runs в один showText
+   (-5.4% output, -3.2% wall time на bench template 13),
+ - 160 ContentStream gstate dedup — drop q/Q wrap + skip duplicate `rg`
+   ops (-2.9% uncompressed; ~0% compressed, Flate covers),
+ - 164 Code 128 auto-mode switching A/B/C — runs split + CODE_X
+   transitions (mixed-content compress: -16..25% modules),
+ - 165 GS1-128 Code128Encoder::gs1() factory + FNC1 + AI parsing,
+ - 166 PieChart cubic Bezier arcs вместо polygon (sub-arcs ≤90°, k=4/3·tan(θ/4)·r),
+ - 167 PieChart exploded slices — radial offset per slice через
+   slices[].explode = bool|float,
+ - 168 PieChart perimeter labels с leader lines (showPerimeterLabels +
+   minLabelAngleDeg).
 
 ---
 
@@ -572,9 +592,8 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - **PDF417 Macro PDF417** — multi-symbol concatenation.
 - **Aztec Rune mode** — single-character symbol variant.
 - **Aztec Structured Append / ECI / FLG(n)** — extended channel interpretation.
-- **Code 128 auto-mode switching** — automatic optimal A/B/C selection per
-  substring для shortest encoding.
-- **Code 128 GS1-128** — Application Identifiers (FNC1 + AI parsing).
+- ~~Code 128 auto-mode switching~~ ✅ **Phase 164 closed**.
+- ~~Code 128 GS1-128~~ ✅ **Phase 165 closed**.
 
 ### Layout / typography
 
@@ -585,11 +604,9 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   for visual alignment.
 - **LineBreaker tab-stops** — explicit tab positioning beyond simple horizontal
   advance.
-- **PieChart true Bezier arc rendering** — currently polygon approximation
-  (60 segments). Cubic Bezier approximation для precise arcs.
-- **PieChart exploded slices** — radial offset per slice для emphasis.
-- **PieChart perimeter labels** — label placement along arc midpoints
-  с leader lines для small slices.
+- ~~PieChart true Bezier arc rendering~~ ✅ **Phase 166 closed**.
+- ~~PieChart exploded slices~~ ✅ **Phase 167 closed**.
+- ~~PieChart perimeter labels~~ ✅ **Phase 168 closed**.
 - **MathExpression nested fractions в superscripts** — multi-level recursion
   в layout engine.
 - **MathExpression custom font / styling** — currently single hardcoded font.
