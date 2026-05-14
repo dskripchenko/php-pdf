@@ -100,6 +100,56 @@ final class AztecEncoder
     /** @var list<list<bool>> */
     private array $matrix;
 
+    /**
+     * Phase 221: Aztec Structured Append (ISO 24778 §8.4).
+     *
+     * Builds multi-symbol concatenated set. Header prefixed к data:
+     *   " {idx_letter}{cnt_letter}{data}"
+     * or with fileID:
+     *   "{fileID} {idx_letter}{cnt_letter}{data}"
+     *
+     * Decoder concatenates data из all symbols in position order, recognizes
+     * structured append через leading-space-or-fileID-space prefix.
+     *
+     * @param  string  $data  Data segment для this symbol.
+     * @param  int  $position  1-based position в set (1..26).
+     * @param  int  $total  Total symbols in set (1..26).
+     * @param  string|null  $fileId  Optional alphanumeric ID (max 24 chars,
+     *                                shared across all symbols в set).
+     */
+    public static function structuredAppend(
+        string $data,
+        int $position,
+        int $total,
+        ?string $fileId = null,
+        int $minEccPercent = 23,
+    ): self {
+        if ($position < 1 || $position > 26) {
+            throw new \InvalidArgumentException('Aztec Structured Append position must be 1..26');
+        }
+        if ($total < 1 || $total > 26) {
+            throw new \InvalidArgumentException('Aztec Structured Append total must be 1..26');
+        }
+        if ($position > $total) {
+            throw new \InvalidArgumentException("Position $position cannot exceed total $total");
+        }
+        if ($fileId !== null) {
+            if (strlen($fileId) > 24) {
+                throw new \InvalidArgumentException('Aztec Structured Append fileID max 24 chars');
+            }
+            if (! preg_match('/^[A-Z0-9]+$/', $fileId)) {
+                throw new \InvalidArgumentException('Aztec Structured Append fileID must be uppercase alphanumeric');
+            }
+        }
+
+        // Format header.
+        $idxLetter = chr(ord('A') + $position - 1);
+        $cntLetter = chr(ord('A') + $total - 1);
+        $header = ($fileId !== null ? $fileId : '').' '.$idxLetter.$cntLetter;
+
+        return new self($header.$data, $minEccPercent);
+    }
+
     public function __construct(public readonly string $data, int $minEccPercent = 23)
     {
         if ($data === '') {
