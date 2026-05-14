@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 124 фазы закрыты (1137 + 194 printable = 1331 тест).
+**Текущий статус:** v1.1-dev — 125 фаз закрыты (1141 + 194 printable = 1335 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-126 closed (102 фазы):
+**v1.1 progress:** 25-127 closed (103 фазы):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -91,7 +91,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 125 Aztec Compact 2D barcode (1-4 layers, 15×15..27×27,
    ZXing-verified),
  - 126 Aztec Full mode (5-32 layers, up to 151×151, alignment grid,
-   7-ring bullseye, GF(1024)/(4096), ZXing-verified L9/L13/L26).
+   7-ring bullseye, GF(1024)/(4096), ZXing-verified L9/L13/L26),
+ - 127 DataMatrix full ECC 200 sizes (29 sizes incl. multi-region 32×32+,
+   rectangular 8×18..16×48, interleaved RS blocks, ZXing-verified).
 
 ---
 
@@ -343,7 +345,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   layout (alignmentMap + 7-ring bullseye + 40-bit mode message + alignment
   grid lines + GF(1024)/GF(4096) для word sizes 10/12). ZXing CLI decoder
   verified across all 4 word sizes (L1/L3/L9/L26).
-- DataMatrix rectangular + larger sizes (32×32+) — отложен.
+- ~~DataMatrix rectangular + larger sizes (32×32+)~~ ✅ **Phase 127 closed** (9704738).
+  Ported ZXing DefaultPlacement + ErrorCorrection + SymbolInfo. 29 sizes
+  (9 small + 6 rect + 14 multi-region). ZXing decoder verified 12×12,
+  36×36, 52×52 interleaved RS, 80×80 16-region.
 - QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
   auto best-mask selection.
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
