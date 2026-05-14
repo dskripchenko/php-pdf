@@ -136,12 +136,47 @@ final class Writer
     }
 
     /**
-     * Сериализует весь PDF. Бросает исключение если есть unfilled-объекты.
+     * Сериализует весь PDF в string. Бросает исключение если есть unfilled-объекты.
+     *
+     * Internally calls {@see toStream()} via php://memory.
      */
     public function toBytes(): string
     {
+        $mem = fopen('php://memory', 'r+b');
+        if ($mem === false) {
+            throw new \RuntimeException('Failed to open php://memory stream');
+        }
+        try {
+            $this->toStream($mem);
+            rewind($mem);
+            $bytes = stream_get_contents($mem);
+            if ($bytes === false) {
+                throw new \RuntimeException('Failed to read memory stream');
+            }
+
+            return $bytes;
+        } finally {
+            fclose($mem);
+        }
+    }
+
+    /**
+     * Phase 129: streaming output. Writes PDF incrementally к $stream resource,
+     * avoiding accumulating final document в string memory.
+     *
+     * Use case: writing large PDFs к file/HTTP response без full-document
+     * memory overhead.
+     *
+     * @param  resource  $stream  any writable stream resource
+     * @return int  total bytes written
+     */
+    public function toStream($stream): int
+    {
+        if (! is_resource($stream) || get_resource_type($stream) !== 'stream') {
+            throw new \InvalidArgumentException('toStream requires a stream resource');
+        }
         if ($this->rootId === null) {
-            throw new \LogicException('Catalog root not set; call setRoot() before toBytes().');
+            throw new \LogicException('Catalog root not set; call setRoot() before toStream().');
         }
         foreach ($this->objects as $id => $body) {
             if ($body === null) {
@@ -149,59 +184,101 @@ final class Writer
             }
         }
 
-        $out = '%PDF-'.$this->version.self::LINE_ENDING;
-        // Comment-line с high-byte symbols — рекомендация ISO 32000-1 §7.5.2.
-        $out .= "%\xE2\xE3\xCF\xD3".self::LINE_ENDING;
+        // PKCS#7 signing requires post-emit byte patching (locate
+        // /ByteRange + /Contents placeholders, sign hash, splice in
+        // signature). For streaming, this means buffering все output
+        // until signature patch is applied. Use memory stream когда
+        // signing is requested.
+        if ($this->signature !== null) {
+            $bytes = $this->buildBytes();
+            $bytes = $this->applyPkcs7Signature($bytes);
 
-        // Object table. Записываем offsets для xref.
+            return self::writeAll($stream, $bytes);
+        }
+
+        $written = 0;
+        $written += self::writeAll($stream, '%PDF-' . $this->version . self::LINE_ENDING);
+        $written += self::writeAll($stream, "%\xE2\xE3\xCF\xD3" . self::LINE_ENDING);
+
+        // Emit objects incrementally; record offsets for xref.
         $offsets = [];
         foreach ($this->objects as $id => $body) {
-            // Phase 41: encrypt streams (НЕ применяется к Encrypt object'у
-            // самому — он содержит ключи в clear).
             if ($this->encryption !== null && $id !== $this->encryptId) {
                 $body = $this->encryptStreamsInBody($body, $id);
             }
-            $offsets[$id] = strlen($out);
-            $out .= $id.' 0 obj'.self::LINE_ENDING;
-            $out .= $body.self::LINE_ENDING;
-            $out .= 'endobj'.self::LINE_ENDING;
+            $offsets[$id] = $written;
+            $written += self::writeAll($stream, $id . ' 0 obj' . self::LINE_ENDING);
+            $written += self::writeAll($stream, $body . self::LINE_ENDING);
+            $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
         }
 
-        // xref-таблица.
-        $xrefOffset = strlen($out);
-        $count = $this->nextId; // объектов: 1..N; xref включает 0-й (head of free list)
-        $out .= 'xref'.self::LINE_ENDING;
-        $out .= '0 '.$count.self::LINE_ENDING;
-        // Entry 0: free, generation 65535. Стандартный head.
-        $out .= '0000000000 65535 f '.self::LINE_ENDING;
+        // xref table.
+        $xrefOffset = $written;
+        $count = $this->nextId;
+        $written += self::writeAll($stream, 'xref' . self::LINE_ENDING);
+        $written += self::writeAll($stream, '0 ' . $count . self::LINE_ENDING);
+        $written += self::writeAll($stream, '0000000000 65535 f ' . self::LINE_ENDING);
         for ($id = 1; $id < $count; $id++) {
-            $offset = $offsets[$id];
-            $out .= sprintf("%010d 00000 n \n", $offset);
+            $written += self::writeAll($stream, sprintf("%010d 00000 n \n", $offsets[$id]));
         }
 
         // Trailer.
-        $out .= 'trailer'.self::LINE_ENDING;
-        $infoPart = $this->infoId !== null ? ' /Info '.$this->infoId.' 0 R' : '';
+        $written += self::writeAll($stream, 'trailer' . self::LINE_ENDING);
+        $infoPart = $this->infoId !== null ? ' /Info ' . $this->infoId . ' 0 R' : '';
         $encryptPart = '';
         $idPart = '';
         if ($this->encryption !== null && $this->encryptId !== null) {
-            $encryptPart = ' /Encrypt '.$this->encryptId.' 0 R';
+            $encryptPart = ' /Encrypt ' . $this->encryptId . ' 0 R';
             $idHex = bin2hex($this->encryption->fileId);
-            // ID array — 16 bytes твой fileId; repeat для permanent + current.
-            $idPart = ' /ID [<'.$idHex.'> <'.$idHex.'>]';
+            $idPart = ' /ID [<' . $idHex . '> <' . $idHex . '>]';
         }
-        $out .= '<< /Size '.$count.' /Root '.$this->rootId.' 0 R'.$infoPart.$encryptPart.$idPart.' >>'.self::LINE_ENDING;
-        $out .= 'startxref'.self::LINE_ENDING;
-        $out .= $xrefOffset.self::LINE_ENDING;
-        $out .= '%%EOF'.self::LINE_ENDING;
+        $written += self::writeAll($stream, '<< /Size ' . $count . ' /Root ' . $this->rootId . ' 0 R' . $infoPart . $encryptPart . $idPart . ' >>' . self::LINE_ENDING);
+        $written += self::writeAll($stream, 'startxref' . self::LINE_ENDING);
+        $written += self::writeAll($stream, $xrefOffset . self::LINE_ENDING);
+        $written += self::writeAll($stream, '%%EOF' . self::LINE_ENDING);
 
-        // Phase 108: post-emit patch — fill /ByteRange и /Contents
-        // placeholders, sign hash через PKCS#7.
-        if ($this->signature !== null) {
-            $out = $this->applyPkcs7Signature($out);
+        return $written;
+    }
+
+    /**
+     * Internal: build PDF в memory string без signing. Used by signing
+     * path which needs full bytes для post-emit patching.
+     */
+    private function buildBytes(): string
+    {
+        $mem = fopen('php://memory', 'r+b');
+        if ($mem === false) {
+            throw new \RuntimeException('Failed to open memory stream');
+        }
+        try {
+            $hadSig = $this->signature;
+            $this->signature = null; // temporarily disable to avoid recursion
+            $this->toStream($mem);
+            $this->signature = $hadSig;
+            rewind($mem);
+
+            return (string) stream_get_contents($mem);
+        } finally {
+            fclose($mem);
+        }
+    }
+
+    /**
+     * @param  resource  $stream
+     */
+    private static function writeAll($stream, string $data): int
+    {
+        $total = strlen($data);
+        $written = 0;
+        while ($written < $total) {
+            $w = fwrite($stream, substr($data, $written));
+            if ($w === false || $w === 0) {
+                throw new \RuntimeException('Stream write failed at offset ' . $written);
+            }
+            $written += $w;
         }
 
-        return $out;
+        return $total;
     }
 
     /**

@@ -562,6 +562,15 @@ final class Document
      */
     public function toBytes(): string
     {
+        return $this->buildWriter()->toBytes();
+    }
+
+    /**
+     * Phase 129: build configured Writer (ready to emit). Extracted из
+     * toBytes() для shared use с toStream().
+     */
+    private function buildWriter(): Writer
+    {
         if ($this->pages === []) {
             // Empty document — add blank A4 page чтобы PDF был валидным
             // (PDF спецификация требует ≥ 1 page в page tree).
@@ -1422,21 +1431,46 @@ final class Document
             $writer->setEncryption($enc, $encryptId);
         }
 
-        return $writer->toBytes();
+        return $writer;
     }
 
     /**
      * Сериализует в файл. Возвращает количество записанных байт.
+     *
+     * Phase 129: использует streaming Writer::toStream для избежания
+     * full-document копии в string memory.
      */
     public function toFile(string $path): int
     {
-        $bytes = $this->toBytes();
-        $written = file_put_contents($path, $bytes);
-        if ($written === false) {
-            throw new \RuntimeException('Failed to write PDF to '.$path);
+        $fp = fopen($path, 'wb');
+        if ($fp === false) {
+            throw new \RuntimeException('Failed to open ' . $path . ' for writing');
         }
+        try {
+            return $this->toStream($fp);
+        } finally {
+            fclose($fp);
+        }
+    }
 
-        return $written;
+    /**
+     * Phase 129: Streaming PDF output к external stream resource.
+     *
+     * Use case: large PDFs (тысячи страниц), HTTP response без full
+     * document in memory, file output без double buffering.
+     *
+     * Currently emits final-document к stream (objects accumulated в
+     * memory as before, но final assembly streamed). Полный per-object
+     * streaming требует deeper API rewrite — отложен.
+     *
+     * @param  resource  $stream
+     * @return int  bytes written
+     */
+    public function toStream($stream): int
+    {
+        $writer = $this->buildWriter();
+
+        return $writer->toStream($stream);
     }
 
     /**
