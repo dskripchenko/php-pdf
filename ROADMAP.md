@@ -37,8 +37,13 @@ Production-ready. Active backlog: v1.6+ scope items.
   access control. Significant Encryption class refactor.
 - **Footnote true page-bottom positioning** — per-page reserved zone
   (currently inline at end of body). Multi-pass layout architecture needed.
-- **LineBreaker Knuth-Plass optimal** — boxes-glues-penalties с backtracking
-  для typographically optimal paragraph breaking.
+- ~~LineBreaker Knuth-Plass optimal~~ ✅ **Phase 218 closed** (library class).
+  `KnuthPlassLineBreaker` доступен как stand-alone utility с same `wrap()`
+  interface как greedy `LineBreaker`. DP-based optimal break-point search
+  + graceful fallback к greedy для oversized words.
+  *Не интегрирован в Engine emitLine()* — это потребует полной replacement
+  Engine's inline line-breaking algorithm (substantial refactor с visual
+  regression risk). User instantiates manually if needed.
 - **Per-object content stream incremental emission** — currently each Page
   content stream materializes fully before emission. Deeper API rewrite
   для streaming memory efficiency.

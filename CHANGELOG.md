@@ -2,9 +2,9 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-217
+## v1.6.0-dev (unreleased) — Phases 214-218
 
-PDF output optimization + top-level API integration.
+PDF output optimization + top-level API integration + typography.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
@@ -18,7 +18,13 @@ PDF output optimization + top-level API integration.
 - Phase 217: declarative encryption/signing/PDF-A via constructor params.
   New `EncryptionParams` VO + Engine auto-tagged for PDF/A-1a.
 
-**Tests:** 1711 → 1719 (+36 new tests across batch).
+### Typography
+- Phase 218: `KnuthPlassLineBreaker` — classic optimal line-breaking
+  algorithm (box-glue-penalty model + DP). Stand-alone library utility;
+  не интегрирован в Engine default (substantial inline emitLine() refactor
+  required + visual regression testing).
+
+**Tests:** 1683 → 1732 (+49 new tests across batch).
 
 ## v1.5.0 — 2026-05-14
 
