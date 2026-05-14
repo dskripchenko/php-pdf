@@ -15,11 +15,16 @@ namespace Dskripchenko\PhpPdf\Text;
  *  - I rules (I1-I2, level assignment)
  *  - L2 reordering (reverse RTL runs)
  *
- * Не реализовано (X rules + L rules beyond L2):
- *  - X1-X9 explicit embedding/override (LRE/RLE/PDF/LRO/RLO bidi controls)
- *  - X10 isolate processing (LRI/RLI/FSI/PDI)
- *  - L3 (mirrored chars) — bracket pair matching skipped
- *  - L4 (combining marks) — handled implicitly via NSM class
+ * Phase 148 additions:
+ *  - X9 filter: drop bidi formatting characters (LRE/RLE/LRO/RLO/PDF +
+ *    LRI/RLI/FSI/PDI) before processing — these don't render
+ *  - L3 mirroring: paired bracket/punctuation chars в RTL runs swapped
+ *    с их Unicode mirror counterparts
+ *
+ * Не реализовано:
+ *  - X1-X8 stack-based explicit embedding/override level tracking — rarely
+ *    used в plain text; full implementation requires ≤125-deep level stack
+ *  - L4 (combining marks reordering) — handled implicitly via NSM class
  *
  * Use case: mixed Latin + Arabic/Hebrew text где исходная Bidi
  * algorithm требуется для correct paragraph layout. Pure unidirectional
@@ -82,6 +87,13 @@ final class BidiAlgorithm
         if ($cps === []) {
             return [];
         }
+        // Phase 148: X9 — drop Bidi formatting characters (LRE/RLE/LRO/RLO/PDF
+        // + LRI/RLI/FSI/PDI) before processing. Full X1-X8 stack-based level
+        // override is deferred — практически embeddings rare в plain text.
+        $cps = self::filterFormattingChars($cps);
+        if ($cps === []) {
+            return [];
+        }
         $types = array_map([self::class, 'bidiClass'], $cps);
         $paragraphLevel ??= self::detectParagraphLevel($types);
 
@@ -90,8 +102,93 @@ final class BidiAlgorithm
         self::applyN($resolved, $paragraphLevel);
         $levels = self::applyI($resolved, $paragraphLevel);
 
+        // Phase 148: L3 mirroring BEFORE L2 reorder — mirror chars at odd
+        // (RTL) levels using levels still aligned к original cps.
+        $cps = self::applyL3($cps, $levels);
+
         return self::applyL2($cps, $levels);
     }
+
+    /**
+     * Phase 148: X9 filter. Bidi formatting characters don't appear в
+     * rendered output (UAX 9 §3.3, после L1).
+     *
+     * @param  list<int>  $cps
+     * @return list<int>
+     */
+    private static function filterFormattingChars(array $cps): array
+    {
+        $out = [];
+        foreach ($cps as $cp) {
+            if ($cp >= 0x202A && $cp <= 0x202E) {
+                continue; // LRE/RLE/PDF/LRO/RLO
+            }
+            if ($cp >= 0x2066 && $cp <= 0x2069) {
+                continue; // LRI/RLI/FSI/PDI
+            }
+            $out[] = $cp;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Phase 148: L3 mirroring. Применяется ДО L2 reorder пока levels всё
+     * ещё parallel к input cps. Для каждой позиции at odd level (RTL),
+     * если char имеет mirror counterpart — заменить им.
+     *
+     * @param  list<int>  $cps
+     * @param  list<int>  $levels   levels parallel к input cps
+     * @return list<int>
+     */
+    private static function applyL3(array $cps, array $levels): array
+    {
+        $out = $cps;
+        $n = count($out);
+        for ($i = 0; $i < $n; $i++) {
+            if (($levels[$i] & 1) === 0) {
+                continue; // even level = LTR
+            }
+            $mirror = self::MIRROR_PAIRS[$out[$i]] ?? null;
+            if ($mirror !== null) {
+                $out[$i] = $mirror;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * BidiMirroring subset — most common ASCII brackets + Unicode brackets.
+     *
+     * @var array<int, int>
+     */
+    private const MIRROR_PAIRS = [
+        0x0028 => 0x0029,  // ( ↔ )
+        0x0029 => 0x0028,
+        0x003C => 0x003E,  // < ↔ >
+        0x003E => 0x003C,
+        0x005B => 0x005D,  // [ ↔ ]
+        0x005D => 0x005B,
+        0x007B => 0x007D,  // { ↔ }
+        0x007D => 0x007B,
+        0x00AB => 0x00BB,  // « ↔ »
+        0x00BB => 0x00AB,
+        0x2039 => 0x203A,  // ‹ ↔ ›
+        0x203A => 0x2039,
+        0x2045 => 0x2046,  // ⁅ ↔ ⁆
+        0x2046 => 0x2045,
+        0x2329 => 0x232A,  // 〈 ↔ 〉
+        0x232A => 0x2329,
+        0x3008 => 0x3009,  // 〈 ↔ 〉
+        0x3009 => 0x3008,
+        0x300A => 0x300B,  // 《 ↔ 》
+        0x300B => 0x300A,
+        0x300C => 0x300D,  // 「 ↔ 」
+        0x300D => 0x300C,
+        0x300E => 0x300F,  // 『 ↔ 』
+        0x300F => 0x300E,
+    ];
 
     /**
      * Determine Bidi class для codepoint via range tables. Subset of UCD —

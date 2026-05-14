@@ -151,4 +151,65 @@ final class BidiAlgorithmTest extends TestCase
         $out = BidiAlgorithm::reorder('Hello!');
         self::assertSame('Hello!', $this->toUtf8($out));
     }
+
+    // -------- Phase 148: X9 filter + L3 mirroring --------
+
+    #[Test]
+    public function x9_filters_lre_rle_pdf(): void
+    {
+        // "A" + LRE (U+202A) + "B" + PDF (U+202C) + "C"
+        $cps = [0x41, 0x202A, 0x42, 0x202C, 0x43];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        // Formatting chars removed — only ABC remain.
+        self::assertSame([0x41, 0x42, 0x43], $out);
+    }
+
+    #[Test]
+    public function x9_filters_isolates(): void
+    {
+        // LRI (U+2066), RLI (U+2067), FSI (U+2068), PDI (U+2069)
+        $cps = [0x41, 0x2066, 0x42, 0x2069, 0x43];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x41, 0x42, 0x43], $out);
+    }
+
+    #[Test]
+    public function l3_mirroring_parens_in_rtl(): void
+    {
+        // Hebrew "א(ב)" — paren в RTL context should mirror.
+        // Logical: א + ( + ב + )
+        // After L2 reverse: ) ב ( א
+        // After L3 mirror: ( ב ) א
+        $cps = [0x05D0, 0x28, 0x05D1, 0x29];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x28, 0x05D1, 0x29, 0x05D0], $out);
+    }
+
+    #[Test]
+    public function l3_no_mirror_in_ltr(): void
+    {
+        // "A(B)C" — pure LTR, parens not mirrored.
+        $cps = [0x41, 0x28, 0x42, 0x29, 0x43];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x41, 0x28, 0x42, 0x29, 0x43], $out);
+    }
+
+    #[Test]
+    public function l3_mirroring_brackets(): void
+    {
+        // Hebrew + brackets: א[ב]
+        $cps = [0x05D0, 0x5B, 0x05D1, 0x5D];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        // Reverse, then mirror: ] ב [ א → [ ב ] א
+        self::assertSame([0x5B, 0x05D1, 0x5D, 0x05D0], $out);
+    }
+
+    #[Test]
+    public function l3_no_mirror_outside_rtl_run(): void
+    {
+        // "(A)" — LTR text in parens, no mirroring.
+        $cps = [0x28, 0x41, 0x29];
+        $out = BidiAlgorithm::reorderCodepoints($cps);
+        self::assertSame([0x28, 0x41, 0x29], $out);
+    }
 }
