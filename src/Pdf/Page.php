@@ -927,6 +927,60 @@ final class Page
     }
 
     /**
+     * Phase 113: named navigation link — click triggers reader action.
+     *
+     * @param  string  $action  one of: NextPage, PrevPage, FirstPage, LastPage,
+     *                          Find, Print, SaveAs, GoBack, GoForward.
+     */
+    public function addNamedActionLink(float $x, float $y, float $width, float $height, string $action): self
+    {
+        $valid = ['NextPage', 'PrevPage', 'FirstPage', 'LastPage', 'Find', 'Print', 'SaveAs', 'GoBack', 'GoForward'];
+        if (! in_array($action, $valid, true)) {
+            throw new \InvalidArgumentException('Invalid named action: ' . $action);
+        }
+        $this->linkAnnotations[] = [
+            'kind' => 'named',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'target' => $action,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Phase 113: JavaScript link — click executes $script.
+     */
+    public function addJavaScriptLink(float $x, float $y, float $width, float $height, string $script): self
+    {
+        $this->linkAnnotations[] = [
+            'kind' => 'javascript',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'target' => $script,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Phase 113: launch link — click opens external file (e.g. companion .docx).
+     *
+     * Note: most PDF readers disable launch actions by default for security.
+     */
+    public function addLaunchLink(float $x, float $y, float $width, float $height, string $filePath): self
+    {
+        $this->linkAnnotations[] = [
+            'kind' => 'launch',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'target' => $filePath,
+        ];
+
+        return $this;
+    }
+
+    /**
      * @return list<array{kind: 'uri'|'internal', x1: float, y1: float, x2: float, y2: float, target: string}>
      *
      * @internal

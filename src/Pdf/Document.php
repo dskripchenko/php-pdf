@@ -777,21 +777,38 @@ final class Document
                     $this->fmt($ann['x1']), $this->fmt($ann['y1']),
                     $this->fmt($ann['x2']), $this->fmt($ann['y2']),
                 );
-                if ($ann['kind'] === 'uri') {
-                    $body = sprintf(
+                $body = match ($ann['kind']) {
+                    'uri' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
                         .'/Border [0 0 0] /A << /S /URI /URI %s >> >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                    );
-                } else {
-                    $body = sprintf(
+                    ),
+                    'named' => sprintf(
+                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        .'/Border [0 0 0] /A << /Type /Action /S /Named /N /%s >> >>',
+                        $rect,
+                        $ann['target'],
+                    ),
+                    'javascript' => sprintf(
+                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        .'/Border [0 0 0] /A << /Type /Action /S /JavaScript /JS %s >> >>',
+                        $rect,
+                        $this->pdfString($ann['target']),
+                    ),
+                    'launch' => sprintf(
+                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        .'/Border [0 0 0] /A << /Type /Action /S /Launch /F %s >> >>',
+                        $rect,
+                        $this->pdfString($ann['target']),
+                    ),
+                    default => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s '
                         .'/Border [0 0 0] /Dest %s >>',
                         $rect,
                         $this->pdfNameString($ann['target']),
-                    );
-                }
+                    ),
+                };
                 $linkAnnotId = $writer->addObject($body);
                 $annotIds[] = $linkAnnotId;
 
