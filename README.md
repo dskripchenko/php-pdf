@@ -901,8 +901,9 @@ $doc = new Document(
    structure: `Document` (catalog/pages/resources), `Writer` (xref,
    trailer, streaming), `Encryption`, `Page`, `PdfFont`.
 
-Архитектура зеркалит [`dskripchenko/php-docx`](https://github.com/dskripchenko/php-docx)
-для consistency между PDF/DOCX render paths.
+Layers общаются однонаправленно (AST → Layout → PDF), без backref'ов.
+Это позволяет независимо тестировать каждый layer и подключать новые
+input frontends (HTML parser, Markdown, etc.) или output backends.
 
 См. [docs/adr/](docs/adr/) для Architecture Decision Records.
 

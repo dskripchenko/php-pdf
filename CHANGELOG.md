@@ -59,7 +59,7 @@ math expressions (LaTeX subset — fractions/superscripts/radicals/environments)
 | 2a-b | TTF subset embedding (86% size reduction) | — | — |
 | 2c | GPOS kerning (pair adjustments через TJ) | — | cec1716 |
 | 2d | GSUB ligatures (fi/fl/ffi + multi-cp ToUnicode) | — | afe78a0 |
-| 3a | AST elements + style VO mirror'инг php-docx | — | 76be6f8 |
+| 3a | AST elements + style value-objects | — | 76be6f8 |
 | 3b | Document AST root + Layout Engine | 13 | 9b991df |
 | 3c | DocumentBuilder fluent API | 39 | 55bc204 |
 | 4 | Images — AST + Layout integration | 24 | 78484cb |
