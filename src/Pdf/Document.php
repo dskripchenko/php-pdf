@@ -452,9 +452,13 @@ final class Document
      * $level (1..N) определяет вложенность: level 1 = top-level,
      * level 2 = ребёнок последнего level-1, и т.д.
      */
-    public function registerOutlineEntry(int $level, string $title, Page $page, float $x, float $y): self
-    {
-        $this->outlineEntries[] = compact('level', 'title', 'page', 'x', 'y');
+    public function registerOutlineEntry(
+        int $level, string $title, Page $page, float $x, float $y,
+        ?string $color = null, bool $bold = false, bool $italic = false,
+    ): self {
+        $this->outlineEntries[] = compact(
+            'level', 'title', 'page', 'x', 'y', 'color', 'bold', 'italic',
+        );
 
         return $this;
     }
@@ -1232,6 +1236,22 @@ final class Document
                 $parts[] = '/Last '.$lastChildRef;
                 $parts[] = '/Count '.$countDesc;
             }
+            // Phase 100: optional /C (color RGB) + /F (style flags).
+            if (! empty($entry['color'])) {
+                [$r, $g, $b] = $this->hexToRgb01((string) $entry['color']);
+                $parts[] = sprintf('/C [%s %s %s]',
+                    $this->fmt($r), $this->fmt($g), $this->fmt($b));
+            }
+            $flags = 0;
+            if (! empty($entry['italic'])) {
+                $flags |= 1;
+            }
+            if (! empty($entry['bold'])) {
+                $flags |= 2;
+            }
+            if ($flags !== 0) {
+                $parts[] = '/F '.$flags;
+            }
             $writer->setObject($entryIds[$i], '<< '.implode(' ', $parts).' >>');
         }
 
@@ -1465,6 +1485,28 @@ final class Document
         $writer->setObject($parentId, $parentBody);
 
         return [$parentId, $childIds];
+    }
+
+    /**
+     * Phase 100: parse hex #rrggbb / #rgb → list<float> в [0..1].
+     *
+     * @return array{0: float, 1: float, 2: float}
+     */
+    private function hexToRgb01(string $hex): array
+    {
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) === 3) {
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+        }
+        if (strlen($hex) !== 6 || ! ctype_xdigit($hex)) {
+            return [0, 0, 0];
+        }
+
+        return [
+            hexdec(substr($hex, 0, 2)) / 255,
+            hexdec(substr($hex, 2, 2)) / 255,
+            hexdec(substr($hex, 4, 2)) / 255,
+        ];
     }
 
     /**
