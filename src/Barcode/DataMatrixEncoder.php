@@ -139,11 +139,25 @@ final class DataMatrixEncoder
 
     public const MACRO_06 = 237;
 
+    /**
+     * Phase 197: FNC1 (Function 1) codeword (232) — GS1 DataMatrix marker.
+     * Prepended к payload для GS1-compliant symbols. Per ISO/IEC 16022 §5.2.4.5.
+     */
+    public const FNC1 = 232;
+
+    /**
+     * Phase 197: ECI (Extended Channel Interpretation) marker CW 241.
+     * Per ISO/IEC 16022 §5.2.4.4 — followed by 1-3 byte designator value.
+     */
+    public const ECI_CODEWORD = 241;
+
     public function __construct(
         public readonly string $data,
         bool $allowRectangular = true,
         string $mode = self::MODE_ASCII,
         ?int $macroMode = null,
+        bool $gs1 = false,
+        ?int $eciDesignator = null,
     ) {
         if ($data === '') {
             throw new \InvalidArgumentException('DataMatrix input must be non-empty');
@@ -167,6 +181,30 @@ final class DataMatrixEncoder
         // Phase 196: Macro 05/06 prefix codeword (если задан).
         if ($macroMode !== null) {
             array_unshift($codewords, $macroMode);
+        }
+        // Phase 197: GS1 DataMatrix — FNC1 (232) первым codeword.
+        if ($gs1) {
+            array_unshift($codewords, self::FNC1);
+        }
+        // Phase 197: ECI marker — codeword 241 + 1-3 byte designator.
+        if ($eciDesignator !== null) {
+            if ($eciDesignator < 0 || $eciDesignator > 999999) {
+                throw new \InvalidArgumentException('DataMatrix ECI designator must be 0..999999');
+            }
+            $eciCw = [self::ECI_CODEWORD];
+            if ($eciDesignator <= 126) {
+                $eciCw[] = $eciDesignator + 1; // 1 byte: value + 1
+            } elseif ($eciDesignator <= 16382) {
+                $eciCw[] = intdiv($eciDesignator - 127, 254) + 128;
+                $eciCw[] = (($eciDesignator - 127) % 254) + 1;
+            } else {
+                // 3-byte: complex offset arithmetic.
+                $offset = $eciDesignator - 16383;
+                $eciCw[] = intdiv($offset, 64516) + 192;
+                $eciCw[] = (intdiv($offset, 254) % 254) + 1;
+                $eciCw[] = ($offset % 254) + 1;
+            }
+            $codewords = array_merge($eciCw, $codewords);
         }
 
         // 2. Pick smallest symbol fitting codewords.

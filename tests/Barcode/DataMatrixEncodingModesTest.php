@@ -244,4 +244,68 @@ final class DataMatrixEncodingModesTest extends TestCase
         self::assertGreaterThan(0, $withoutMacro->size());
         self::assertGreaterThan(0, $withMacro->size());
     }
+
+    // -------- Phase 197: GS1 + ECI --------
+
+    #[Test]
+    public function gs1_datamatrix_prepends_fnc1(): void
+    {
+        $enc = new DataMatrixEncoder('01095060001343528200', gs1: true);
+        self::assertGreaterThan(0, $enc->size());
+    }
+
+    #[Test]
+    public function fnc1_constant_is_232(): void
+    {
+        self::assertSame(232, DataMatrixEncoder::FNC1);
+    }
+
+    #[Test]
+    public function eci_marker_short_designator(): void
+    {
+        $enc = new DataMatrixEncoder('test', eciDesignator: 26); // UTF-8
+        self::assertGreaterThan(0, $enc->size());
+    }
+
+    #[Test]
+    public function eci_marker_medium_designator(): void
+    {
+        $enc = new DataMatrixEncoder('test', eciDesignator: 1000);
+        self::assertGreaterThan(0, $enc->size());
+    }
+
+    #[Test]
+    public function eci_marker_large_designator(): void
+    {
+        $enc = new DataMatrixEncoder('test', eciDesignator: 50000);
+        self::assertGreaterThan(0, $enc->size());
+    }
+
+    #[Test]
+    public function eci_rejects_negative(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new DataMatrixEncoder('test', eciDesignator: -1);
+    }
+
+    #[Test]
+    public function eci_rejects_too_large(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new DataMatrixEncoder('test', eciDesignator: 1000000);
+    }
+
+    #[Test]
+    public function eci_constant_is_241(): void
+    {
+        self::assertSame(241, DataMatrixEncoder::ECI_CODEWORD);
+    }
+
+    #[Test]
+    public function gs1_and_eci_combined(): void
+    {
+        // GS1 marker + ECI for non-default charset.
+        $enc = new DataMatrixEncoder('data', gs1: true, eciDesignator: 26);
+        self::assertGreaterThan(0, $enc->size());
+    }
 }
