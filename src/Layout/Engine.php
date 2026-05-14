@@ -135,6 +135,17 @@ final class Engine
          * @var list<PdfFont>
          */
         public readonly array $fallbackFonts = [],
+        /**
+         * Phase 188: tab stop interval (pt). When \t encountered в Run text,
+         * x advances к next multiple of this value from line start. Default
+         * 36pt = 0.5 inch.
+         */
+        public readonly float $tabStopPt = 36.0,
+        /**
+         * Phase 189: enable hanging punctuation (trailing period/comma/etc
+         * на line end extend past right margin для visual flush).
+         */
+        public readonly bool $hangingPunctuation = false,
     ) {
         if ($fontProvider !== null) {
             $this->resolver = new PdfFontResolver($fontProvider);
@@ -2882,7 +2893,17 @@ final class Engine
             $wordWidth = $this->measureWidth($word, $style);
             $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $style);
 
-            if ($currentLine !== [] && $currentWidth + $sepWidth + $wordWidth > $effectiveAvail) {
+            // Phase 189: hanging punctuation — trailing punct discounted из
+            // wrap decision (it visually overflows past margin).
+            $effectiveWordWidth = $wordWidth;
+            if ($this->hangingPunctuation) {
+                $lastChar = mb_substr($word, -1, 1, 'UTF-8');
+                if (in_array($lastChar, ['.', ',', ';', ':', '!', '?', '。', '，', '；', '：', '！', '？'], true)) {
+                    $effectiveWordWidth -= $this->measureWidth($lastChar, $style);
+                }
+            }
+
+            if ($currentLine !== [] && $currentWidth + $sepWidth + $effectiveWordWidth > $effectiveAvail) {
                 // Phase 33: Try soft-hyphen split — if word can be broken at SHY
                 // marker such that prefix + '-' fits in remaining space, place
                 // prefix here и put remainder as new item на следующую line.
@@ -2961,8 +2982,15 @@ final class Engine
         foreach ($children as $child) {
             if ($child instanceof Run) {
                 $childStyle = $child->style->inheritFrom($effectiveDefault);
-                foreach ($this->splitWords($child->text) as $word) {
-                    $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle, 'link' => $currentLink];
+                // Phase 188: \t (tab) — emit 'tab' marker между segments.
+                $segments = explode("\t", $child->text);
+                foreach ($segments as $segIdx => $segment) {
+                    foreach ($this->splitWords($segment) as $word) {
+                        $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle, 'link' => $currentLink];
+                    }
+                    if ($segIdx < count($segments) - 1) {
+                        $items[] = ['type' => 'tab', 'style' => $childStyle, 'link' => $currentLink];
+                    }
                 }
             } elseif ($child instanceof LineBreak) {
                 $items[] = ['type' => 'br'];
@@ -3146,18 +3174,22 @@ final class Engine
         $this->registerBookmarksAt($ctx, $bookmarks, $ctx->cursorY);
 
         // Вычислить total content width этой line.
+        // Phase 188: tabs treated as minimum-width spacers (tabStopPt) для wrap.
         $totalContentWidth = 0;
         $countWords = count($wordItems);
         for ($i = 0; $i < $countWords; $i++) {
             $item = $wordItems[$i];
             $style = $item['style'] ?? $defaultStyle;
-            if (($item['type'] ?? null) === 'image') {
+            $type = $item['type'] ?? null;
+            if ($type === 'image') {
                 $totalContentWidth += $item['width'];
+            } elseif ($type === 'tab') {
+                $totalContentWidth += $this->tabStopPt;
             } else {
                 $word = $item['text'] ?? '';
                 $totalContentWidth += $this->measureWidth($word, $style);
             }
-            if ($i + 1 < $countWords) {
+            if ($i + 1 < $countWords && $type !== 'tab' && ($wordItems[$i + 1]['type'] ?? null) !== 'tab') {
                 $totalContentWidth += $this->measureWidth(' ', $style);
             }
         }
@@ -3282,6 +3314,21 @@ final class Engine
             $item = $wordItems[$i];
             $style = $item['style'] ?? $defaultStyle;
 
+            // Phase 188: tab item — advance x к next tab stop.
+            if (($item['type'] ?? null) === 'tab') {
+                $flushBatch();
+                $relativeX = $x - $startX;
+                $nextStop = ((int) ($relativeX / $this->tabStopPt) + 1) * $this->tabStopPt;
+                $newX = $startX + $nextStop;
+                // Ensure we move forward at least minimum (если currently at multiple of tabStopPt).
+                if ($newX <= $x) {
+                    $newX = $x + $this->tabStopPt;
+                }
+                $x = $newX;
+                // Skip implicit space after tab (we placed exact x).
+                continue;
+            }
+
             // Image atom: flush text batch first, then draw image.
             if (($item['type'] ?? null) === 'image') {
                 $flushBatch();
@@ -3300,7 +3347,7 @@ final class Engine
                 if ($linkRef !== null) {
                     $linkLastX = $x;
                 }
-                if ($i + 1 < $countWords) {
+                if ($i + 1 < $countWords && ($wordItems[$i + 1]['type'] ?? null) !== 'tab') {
                     $spaceWidth = $this->measureWidth(' ', $defaultStyle) + $extraPerGap;
                     $x += $spaceWidth;
                     if ($linkRef !== null && (($wordItems[$i + 1]['link'] ?? null) === $linkRef)) {
@@ -3354,8 +3401,12 @@ final class Engine
             }
 
             if ($i + 1 < $countWords) {
-                $spaceWidth = $this->measureWidth(' ', $style) + $extraPerGap;
                 $nextItem = $wordItems[$i + 1];
+                // Phase 188: если next item — tab, не append space (tab sets exact x).
+                if (($nextItem['type'] ?? null) === 'tab') {
+                    continue;
+                }
+                $spaceWidth = $this->measureWidth(' ', $style) + $extraPerGap;
                 $nextIsImage = ($nextItem['type'] ?? null) === 'image';
                 $nextStyle = $nextItem['style'] ?? $defaultStyle;
                 $nextSize = $nextStyle->sizePt ?? $this->defaultFontSizePt;
