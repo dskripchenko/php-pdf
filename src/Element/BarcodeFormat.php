@@ -24,6 +24,7 @@ enum BarcodeFormat: string
     case UpcA = 'upca';
     case Qr = 'qr';
     case DataMatrix = 'datamatrix';
+    case Pdf417 = 'pdf417'; // Phase 124: stacked linear 2D barcode.
 
     public function is2D(): bool
     {
@@ -31,5 +32,11 @@ enum BarcodeFormat: string
             self::Qr, self::DataMatrix => true,
             default => false,
         };
+    }
+
+    /** Phase 124: stacked-linear barcodes need per-row rendering. */
+    public function isStacked(): bool
+    {
+        return $this === self::Pdf417;
     }
 }

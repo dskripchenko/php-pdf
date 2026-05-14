@@ -2026,6 +2026,13 @@ final class Engine
             return;
         }
 
+        // Phase 124: PDF417 — stacked linear (multiple rows of bars).
+        if ($bc->format === \Dskripchenko\PhpPdf\Element\BarcodeFormat::Pdf417) {
+            $this->renderPdf417Barcode($bc, $ctx);
+
+            return;
+        }
+
         // Encode по format'у (linear barcodes only — QR обрабатывается выше).
         [$modules, $captionText] = match ($bc->format) {
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::Code128 => [
@@ -2131,6 +2138,87 @@ final class Engine
             $enc->modules(), $enc->size(), $bc, $ctx,
             quietZone: 1,
         );
+    }
+
+    /**
+     * Phase 124: PDF417 stacked-linear render. Каждый logical row повторяется
+     * vertically rowHeight times (default 3 modules — ISO recommends 3).
+     */
+    private function renderPdf417Barcode(\Dskripchenko\PhpPdf\Element\Barcode $bc, LayoutContext $ctx): void
+    {
+        $enc = new \Dskripchenko\PhpPdf\Barcode\Pdf417Encoder($bc->value);
+        $matrix = $enc->modules();
+        $logicalRows = count($matrix);
+        $cols = count($matrix[0]);
+        $rowHeightModules = 3; // ISO §5.3.2 рекомендует rowHeight ≥ 3 × X-dim.
+        $quietZoneH = 2;
+        $quietZoneV = 2;
+
+        $totalModuleCols = $cols + 2 * $quietZoneH;
+        $totalModuleRows = $logicalRows * $rowHeightModules + 2 * $quietZoneV;
+
+        $totalWidthPt = $bc->widthPt ?? ($totalModuleCols * 0.5);
+        $totalWidthPt = min($totalWidthPt, $ctx->contentWidth);
+        $moduleWidth = $totalWidthPt / $totalModuleCols;
+        // Aspect ratio преобразуется в module height = X-dim units.
+        $moduleHeight = $moduleWidth;
+        $totalHeightPt = $totalModuleRows * $moduleHeight;
+
+        $captionHeight = $bc->showText ? $bc->textSizePt + 2.0 : 0;
+        $this->ensureRoomFor($ctx, $totalHeightPt + $captionHeight);
+
+        $blockX = match ($bc->alignment) {
+            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalWidthPt) / 2,
+            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalWidthPt,
+            default => $ctx->leftX,
+        };
+
+        $yTop = $ctx->cursorY;
+        $matrixOffsetX = $quietZoneH * $moduleWidth;
+        // Каждая logical row рендерится rowHeight раз (vertical replication).
+        for ($lr = 0; $lr < $logicalRows; $lr++) {
+            for ($vr = 0; $vr < $rowHeightModules; $vr++) {
+                $globalRow = $lr * $rowHeightModules + $vr;
+                $rowYBottom = $yTop - ($quietZoneV * $moduleHeight) - ($globalRow + 1) * $moduleHeight;
+                $runStart = null;
+                for ($c = 0; $c < $cols; $c++) {
+                    if ($matrix[$lr][$c]) {
+                        if ($runStart === null) {
+                            $runStart = $c;
+                        }
+                    } elseif ($runStart !== null) {
+                        $w = ($c - $runStart) * $moduleWidth;
+                        $ctx->currentPage->fillRect(
+                            $blockX + $matrixOffsetX + $runStart * $moduleWidth,
+                            $rowYBottom, $w, $moduleHeight, 0, 0, 0,
+                        );
+                        $runStart = null;
+                    }
+                }
+                if ($runStart !== null) {
+                    $w = ($cols - $runStart) * $moduleWidth;
+                    $ctx->currentPage->fillRect(
+                        $blockX + $matrixOffsetX + $runStart * $moduleWidth,
+                        $rowYBottom, $w, $moduleHeight, 0, 0, 0,
+                    );
+                }
+            }
+        }
+
+        if ($bc->showText) {
+            $captionY = $yTop - $totalHeightPt - $bc->textSizePt - 1.0;
+            $captionWidth = $this->defaultFont !== null
+                ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($bc->value)
+                : mb_strlen($bc->value, 'UTF-8') * $bc->textSizePt * 0.5;
+            $captionX = $blockX + ($totalWidthPt - $captionWidth) / 2;
+            if ($this->defaultFont !== null) {
+                $ctx->currentPage->showEmbeddedText($bc->value, $captionX, $captionY, $this->defaultFont, $bc->textSizePt);
+            } else {
+                $ctx->currentPage->showText($bc->value, $captionX, $captionY, $this->fallbackStandard, $bc->textSizePt);
+            }
+        }
+
+        $ctx->cursorY -= $totalHeightPt + $captionHeight + $bc->spaceAfterPt;
     }
 
     /**
