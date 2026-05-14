@@ -529,6 +529,17 @@ final class Page
     }
 
     /**
+     * Phase 118: set text rendering mode (0..7). См.
+     * ContentStream::setTextRenderingMode для list режимов.
+     */
+    public function setTextRenderingMode(int $mode): self
+    {
+        $this->stream->setTextRenderingMode($mode);
+
+        return $this;
+    }
+
+    /**
      * Phase 117: set DeviceCMYK fill color для последующих fill ops.
      * Effective until next color change or graphics state restore.
      */

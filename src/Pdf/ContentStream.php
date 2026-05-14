@@ -580,6 +580,31 @@ final class ContentStream
     }
 
     /**
+     * Phase 118: set text rendering mode.
+     *
+     * Modes (ISO 32000-1 §9.3.6 Table 106):
+     *  - 0: fill (default)
+     *  - 1: stroke (outline only)
+     *  - 2: fill + stroke
+     *  - 3: invisible (useful для searchable OCR layer над scanned image)
+     *  - 4: fill + add to path для clipping
+     *  - 5: stroke + add to path для clipping
+     *  - 6: fill + stroke + add to path для clipping
+     *  - 7: add to path для clipping only
+     *
+     * Emits `N Tr`.
+     */
+    public function setTextRenderingMode(int $mode): self
+    {
+        if ($mode < 0 || $mode > 7) {
+            throw new \InvalidArgumentException('Text rendering mode must be 0..7');
+        }
+        $this->body .= sprintf("%d Tr\n", $mode);
+
+        return $this;
+    }
+
+    /**
      * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *
