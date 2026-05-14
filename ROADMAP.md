@@ -673,6 +673,9 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   `addOn: ?string` параметр в Ean13Encoder; 20-module 2-digit (parity LL/LG/
   GL/GG по value%4) и 47-module 5-digit (parity по check digit = (3·sum_odd
   + 9·sum_even)%10) supplements с 9-module gap после END_GUARD.
+- ~~EAN-8 short variant~~ ✅ **Phase 200 closed**. Отдельный `Ean8Encoder`
+  (7 data + 1 check digit, 67 modules, все 4 left digits L-coded без G-shift)
+  + `BarcodeFormat::Ean8` + dispatch в Engine::renderBarcode.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.

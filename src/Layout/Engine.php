@@ -2334,6 +2334,11 @@ final class Engine
 
                 return [$e->modulesWithQuietZone(9), $e->canonical];
             })(),
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::Ean8 => (function () use ($bc): array {
+                $e = new \Dskripchenko\PhpPdf\Barcode\Ean8Encoder($bc->value);
+
+                return [$e->modulesWithQuietZone(7), $e->canonical];
+            })(),
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::UpcA => (function () use ($bc): array {
                 $e = new \Dskripchenko\PhpPdf\Barcode\Ean13Encoder($bc->value, upcA: true);
 

@@ -24,6 +24,7 @@ enum BarcodeFormat: string
 {
     case Code128 = 'code128';
     case Ean13 = 'ean13';
+    case Ean8 = 'ean8';      // Phase 200: short EAN variant (7+1 digits).
     case UpcA = 'upca';
     case Qr = 'qr';
     case DataMatrix = 'datamatrix';
