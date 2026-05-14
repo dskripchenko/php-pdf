@@ -48,7 +48,8 @@ switch (strtolower($format)) {
         $enc = new Dskripchenko\PhpPdf\Barcode\AztecEncoder($data);
         $matrix = $enc->modules();
         $cols = $rows = $enc->matrixSize();
-        printf("Aztec Compact: %d layers, %d×%d modules; %d data + %d ECC codewords\n",
+        printf("Aztec %s: %d layers, %d×%d modules; %d data + %d ECC codewords\n",
+            $enc->compact ? 'Compact' : 'Full',
             $enc->layers, $rows, $cols, $enc->dataCodewords, $enc->eccCodewords);
         break;
 

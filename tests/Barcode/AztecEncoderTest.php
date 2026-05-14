@@ -67,10 +67,20 @@ final class AztecEncoderTest extends TestCase
     }
 
     #[Test]
-    public function very_long_data_overflows_compact(): void
+    public function long_data_promotes_to_full(): void
     {
+        // 500 X's overflows Compact (max 4L = 27×27, ~76 codewords) → Full Aztec.
+        $enc = new AztecEncoder(str_repeat('X', 500));
+        self::assertFalse($enc->compact);
+        self::assertGreaterThanOrEqual(5, $enc->layers);
+    }
+
+    #[Test]
+    public function very_long_data_overflows_full(): void
+    {
+        // Beyond max Full Aztec (32 layers, 151×151, ~3000 codewords).
         $this->expectException(\InvalidArgumentException::class);
-        new AztecEncoder(str_repeat('X', 500));
+        new AztecEncoder(str_repeat('X', 4000));
     }
 
     #[Test]

@@ -59,27 +59,37 @@ final class AztecEncoder
     /** @var array<int, list<array{0:int, 1:int}>>|null */
     private static ?array $charMap = null;
 
-    // ---------------- Compact size info ----------------
+    // ---------------- Size / GF info ----------------
 
-    /** Compact Aztec data capacity (bits) per layer count. */
-    private const COMPACT_DATA_BITS = [
-        1 => 102,  // 17 codewords × 6 bits
-        2 => 240,  // 40 codewords × 6 bits
-        3 => 408,  // 51 codewords × 8 bits
-        4 => 608,  // 76 codewords × 8 bits
+    /**
+     * Word size (codeword bit width) по layer count (index 1..32).
+     * Index 0 reserved для mode message (always 4 bits, GF(16)).
+     * Source: ZXing Encoder.java WORD_SIZE.
+     */
+    private const WORD_SIZE = [
+        4,
+        6, 6, 8, 8, 8, 8, 8, 8,
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+        12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     ];
 
-    /** Codeword bit width per compact layer count. */
-    private const COMPACT_CW_BITS = [
-        1 => 6,
-        2 => 6,
-        3 => 8,
-        4 => 8,
+    /** Primitive polynomial для каждого word size, GF(2^n). */
+    private const PRIM_POLY = [
+        4 => 0x13,    // x^4 + x + 1 (Aztec param, GF(16))
+        6 => 0x43,    // x^6 + x + 1 (GF(64))
+        8 => 0x12D,   // x^8 + x^5 + x^3 + x^2 + 1 (Aztec data 8, GF(256))
+        10 => 0x409,  // x^10 + x^3 + 1 (Aztec data 10, GF(1024))
+        12 => 0x1069, // x^12 + x^6 + x^5 + x^3 + 1 (Aztec data 12, GF(4096))
     ];
+
+    public readonly bool $compact;
 
     public readonly int $layers;
 
     public readonly int $size;
+
+    /** Base matrix size до addition of alignment lines (Full mode). */
+    public readonly int $baseMatrixSize;
 
     public readonly int $dataCodewords;
 
@@ -97,42 +107,56 @@ final class AztecEncoder
         // 1. High-level encode → bit string.
         $bits = self::encodeToBits($data);
 
-        // 2. Pick smallest compact size accommodating data + ECC overhead.
-        //    Per ZXing Encoder.java algorithm.
+        // 2. Pick smallest size accommodating data + ECC.
+        //    Iteration order per ZXing: Compact L=1..4, then Full L=4..32.
+        //    Skip Full L=1..3 since Compact L=2..4 have same matrix sizes
+        //    but more data capacity.
         $eccBits = intdiv(strlen($bits) * $minEccPercent, 100) + 11;
         $totalSizeBits = strlen($bits) + $eccBits;
 
-        $layers = null;
+        $chosenLayers = null;
+        $chosenCompact = false;
         $wordSize = 0;
         $totalBitsInLayer = 0;
         $stuffedBits = '';
-        foreach ([1, 2, 3, 4] as $L) {
-            $totalBitsInLayerForL = ((88) + 16 * $L) * $L; // compact formula
+        for ($i = 0; $i <= 32; $i++) {
+            $compact = $i <= 3;
+            $L = $compact ? $i + 1 : $i;
+            // totalBitsInLayer = ((88 if compact else 112) + 16L) * L
+            $totalBitsInLayerForL = (($compact ? 88 : 112) + 16 * $L) * $L;
             if ($totalSizeBits > $totalBitsInLayerForL) {
                 continue;
             }
-            $ws = self::COMPACT_CW_BITS[$L];
+            $ws = self::WORD_SIZE[$L];
             if ($wordSize !== $ws) {
                 $wordSize = $ws;
                 $stuffedBits = self::stuffBits($bits, $ws);
             }
             $usable = $totalBitsInLayerForL - ($totalBitsInLayerForL % $ws);
-            // Compact ограничен 64 message words.
-            if (strlen($stuffedBits) > $ws * 64) {
+            // Compact limited к 64 message words.
+            if ($compact && strlen($stuffedBits) > $ws * 64) {
                 continue;
             }
             if (strlen($stuffedBits) + $eccBits <= $usable) {
-                $layers = $L;
+                $chosenLayers = $L;
+                $chosenCompact = $compact;
                 $totalBitsInLayer = $totalBitsInLayerForL;
                 break;
             }
         }
-        if ($layers === null) {
-            throw new \InvalidArgumentException('Aztec compact capacity exceeded; use Full Aztec');
+        if ($chosenLayers === null) {
+            throw new \InvalidArgumentException('Aztec data too large (>32 Full layers)');
         }
 
-        $this->layers = $layers;
-        $this->size = 11 + 4 * $layers; // 15, 19, 23, 27.
+        $this->compact = $chosenCompact;
+        $this->layers = $chosenLayers;
+        $this->baseMatrixSize = ($chosenCompact ? 11 : 14) + 4 * $chosenLayers;
+        if ($chosenCompact) {
+            $this->size = $this->baseMatrixSize;
+        } else {
+            // Full: insert 1 center alignment line + 2 lines per 15-step from center.
+            $this->size = $this->baseMatrixSize + 1 + 2 * intdiv(intdiv($this->baseMatrixSize, 2) - 1, 15);
+        }
 
         // 3. Generate check (ECC) words filling totalBitsInLayer.
         $messageBits = self::generateCheckWords($stuffedBits, $totalBitsInLayer, $wordSize);
@@ -141,10 +165,10 @@ final class AztecEncoder
         $messageSizeInWords = intdiv(strlen($stuffedBits), $wordSize);
         $this->dataCodewords = $messageSizeInWords;
         $this->eccCodewords = intdiv($totalBitsInLayer, $wordSize) - $messageSizeInWords;
-        $modeMessage = self::generateCompactModeMessage($layers, $messageSizeInWords);
+        $modeMessage = self::generateModeMessage($chosenCompact, $chosenLayers, $messageSizeInWords);
 
-        // 5. Build matrix per ZXing algorithm: spiral data, then mode, then bullseye.
-        $this->matrix = $this->buildMatrix($messageBits, $modeMessage, $layers);
+        // 5. Build matrix per ZXing algorithm.
+        $this->matrix = $this->buildMatrix($messageBits, $modeMessage);
     }
 
     /** @return list<list<bool>> */
@@ -452,12 +476,8 @@ final class AztecEncoder
         $messageSizeInWords = intdiv(strlen($messageBits), $wordSize);
         $totalWords = intdiv($totalBits, $wordSize);
         $eccLen = $totalWords - $messageSizeInWords;
-        $primPoly = match ($wordSize) {
-            4 => 0x13,
-            6 => 0x43,
-            8 => 0x12D,
-            default => throw new \InvalidArgumentException('Unsupported word size: ' . $wordSize),
-        };
+        $primPoly = self::PRIM_POLY[$wordSize]
+            ?? throw new \InvalidArgumentException('Unsupported word size: ' . $wordSize);
         $size = 1 << $wordSize;
         [$logTable, $expTable] = self::gfTables($size, $primPoly);
 
@@ -519,15 +539,22 @@ final class AztecEncoder
     }
 
     /**
-     * Generate mode message bits для Compact Aztec.
-     * 2 bits layers-1 + 6 bits messageSizeInWords-1 + 20 bits RS ECC = 28 bits.
+     * Generate mode message bits.
+     * Compact: 2 bits layers-1 + 6 bits messageSize-1 + 20 bits RS ECC = 28 bits.
+     * Full:    5 bits layers-1 + 11 bits messageSize-1 + 24 bits RS ECC = 40 bits.
      */
-    public static function generateCompactModeMessage(int $layers, int $messageSizeInWords): string
+    public static function generateModeMessage(bool $compact, int $layers, int $messageSizeInWords): string
     {
-        $info = (($layers - 1) << 6) | ($messageSizeInWords - 1);
-        $infoBits = str_pad(decbin($info), 8, '0', STR_PAD_LEFT);
+        if ($compact) {
+            $info = (($layers - 1) << 6) | ($messageSizeInWords - 1);
+            $infoBits = str_pad(decbin($info), 8, '0', STR_PAD_LEFT);
 
-        return self::generateCheckWords($infoBits, 28, 4);
+            return self::generateCheckWords($infoBits, 28, 4);
+        }
+        $info = (($layers - 1) << 11) | ($messageSizeInWords - 1);
+        $infoBits = str_pad(decbin($info), 16, '0', STR_PAD_LEFT);
+
+        return self::generateCheckWords($infoBits, 40, 4);
     }
 
     // ---------------- Reed-Solomon ----------------
@@ -618,54 +645,81 @@ final class AztecEncoder
     // ---------------- Matrix layout ----------------
 
     /**
-     * Build Compact Aztec matrix per ZXing Encoder.java algorithm.
+     * Build Aztec matrix (Compact или Full).
      *
-     * Order (важно!): data spiral first → mode message → bullseye + orient.
-     *
-     * @param  string  $messageBits  bits для data spiral (incl. RS ECC)
-     * @param  string  $modeBits     28-bit mode message
+     * Algorithm ported from ZXing Encoder.java:
+     *  1. Build alignment map (identity for Compact, sparse for Full).
+     *  2. Draw data spiral via alignmentMap.
+     *  3. Draw mode message (28 bits compact / 40 bits full).
+     *  4. Draw bullseye (5-ring compact / 7-ring full) с orientation cells.
+     *  5. Draw alignment grid lines (Full only).
      */
-    private function buildMatrix(string $messageBits, string $modeBits, int $layers): array
+    private function buildMatrix(string $messageBits, string $modeBits): array
     {
+        $base = $this->baseMatrixSize;
         $matrixSize = $this->size;
-        $center = intdiv($matrixSize, 2);
         $m = array_fill(0, $matrixSize, array_fill(0, $matrixSize, false));
-        $baseMatrixSize = 11 + 4 * $layers; // compact base size = matrixSize for compact.
 
-        // 1. Draw data bits — 2-cell dominoes around layers (outermost first).
+        // Build alignment map.
+        $alignmentMap = array_fill(0, $base, 0);
+        if ($this->compact) {
+            for ($i = 0; $i < $base; $i++) {
+                $alignmentMap[$i] = $i;
+            }
+        } else {
+            $origCenter = intdiv($base, 2);
+            $center = intdiv($matrixSize, 2);
+            for ($i = 0; $i < $origCenter; $i++) {
+                $newOffset = $i + intdiv($i, 15);
+                $alignmentMap[$origCenter - $i - 1] = $center - $newOffset - 1;
+                $alignmentMap[$origCenter + $i] = $center + $newOffset + 1;
+            }
+        }
+
+        // 1. Data spiral — 4 sides per layer, outermost layer first.
+        $sideOffset = $this->compact ? 9 : 12;
         $rowOffset = 0;
-        for ($i = 0; $i < $layers; $i++) {
-            $rowSize = ($layers - $i) * 4 + 9; // compact formula
+        for ($i = 0; $i < $this->layers; $i++) {
+            $rowSize = ($this->layers - $i) * 4 + $sideOffset;
             for ($j = 0; $j < $rowSize; $j++) {
                 $columnOffset = $j * 2;
                 for ($k = 0; $k < 2; $k++) {
-                    // Top side
+                    // Top side (left edge in logical coords).
                     if (self::bitAt($messageBits, $rowOffset + $columnOffset + $k)) {
-                        // matrix.set(x=col, y=row) → $m[row][col] = true
-                        $m[$i * 2 + $j][$i * 2 + $k] = true;
+                        $m[$alignmentMap[$i * 2 + $j]][$alignmentMap[$i * 2 + $k]] = true;
                     }
-                    // Right side
+                    // Right side (top edge).
                     if (self::bitAt($messageBits, $rowOffset + $rowSize * 2 + $columnOffset + $k)) {
-                        $m[$baseMatrixSize - 1 - $i * 2 - $k][$i * 2 + $j] = true;
+                        $m[$alignmentMap[$base - 1 - $i * 2 - $k]][$alignmentMap[$i * 2 + $j]] = true;
                     }
-                    // Bottom side
+                    // Bottom side (right edge).
                     if (self::bitAt($messageBits, $rowOffset + $rowSize * 4 + $columnOffset + $k)) {
-                        $m[$baseMatrixSize - 1 - $i * 2 - $j][$baseMatrixSize - 1 - $i * 2 - $k] = true;
+                        $m[$alignmentMap[$base - 1 - $i * 2 - $j]][$alignmentMap[$base - 1 - $i * 2 - $k]] = true;
                     }
-                    // Left side
+                    // Left side (bottom edge).
                     if (self::bitAt($messageBits, $rowOffset + $rowSize * 6 + $columnOffset + $k)) {
-                        $m[$i * 2 + $k][$baseMatrixSize - 1 - $i * 2 - $j] = true;
+                        $m[$alignmentMap[$i * 2 + $k]][$alignmentMap[$base - 1 - $i * 2 - $j]] = true;
                     }
                 }
             }
             $rowOffset += $rowSize * 8;
         }
 
-        // 2. Draw mode message (28 bits for compact) в 11×11 ring around 9×9 bullseye.
-        $this->drawCompactModeMessage($m, $center, $modeBits);
+        // 2. Mode message.
+        $center = intdiv($matrixSize, 2);
+        if ($this->compact) {
+            $this->drawCompactModeMessage($m, $center, $modeBits);
+        } else {
+            $this->drawFullModeMessage($m, $center, $modeBits);
+        }
 
-        // 3. Draw bullseye (compact: size=5, drawn AFTER data + mode).
-        $this->drawBullsEye($m, $center, 5);
+        // 3. Bullseye + orientation cells.
+        $this->drawBullsEye($m, $center, $this->compact ? 5 : 7);
+
+        // 4. Alignment grid lines (Full only).
+        if (! $this->compact) {
+            $this->drawAlignmentGrid($m, $matrixSize, $base);
+        }
 
         return $m;
     }
@@ -676,8 +730,9 @@ final class AztecEncoder
     }
 
     /**
-     * Draw concentric square frames at distance 0, 2, 4, ..., size-1 from
-     * center. Plus 6 fixed orientation cells at 11×11 corners (compact).
+     * Draw concentric square frames at distance 0, 2, ..., size-1 from
+     * center. Compact: size=5 (3 frames). Full: size=7 (4 frames).
+     * Plus 6 fixed orientation cells just outside bullseye.
      */
     private function drawBullsEye(array &$m, int $center, int $size): void
     {
@@ -689,8 +744,7 @@ final class AztecEncoder
                 $m[$j][$center + $i] = true;
             }
         }
-        // 6 orientation cells (compact-specific positions).
-        // Note: ZXing uses (col, row) but my matrix is [row][col].
+        // 6 orientation cells.
         $m[$center - $size][$center - $size] = true;
         $m[$center - $size][$center - $size + 1] = true;
         $m[$center - $size + 1][$center - $size] = true;
@@ -700,11 +754,8 @@ final class AztecEncoder
     }
 
     /**
-     * Place 28-bit compact mode message в 11×11 ring around 9×9 bullseye.
-     * Top edge: bits 0..6 at cols c-3..c+3, row c-5.
-     * Right edge: bits 7..13 at col c+5, rows c-3..c+3.
-     * Bottom edge: bits 14..20 at cols c+3..c-3 (reverse), row c+5.
-     * Left edge: bits 21..27 at col c-5, rows c+3..c-3 (reverse).
+     * Compact: 28-bit mode message в 7-cell groups на 4 sides
+     * (rows c-5, c+5; cols c-5, c+5; offsets c-3..c+3).
      */
     private function drawCompactModeMessage(array &$m, int $center, string $modeBits): void
     {
@@ -721,6 +772,48 @@ final class AztecEncoder
             }
             if (self::bitAt($modeBits, 27 - $i)) {
                 $m[$offset][$center - 5] = true;
+            }
+        }
+    }
+
+    /**
+     * Full: 40-bit mode message в 10-cell groups на 4 sides
+     * (rows c-7, c+7; cols c-7, c+7).
+     * Offset формула: c - 5 + i + i/5 (skips center alignment cell at i=5).
+     */
+    private function drawFullModeMessage(array &$m, int $center, string $modeBits): void
+    {
+        for ($i = 0; $i < 10; $i++) {
+            $offset = $center - 5 + $i + intdiv($i, 5);
+            if (self::bitAt($modeBits, $i)) {
+                $m[$center - 7][$offset] = true;
+            }
+            if (self::bitAt($modeBits, $i + 10)) {
+                $m[$offset][$center + 7] = true;
+            }
+            if (self::bitAt($modeBits, 29 - $i)) {
+                $m[$center + 7][$offset] = true;
+            }
+            if (self::bitAt($modeBits, 39 - $i)) {
+                $m[$offset][$center - 7] = true;
+            }
+        }
+    }
+
+    /**
+     * Full Aztec reference grid lines — dotted vertical + horizontal lines
+     * at center and every 16 modules from center.
+     */
+    private function drawAlignmentGrid(array &$m, int $matrixSize, int $base): void
+    {
+        $center = intdiv($matrixSize, 2);
+        $startParity = $center & 1; // even cells get black if center is even
+        for ($i = 0, $j = 0; $i < intdiv($base, 2) - 1; $i += 15, $j += 16) {
+            for ($k = $startParity; $k < $matrixSize; $k += 2) {
+                $m[$k][$center - $j] = true;
+                $m[$k][$center + $j] = true;
+                $m[$center - $j][$k] = true;
+                $m[$center + $j][$k] = true;
             }
         }
     }
