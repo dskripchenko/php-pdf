@@ -14,11 +14,13 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  * filled circles (~2pt radius) at data points.
  *
  * Не реализовано:
- *  - Multi-series.
- *  - Spline / smooth interpolation (только straight lines).
- *  - Y-axis custom range.
- *  - Grid lines.
  *  - X-axis numeric scale (currently labels evenly spaced).
+ *
+ * Closed в later phases:
+ *  - Multi-series → Phase 51 (MultiLineChart)
+ *  - Spline interpolation → Phase 98 (smoothed=true)
+ *  - Y-axis custom range → Phase 68 (yMin/yMax)
+ *  - Grid lines → Phase 64 (showGridLines=true)
  */
 final readonly class LineChart implements BlockElement
 {
@@ -44,6 +46,7 @@ final readonly class LineChart implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
+        public float $xLabelRotationDeg = 0.0,
     ) {
         if (count($points) < 2) {
             throw new \InvalidArgumentException('LineChart requires at least 2 points');

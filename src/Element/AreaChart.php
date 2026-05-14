@@ -44,6 +44,7 @@ final readonly class AreaChart implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
+        public float $xLabelRotationDeg = 0.0,
     ) {
         if (count($xLabels) < 2) {
             throw new \InvalidArgumentException('AreaChart requires ≥2 xLabels');

@@ -13,11 +13,14 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  * paths (fillRect для bars, strokeLine для axes, showText для labels).
  *
  * Не реализовано:
- *  - Multi-series (grouped/stacked bars).
- *  - Custom axis ranges (auto-computed from data).
- *  - Grid lines.
- *  - Animation / interactivity.
- *  - Line/Pie charts (отдельные фазы).
+ *  - Animation / interactivity (PDF-format limitation, out of scope).
+ *
+ * Closed в later phases:
+ *  - Multi-series → Phase 51 (GroupedBarChart), Phase 54 (StackedBarChart)
+ *  - Custom axis ranges → Phase 68 (yMin/yMax)
+ *  - Grid lines → Phase 64 (showGridLines=true)
+ *  - X-axis label rotation → Phase 140 (xLabelRotationDeg)
+ *  - LineChart/PieChart → Phase 45
  */
 final readonly class BarChart implements BlockElement
 {
@@ -44,6 +47,10 @@ final readonly class BarChart implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
+        // Phase 140: x-axis label rotation в degrees. Positive = CCW.
+        // Common values: 45 (matplotlib default), -45 (Excel-style), 90.
+        // End-anchor convention: label's natural right-edge lands at tick position.
+        public float $xLabelRotationDeg = 0.0,
     ) {
         if ($bars === []) {
             throw new \InvalidArgumentException('BarChart requires at least one bar');

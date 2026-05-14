@@ -36,9 +36,13 @@ final readonly class GroupedBarChart implements BlockElement
         public float $legendSizePt = 8.0,
         public bool $showLegend = true,
         public bool $showGridLines = false,
+        public ?string $xAxisTitle = null,
+        public ?string $yAxisTitle = null,
+        public float $axisTitleSizePt = 9.0,
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
+        public float $xLabelRotationDeg = 0.0,
     ) {
         if ($bars === []) {
             throw new \InvalidArgumentException('GroupedBarChart requires bars');

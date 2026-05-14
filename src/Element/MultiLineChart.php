@@ -34,9 +34,13 @@ final readonly class MultiLineChart implements BlockElement
         public bool $showLegend = true,
         public bool $showMarkers = true,
         public bool $showGridLines = false,
+        public ?string $xAxisTitle = null,
+        public ?string $yAxisTitle = null,
+        public float $axisTitleSizePt = 9.0,
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
+        public float $xLabelRotationDeg = 0.0,
     ) {
         if (count($xLabels) < 2) {
             throw new \InvalidArgumentException('MultiLineChart requires ≥2 xLabels');
