@@ -248,6 +248,10 @@ final class Engine
             pageSetup: $primarySetup,
         );
 
+        // Phase 157: track page ranges per section для watermark post-pass.
+        // sectionPageRanges[i] = [startPageIdx, endPageIdx] — inclusive
+        // indices в $pdf->pages() array.
+        $sectionPageRanges = [];
         foreach ($sections as $idx => $section) {
             $this->currentSection = $section;
             if ($idx > 0) {
@@ -262,6 +266,7 @@ final class Engine
                 $this->applyPerPageMargins($context);
                 $context->cursorY = $context->topY;
             }
+            $sectionStartIdx = count($pdf->pages()) - 1;
             // Render header/footer на новой first page section'а.
             $this->renderHeaderFooter($context);
 
@@ -273,6 +278,24 @@ final class Engine
             if ($context->footnotes !== []) {
                 $this->renderEndnotes($context);
                 $context->footnotes = [];
+            }
+            $sectionPageRanges[$idx] = [$sectionStartIdx, count($pdf->pages()) - 1];
+        }
+
+        // Phase 157: watermark post-pass — draw watermarks ON TOP of body
+        // content на каждой странице section'а. PDF z-order: позже = выше,
+        // так что watermark appended после body commands appears OVER body.
+        $allPages = $pdf->pages();
+        foreach ($sections as $idx => $section) {
+            if (! $section->hasWatermark()) {
+                continue;
+            }
+            [$startIdx, $endIdx] = $sectionPageRanges[$idx];
+            for ($p = $startIdx; $p <= $endIdx; $p++) {
+                if (! isset($allPages[$p])) {
+                    continue;
+                }
+                $this->renderWatermarksOnPage($section, $allPages[$p]);
             }
         }
 
@@ -1890,24 +1913,10 @@ final class Engine
             $ctx->skipParagraphTag = true;
         }
 
-        // Watermark — рисуется первым на странице, чтобы оказаться под
-        // content'ом (PDF z-order: позже = выше). Image первым, чтобы
-        // text-watermark (если оба заданы) лежал поверх.
-        if ($section->hasImageWatermark()) {
-            $this->renderWatermarkImage(
-                $section->watermarkImage,
-                $section->watermarkImageWidthPt,
-                $section->watermarkImageOpacity,
-                $ctx,
-            );
-        }
-        if ($section->hasTextWatermark()) {
-            $this->renderWatermark(
-                (string) $section->watermarkText,
-                $section->watermarkTextOpacity,
-                $ctx,
-            );
-        }
+        // Phase 157: watermark переехал в post-pass рендера (Engine::renderWatermarksPostPass).
+        // mpdf-style: watermark поверх body content с opacity, не под — иначе
+        // прозрачные cells пропускают watermark поверх и он смешивается с
+        // текстом цвета фона. Сейчас здесь только header/footer rendering.
         $setup = $ctx->pageSetup;
         [$pageWidth, $pageHeight] = $setup->dimensions();
 
@@ -2033,6 +2042,78 @@ final class Engine
                 $text, $cx, $cy, $this->fallbackStandard, $sizePt, $angleRad,
                 opacity: $opacity,
             );
+        }
+    }
+
+    /**
+     * Phase 157: draw both image и text watermarks on a specific Page.
+     * Called в post-pass после рендера body content, чтобы watermark
+     * оказался ABOVE контента (mpdf-style stamp).
+     */
+    private function renderWatermarksOnPage(\Dskripchenko\PhpPdf\Section $section, \Dskripchenko\PhpPdf\Pdf\Page $page): void
+    {
+        // Image first (если есть оба, text лежит поверх image).
+        if ($section->hasImageWatermark()) {
+            $this->renderWatermarkImageOnPage(
+                $section->watermarkImage,
+                $section->watermarkImageWidthPt,
+                $section->watermarkImageOpacity,
+                $page,
+                $section->pageSetup,
+            );
+        }
+        if ($section->hasTextWatermark()) {
+            $this->renderWatermarkTextOnPage(
+                (string) $section->watermarkText,
+                $section->watermarkTextOpacity,
+                $page,
+                $section->pageSetup,
+            );
+        }
+    }
+
+    private function renderWatermarkTextOnPage(
+        string $text,
+        ?float $opacity,
+        \Dskripchenko\PhpPdf\Pdf\Page $page,
+        \Dskripchenko\PhpPdf\Style\PageSetup $setup,
+    ): void {
+        [$pageWidth, $pageHeight] = $setup->dimensions();
+
+        $sizePt = 72;
+        $textWidth = $this->defaultFont !== null
+            ? (new TextMeasurer($this->defaultFont, $sizePt))->widthPt($text)
+            : mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
+
+        $angleRad = -M_PI / 4;
+        $halfWidth = $textWidth / 2;
+        $cx = $pageWidth / 2 - $halfWidth * cos($angleRad);
+        $cy = $pageHeight / 2 - $halfWidth * sin($angleRad) - $sizePt * 0.3;
+
+        if ($this->defaultFont !== null) {
+            $page->drawWatermarkEmbedded($text, $cx, $cy, $this->defaultFont, $sizePt, $angleRad, opacity: $opacity);
+        } else {
+            $page->drawWatermark($text, $cx, $cy, $this->fallbackStandard, $sizePt, $angleRad, opacity: $opacity);
+        }
+    }
+
+    private function renderWatermarkImageOnPage(
+        \Dskripchenko\PhpPdf\Image\PdfImage $image,
+        ?float $widthPt,
+        ?float $opacity,
+        \Dskripchenko\PhpPdf\Pdf\Page $page,
+        \Dskripchenko\PhpPdf\Style\PageSetup $setup,
+    ): void {
+        [$pageWidth, $pageHeight] = $setup->dimensions();
+        $w = $widthPt ?? $pageWidth * 0.5;
+        $aspect = $image->heightPx > 0 ? $image->widthPx / $image->heightPx : 1.0;
+        $h = $aspect > 0 ? $w / $aspect : $w;
+        $x = ($pageWidth - $w) / 2;
+        $y = ($pageHeight - $h) / 2;
+        if ($opacity !== null && $opacity < 1.0) {
+            $page->drawImageWithOpacity($image, $x, $y, $w, $h, $opacity);
+        } else {
+            $page->drawImage($image, $x, $y, $w, $h);
         }
     }
 
