@@ -38,6 +38,12 @@ final readonly class PieChart implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
+        // Phase 168: показывать labels на perimeter с leader-lines (вместо
+        // или в дополнение к sidebar legend). Минимальный угол для label —
+        // small slices < $minLabelAngleDeg skip'ятся (избегаем overlap).
+        public bool $showPerimeterLabels = false,
+        public float $perimeterLabelSizePt = 8.0,
+        public float $minLabelAngleDeg = 8.0,
     ) {
         if ($slices === []) {
             throw new \InvalidArgumentException('PieChart requires at least one slice');

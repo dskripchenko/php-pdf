@@ -1442,6 +1442,37 @@ final class Engine
             }
         }
 
+        // Phase 168: perimeter labels с leader lines. Для each slice большего
+        // чем minLabelAngleDeg, draw line из arc midpoint → outside + label.
+        if ($pc->showPerimeterLabels) {
+            $minAngleRad = deg2rad($pc->minLabelAngleDeg);
+            $a2 = -M_PI / 2;
+            foreach ($pc->slices as $idx => $slice) {
+                $sliceAng = ($slice['value'] / $total) * 2 * M_PI;
+                if ($sliceAng < $minAngleRad) {
+                    $a2 += $sliceAng;
+
+                    continue;
+                }
+                $midAngle = $a2 + $sliceAng / 2;
+                // Leader line points: arc midpoint → outer offset.
+                $x1 = $cx + cos($midAngle) * $radius;
+                $y1 = $cy + sin($midAngle) * $radius;
+                $x2 = $cx + cos($midAngle) * ($radius + 8);
+                $y2 = $cy + sin($midAngle) * ($radius + 8);
+                $ctx->currentPage->strokeLine($x1, $y1, $x2, $y2, 0.5, 0.4, 0.4, 0.4);
+                // Label position: extends к right side если cos>0, левее если <0.
+                $labelText = (string) $slice['label'];
+                $labelW = $this->defaultFont !== null
+                    ? (new TextMeasurer($this->defaultFont, $pc->perimeterLabelSizePt))->widthPt($labelText)
+                    : mb_strlen($labelText, 'UTF-8') * $pc->perimeterLabelSizePt * 0.5;
+                $labelX = cos($midAngle) >= 0 ? $x2 + 2 : $x2 - $labelW - 2;
+                $labelY = $y2 - $pc->perimeterLabelSizePt * 0.5;
+                $this->chartText($ctx->currentPage, $labelText, $labelX, $labelY, $pc->perimeterLabelSizePt);
+                $a2 += $sliceAng;
+            }
+        }
+
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $pc->spaceAfterPt;
     }
