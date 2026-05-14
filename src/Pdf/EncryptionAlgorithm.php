@@ -18,12 +18,15 @@ enum EncryptionAlgorithm: string
     /** Adobe Supplement to ISO 32000 V=5 R=5 — AES-256-CBC. */
     case Aes_256 = 'aes-256';
 
+    /** Phase 106: ISO 32000-2 (PDF 2.0) V=5 R=6 — AES-256-CBC + iterative hash 2.B. */
+    case Aes_256_R6 = 'aes-256-r6';
+
     public function pdfVersion(): int
     {
         return match ($this) {
             self::Rc4_128 => 2,
             self::Aes_128 => 4,
-            self::Aes_256 => 5,
+            self::Aes_256, self::Aes_256_R6 => 5,
         };
     }
 
@@ -33,6 +36,7 @@ enum EncryptionAlgorithm: string
             self::Rc4_128 => 3,
             self::Aes_128 => 4,
             self::Aes_256 => 5,
+            self::Aes_256_R6 => 6,
         };
     }
 }

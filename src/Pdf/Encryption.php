@@ -79,10 +79,20 @@ final class Encryption
         if ($algorithm === EncryptionAlgorithm::Aes_256 && ! self::aes256Available()) {
             throw new \RuntimeException('AES-256 encryption requires openssl extension with aes-256-cbc support');
         }
+        if ($algorithm === EncryptionAlgorithm::Aes_256_R6 && ! self::aes256R6Available()) {
+            throw new \RuntimeException('AES-256 R6 encryption requires openssl extension with aes-128-cbc + aes-256-cbc + aes-256-ecb support');
+        }
 
         // V5 R5 path — completely different key/O/U derivation.
         if ($algorithm === EncryptionAlgorithm::Aes_256) {
-            $this->initAes256($userPassword, $ownerPassword, $permissions);
+            $this->initAes256($userPassword, $ownerPassword, $permissions, useR6Hash: false);
+
+            return;
+        }
+        // Phase 106: V5 R6 (PDF 2.0) — same dictionary layout, iterative
+        // hash 2.B used вместо single SHA-256 call.
+        if ($algorithm === EncryptionAlgorithm::Aes_256_R6) {
+            $this->initAes256($userPassword, $ownerPassword, $permissions, useR6Hash: true);
 
             return;
         }
@@ -124,9 +134,10 @@ final class Encryption
      */
     public function encryptObject(string $data, int $objNum, int $genNum = 0): string
     {
-        // Phase 50: V5 R5 uses fileKey directly + random IV — no per-object
-        // derivation.
-        if ($this->algorithm === EncryptionAlgorithm::Aes_256) {
+        // Phase 50/106: V5 R5+R6 use fileKey directly + random IV — no
+        // per-object derivation. Stream encryption identical между R5 и R6.
+        if ($this->algorithm === EncryptionAlgorithm::Aes_256
+            || $this->algorithm === EncryptionAlgorithm::Aes_256_R6) {
             $iv = random_bytes(16);
             $cipher = (string) openssl_encrypt(
                 $data,
@@ -180,6 +191,13 @@ final class Encryption
             && in_array('aes-256-ecb', openssl_get_cipher_methods(), true);
     }
 
+    /** Phase 106: R6 hash needs AES-128-CBC additionally. */
+    public static function aes256R6Available(): bool
+    {
+        return self::aes256Available()
+            && in_array('aes-128-cbc', openssl_get_cipher_methods(), true);
+    }
+
     /**
      * Phase 50: Initialize V5 R5 (Adobe Supplement) AES-256 encryption.
      *
@@ -192,7 +210,7 @@ final class Encryption
      *  - Similar для owner pw, но включает U в hash inputs.
      *  - /Perms = AES-256-ECB(extendedPermBytes, fileEncryptionKey).
      */
-    private function initAes256(string $userPassword, ?string $ownerPassword, int $permissions): void
+    private function initAes256(string $userPassword, ?string $ownerPassword, int $permissions, bool $useR6Hash): void
     {
         $owner = $ownerPassword ?? $userPassword;
         $userBytes = substr($userPassword, 0, 127);
@@ -215,23 +233,28 @@ final class Encryption
         $this->permissions = $p;
         $this->fileId = random_bytes(16);
 
+        // Phase 106: R6 заменяет single SHA-256 на iterative Algorithm 2.B.
+        $hashFn = $useR6Hash
+            ? fn (string $pw, string $salt, string $udata = ''): string => self::computeR6Hash($pw, $salt, $udata)
+            : fn (string $pw, string $salt, string $udata = ''): string => hash('sha256', $pw . $salt . $udata, true);
+
         // /U entry: hash(pw + valSalt) || valSalt || keySalt → 48 bytes.
-        $userHash = hash('sha256', $userBytes . $userValidationSalt, true);
+        $userHash = $hashFn($userBytes, $userValidationSalt);
         $this->uValue = $userHash . $userValidationSalt . $userKeySalt;
 
         // /O entry: hash(pw + valSalt + U[0..48]) || valSalt || keySalt.
         // U в hash input — 48 bytes /U value computed above.
-        $ownerHash = hash('sha256', $ownerBytes . $ownerValidationSalt . $this->uValue, true);
+        $ownerHash = $hashFn($ownerBytes, $ownerValidationSalt, $this->uValue);
         $this->oValue = $ownerHash . $ownerValidationSalt . $ownerKeySalt;
 
-        // /UE: AES-256-CBC(key=SHA-256(pw + userKeySalt), IV=zeros, fileKey).
-        $userInterKey = hash('sha256', $userBytes . $userKeySalt, true);
+        // /UE: AES-256-CBC(key=hash(pw + userKeySalt), IV=zeros, fileKey).
+        $userInterKey = $hashFn($userBytes, $userKeySalt);
         $this->ueValue = self::aes256CbcNoPadding(
             $userInterKey, str_repeat("\x00", 16), $fileEncryptionKey,
         );
 
         // /OE: similar с owner + U.
-        $ownerInterKey = hash('sha256', $ownerBytes . $ownerKeySalt . $this->uValue, true);
+        $ownerInterKey = $hashFn($ownerBytes, $ownerKeySalt, $this->uValue);
         $this->oeValue = self::aes256CbcNoPadding(
             $ownerInterKey, str_repeat("\x00", 16), $fileEncryptionKey,
         );
@@ -390,5 +413,68 @@ final class Encryption
     public static function asHexString(string $bytes): string
     {
         return '<' . bin2hex($bytes) . '>';
+    }
+
+    /**
+     * Phase 106: ISO 32000-2 Algorithm 2.B — R6 iterative hash.
+     *
+     * Mixes password + intermediate hash + optional U-value through 64+
+     * rounds of AES-128-CBC and a SHA-2 variant picked dynamically by
+     * `int(E[0..16]) mod 3`. Terminates after round ≥64 when the last
+     * byte of E ≤ (round - 32).
+     *
+     * @param  string  $udata  optional 48-byte U value (for /O hash) или ''.
+     */
+    public static function computeR6Hash(string $password, string $salt, string $udata = ''): string
+    {
+        $K = hash('sha256', $password . $salt . $udata, true);
+        $round = 0;
+        $lastByte = 0;
+        while (true) {
+            // K1 = (password || K || udata) repeated 64 times.
+            $K1 = str_repeat($password . $K . $udata, 64);
+            $aesKey = substr($K, 0, 16);
+            $iv = substr($K, 16, 16);
+            $E = (string) openssl_encrypt(
+                $K1,
+                'aes-128-cbc',
+                $aesKey,
+                OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+                $iv,
+            );
+
+            $sumMod3 = self::bigIntMod3(substr($E, 0, 16));
+            $hashAlg = match ($sumMod3) {
+                0 => 'sha256',
+                1 => 'sha384',
+                default => 'sha512',
+            };
+            $K = hash($hashAlg, $E, true);
+
+            $lastByte = ord($E[strlen($E) - 1]);
+            $round++;
+            if ($round >= 64 && $lastByte <= $round - 32) {
+                break;
+            }
+        }
+
+        return substr($K, 0, 32);
+    }
+
+    /**
+     * Big-endian unsigned integer mod 3, byte-by-byte (no GMP dependency).
+     *
+     * Iterates: acc = (acc * 256 + byte) % 3. Mathematically identical к
+     * BigInteger().mod(3) but works on arbitrary-length byte strings.
+     */
+    private static function bigIntMod3(string $bytes): int
+    {
+        $mod = 0;
+        $len = strlen($bytes);
+        for ($i = 0; $i < $len; $i++) {
+            $mod = ($mod * 256 + ord($bytes[$i])) % 3;
+        }
+
+        return $mod;
     }
 }

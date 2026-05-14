@@ -308,6 +308,10 @@ final class Document
         if ($algorithm === EncryptionAlgorithm::Aes_256 && version_compare($this->pdfVersion, '1.7', '<')) {
             $this->pdfVersion = '1.7';
         }
+        // Phase 106: R6 — PDF 2.0 (ISO 32000-2). Bump version unconditionally.
+        if ($algorithm === EncryptionAlgorithm::Aes_256_R6) {
+            $this->pdfVersion = '2.0';
+        }
 
         return $this;
     }
@@ -1095,17 +1099,19 @@ final class Document
             $enc = $this->encryption;
             $oHex = bin2hex($enc->oValue);
             $uHex = bin2hex($enc->uValue);
-            if ($enc->algorithm === EncryptionAlgorithm::Aes_256) {
-                // V5 R5 + Crypt Filter AESV3.
+            if ($enc->algorithm === EncryptionAlgorithm::Aes_256
+                || $enc->algorithm === EncryptionAlgorithm::Aes_256_R6) {
+                // V5 R5 (Adobe Supplement) или V5 R6 (PDF 2.0) + Crypt Filter AESV3.
+                $revision = $enc->algorithm === EncryptionAlgorithm::Aes_256_R6 ? 6 : 5;
                 $oeHex = bin2hex($enc->oeValue);
                 $ueHex = bin2hex($enc->ueValue);
                 $permsHex = bin2hex($enc->permsValue);
                 $encryptBody = sprintf(
-                    '<< /Filter /Standard /V 5 /R 5 /Length 256 '
+                    '<< /Filter /Standard /V 5 /R %d /Length 256 '
                     .'/CF << /StdCF << /CFM /AESV3 /Length 32 /AuthEvent /DocOpen >> >> '
                     .'/StmF /StdCF /StrF /StdCF '
                     .'/O <%s> /U <%s> /OE <%s> /UE <%s> /Perms <%s> /P %d >>',
-                    $oHex, $uHex, $oeHex, $ueHex, $permsHex, $enc->permissions,
+                    $revision, $oHex, $uHex, $oeHex, $ueHex, $permsHex, $enc->permissions,
                 );
             } elseif ($enc->algorithm === EncryptionAlgorithm::Aes_128) {
                 // V4 R4 + Crypt Filter AESV2.
