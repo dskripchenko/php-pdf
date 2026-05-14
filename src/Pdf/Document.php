@@ -684,6 +684,28 @@ final class Document
                 $patternId = $writer->addObject($pattern->toDictBody($shadingId));
                 $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $patternId);
             }
+            // Phase 111: Tiling Patterns (Type 1) — stream-bearing pattern
+            // objects emitted в same /Pattern resource namespace.
+            foreach ($page->tilingPatterns() as $name => $tp) {
+                $body = $tp->contentStream;
+                if ($this->compressStreams && $body !== '') {
+                    $compressed = (string) gzcompress($body, 6);
+                    $tpId = $writer->addObject(sprintf(
+                        "<< %s /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                        $tp->dictHead(),
+                        strlen($compressed),
+                        $compressed,
+                    ));
+                } else {
+                    $tpId = $writer->addObject(sprintf(
+                        "<< %s /Length %d >>\nstream\n%s\nendstream",
+                        $tp->dictHead(),
+                        strlen($body),
+                        $body,
+                    ));
+                }
+                $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $tpId);
+            }
 
             $resourcesParts = [];
             if ($resourcesFont !== '') {

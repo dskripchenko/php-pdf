@@ -56,6 +56,11 @@ final class Page
 
     private int $formXObjectCounter = 0;
 
+    /** @var array<string, PdfTilingPattern> name → tiling pattern (Phase 111) */
+    private array $tilingPatterns = [];
+
+    private int $tilingPatternCounter = 0;
+
     /** Phase 85: Page transition (slideshow effect) — emitted as /Trans dict. */
     private ?array $transition = null;
 
@@ -400,6 +405,38 @@ final class Page
      * Phase 82: fill rectangle с shading pattern.
      */
     public function fillRectWithPattern(float $x, float $y, float $w, float $h, string $patternName): self
+    {
+        $this->stream->fillRectWithPattern($x, $y, $w, $h, $patternName);
+
+        return $this;
+    }
+
+    /**
+     * Phase 111: register a Type 1 tiling pattern; return resource name.
+     */
+    public function registerTilingPattern(PdfTilingPattern $pattern): string
+    {
+        $name = 'TP' . (++$this->tilingPatternCounter);
+        $this->tilingPatterns[$name] = $pattern;
+
+        return $name;
+    }
+
+    /**
+     * @return array<string, PdfTilingPattern>
+     *
+     * @internal
+     */
+    public function tilingPatterns(): array
+    {
+        return $this->tilingPatterns;
+    }
+
+    /**
+     * Phase 111: fill rectangle с tiling pattern (same content stream ops
+     * as shading pattern fill — Pattern color space через `/Pattern cs`).
+     */
+    public function fillRectWithTilingPattern(float $x, float $y, float $w, float $h, string $patternName): self
     {
         $this->stream->fillRectWithPattern($x, $y, $w, $h, $patternName);
 
