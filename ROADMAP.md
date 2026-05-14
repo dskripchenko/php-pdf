@@ -709,6 +709,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   stop `1001` = 12·N + 7 modules. Optional Mod-10 check digit (Luhn-style
   variant) via `withCheckDigit: true`. `BarcodeFormat::MsiPlessey` +
   Engine dispatch.
+- ~~Pharmacode (Laetus) — pharma blister packs~~ ✅ **Phase 207 closed**.
+  Самый простой 1D barcode — value 3..131070 без start/stop/check digit.
+  Recursive algorithm: even → wide bar + N=N/2−1; odd → narrow bar + N=(N−1)/2.
+  Module widths 1/3/2 (narrow bar / wide bar / inter-bar space). Max 16 wide
+  bars для value=131070 = 78 modules. `BarcodeFormat::Pharmacode` + Engine
+  dispatch (string→int conversion).
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.

@@ -2354,6 +2354,14 @@ final class Engine
 
                 return [$e->modulesWithQuietZone(12), $e->canonical];
             })(),
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::Pharmacode => (function () use ($bc): array {
+                if (! preg_match('@^\d+$@', $bc->value)) {
+                    throw new \InvalidArgumentException('Pharmacode requires numeric value');
+                }
+                $e = new \Dskripchenko\PhpPdf\Barcode\PharmacodeEncoder((int) $bc->value);
+
+                return [$e->modulesWithQuietZone(6), (string) $e->value];
+            })(),
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::Ean13 => (function () use ($bc): array {
                 $e = new \Dskripchenko\PhpPdf\Barcode\Ean13Encoder($bc->value);
 
