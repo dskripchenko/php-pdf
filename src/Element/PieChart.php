@@ -9,22 +9,24 @@ use Dskripchenko\PhpPdf\Style\Alignment;
 /**
  * Phase 45: Pie chart primitive.
  *
- * Sectors rendered как polygon approximation (N segments per slice).
- * Default 60 chord segments per slice — visually смотрится gladkim.
+ * Phase 166: sectors rendered как cubic Bezier arcs (true curve, не polygon).
+ * Phase 167: optional exploded slices (radial offset для emphasis).
  *
  * Не реализовано:
- *  - True Bezier arc rendering — v1.3 backlog.
- *  - Exploded slices — v1.3 backlog.
  *  - Slice labels по периметру — v1.3 backlog.
  *  - 3D effects — out of scope (PDF static format).
  *
  * Closed в later phases:
  *  - Donut variant → Phase 55 (DonutChart)
+ *  - True Bezier arc rendering → Phase 166
+ *  - Exploded slices → Phase 167
  */
 final readonly class PieChart implements BlockElement
 {
     /**
-     * @param  list<array{label: string, value: float, color?: string}>  $slices
+     * @param  list<array{label: string, value: float, color?: string, explode?: bool|float}>  $slices
+     *   slice.explode: true → standard ~8% radius offset; float → custom offset
+     *   как fraction of radius (0.05 = 5%, 0.2 = 20%).
      */
     public function __construct(
         public array $slices,

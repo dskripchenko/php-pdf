@@ -1383,10 +1383,21 @@ final class Engine
         // → close → fill. Sub-arc cap 90° for accuracy. k = 4/3*tan(θ/4)*r.
         foreach ($pc->slices as $idx => $slice) {
             $sliceAngle = ($slice['value'] / $total) * 2 * M_PI;
-            $arcStartX = $cx + cos($angle) * $radius;
-            $arcStartY = $cy + sin($angle) * $radius;
+            // Phase 167: explode offset — sliceCx/Cy shifted radially при slice.explode set.
+            $explode = $slice['explode'] ?? false;
+            $offsetFraction = is_float($explode) ? $explode : ($explode === true ? 0.08 : 0.0);
+            $sliceCx = $cx;
+            $sliceCy = $cy;
+            if ($offsetFraction > 0) {
+                $midAngle = $angle + $sliceAngle / 2;
+                $offsetDist = $radius * $offsetFraction;
+                $sliceCx = $cx + cos($midAngle) * $offsetDist;
+                $sliceCy = $cy + sin($midAngle) * $offsetDist;
+            }
+            $arcStartX = $sliceCx + cos($angle) * $radius;
+            $arcStartY = $sliceCy + sin($angle) * $radius;
             $commands = [
-                ['M', $cx, $cy],
+                ['M', $sliceCx, $sliceCy],
                 ['L', $arcStartX, $arcStartY],
             ];
             // Subdivide slice angle на chunks ≤ 90°.
@@ -1397,10 +1408,10 @@ final class Engine
                 $a1 = $a0 + $perArc;
                 // Bezier control distance: 4/3 * tan(θ/4) * r
                 $k_factor = (4.0 / 3.0) * tan($perArc / 4.0) * $radius;
-                $p0x = $cx + cos($a0) * $radius;
-                $p0y = $cy + sin($a0) * $radius;
-                $p3x = $cx + cos($a1) * $radius;
-                $p3y = $cy + sin($a1) * $radius;
+                $p0x = $sliceCx + cos($a0) * $radius;
+                $p0y = $sliceCy + sin($a0) * $radius;
+                $p3x = $sliceCx + cos($a1) * $radius;
+                $p3y = $sliceCy + sin($a1) * $radius;
                 // C1 = P0 + tangent at P0 (perpendicular to radius, rotation direction).
                 $p1x = $p0x + cos($a0 + M_PI / 2) * $k_factor;
                 $p1y = $p0y + sin($a0 + M_PI / 2) * $k_factor;
