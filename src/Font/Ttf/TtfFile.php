@@ -324,6 +324,25 @@ final class TtfFile
         return $this->mvar;
     }
 
+    /** Phase 133: lazy gvar parser. */
+    private ?GvarReader $gvar = null;
+
+    private bool $gvarParsed = false;
+
+    public function gvar(): ?GvarReader
+    {
+        if ($this->gvarParsed) {
+            return $this->gvar;
+        }
+        $this->gvarParsed = true;
+        $info = $this->tableInfo('gvar');
+        if ($info !== null) {
+            $this->gvar = GvarReader::read($this->bytes, $info);
+        }
+
+        return $this->gvar;
+    }
+
     /**
      * Phase 132: convert user-space axis coords к normalized -1..+1 space.
      * Applies linear default normalization, then avar piecewise-linear remap
