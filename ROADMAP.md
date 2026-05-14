@@ -721,6 +721,11 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   (weight cycle 1..10) via `withCheckDigit: true`, or dual C+K (C weight
   1..10, K weight 1..9) via `doubleCheck: true`. `BarcodeFormat::Code11`
   + Engine dispatch.
+- ~~QR FNC1 mode 1 (GS1) + mode 2 (AIM) markers~~ ✅ **Phase 211 closed**.
+  Per ISO/IEC 18004 §6.4.7 — Mode 1 (GS1): 4-bit `0101` indicator. Mode 2
+  (AIM): 4-bit `1001` + 8-bit Application Indicator. `fnc1Mode` + optional
+  `fnc1AimIndicator` constructor params в QrEncoder с full validation
+  (mode 1/2 only, AIM indicator required only для mode 2, value 0..255).
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.
@@ -752,6 +757,13 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   `$useXrefStream` param. Binary-packed (W=[1 4 2]) FlateDecode XRef stream
   object replaces classic `xref...trailer` keywords. Auto-bumps PDF version
   к 1.5. Disabled for PKCS#7 signing path. Output ~50% smaller metadata.
+
+### Other v1.4 features (closed in current cycle)
+
+- ~~Document::pdfVersion constructor param~~ ✅ **Phase 210 closed**.
+  Expose PDF version targeting на top-level API (default null = Engine's
+  1.7; subsystems auto-bump for AES/XRef stream/PDF 2.0). Useful для
+  '1.4' legacy compat или '2.0' modern features.
 
 ### Pragmatic publication strategy
 
