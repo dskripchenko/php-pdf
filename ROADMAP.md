@@ -697,6 +697,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   (4 bars + 3 spaces), 2 wide chars = 9 mod, 3 wide chars = 10 mod @ 2:1
   ratio. Custom start/stop via constructor params. `BarcodeFormat::Codabar`
   + Engine dispatch. Used by libraries, blood banks, FedEx ground.
+- ~~Code 93 alphanumeric с dual Mod-47 check~~ ✅ **Phase 205 closed**.
+  USS Code 93 — 47-char set (43 user-allowed + 4 shift placeholders для
+  check digit overflow), continuous encoding (9 modules/char, no inter-char
+  gaps), mandatory dual check digits C (weight cycle 1..20) и K (1..15).
+  Module count = 9·(N+4) + 1 (включая termination bar). Denser successor
+  Code 39 — больше data density + automatic error detection.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.

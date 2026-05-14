@@ -24,6 +24,7 @@ enum BarcodeFormat: string
 {
     case Code128 = 'code128';
     case Code39 = 'code39';   // Phase 202: alphanumeric self-checking variable-length.
+    case Code93 = 'code93';   // Phase 205: denser Code 39 successor с dual Mod-47 check.
     case Codabar = 'codabar'; // Phase 204: NW-7 numeric+punct, libraries/FedEx/blood banks.
     case Itf = 'itf';         // Phase 203: Interleaved 2 of 5 (ITF-14 GTIN profile).
     case Ean13 = 'ean13';
