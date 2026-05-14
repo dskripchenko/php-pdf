@@ -25,11 +25,12 @@ enum BarcodeFormat: string
     case Qr = 'qr';
     case DataMatrix = 'datamatrix';
     case Pdf417 = 'pdf417'; // Phase 124: stacked linear 2D barcode.
+    case Aztec = 'aztec';   // Phase 125: square 2D barcode (compact 1-4L).
 
     public function is2D(): bool
     {
         return match ($this) {
-            self::Qr, self::DataMatrix => true,
+            self::Qr, self::DataMatrix, self::Aztec => true,
             default => false,
         };
     }

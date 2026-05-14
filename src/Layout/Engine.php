@@ -2019,6 +2019,8 @@ final class Engine
         if ($bc->format->is2D()) {
             if ($bc->format === \Dskripchenko\PhpPdf\Element\BarcodeFormat::DataMatrix) {
                 $this->renderDataMatrixBarcode($bc, $ctx);
+            } elseif ($bc->format === \Dskripchenko\PhpPdf\Element\BarcodeFormat::Aztec) {
+                $this->renderAztecBarcode($bc, $ctx);
             } else {
                 $this->renderQrBarcode($bc, $ctx);
             }
@@ -2137,6 +2139,18 @@ final class Engine
         $this->render2DMatrix(
             $enc->modules(), $enc->size(), $bc, $ctx,
             quietZone: 1,
+        );
+    }
+
+    /**
+     * Phase 125: Aztec compact (1-4 layers, 15..27 squared).
+     */
+    private function renderAztecBarcode(\Dskripchenko\PhpPdf\Element\Barcode $bc, LayoutContext $ctx): void
+    {
+        $enc = new \Dskripchenko\PhpPdf\Barcode\AztecEncoder($bc->value);
+        $this->render2DMatrix(
+            $enc->modules(), $enc->matrixSize(), $bc, $ctx,
+            quietZone: 2,
         );
     }
 
