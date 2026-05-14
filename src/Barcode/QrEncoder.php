@@ -212,18 +212,47 @@ final class QrEncoder
 
     public readonly ?int $eciDesignator;
 
+    /**
+     * Phase 211: FNC1 mode flag. Null = no FNC1; 1 = GS1 (Mode 1, marker
+     * только); 2 = AIM (Mode 2, marker + 8-bit Application Indicator —
+     * provided via $fnc1AimIndicator).
+     */
+    public readonly ?int $fnc1Mode;
+
+    /**
+     * Phase 211: AIM Application Indicator (for Mode 2 only). 8-bit value
+     * 0..255 per AIM specification.
+     */
+    public readonly ?int $fnc1AimIndicator;
+
     public function __construct(
         public readonly string $data,
         ?QrEccLevel $eccLevel = null,
         ?QrEncodingMode $mode = null,
         ?array $structuredAppend = null,
         ?int $eciDesignator = null,
+        ?int $fnc1Mode = null,
+        ?int $fnc1AimIndicator = null,
     ) {
         $this->structuredAppend = $structuredAppend;
         if ($eciDesignator !== null && ($eciDesignator < 0 || $eciDesignator > 999999)) {
             throw new \InvalidArgumentException('QR ECI designator must be 0..999999');
         }
         $this->eciDesignator = $eciDesignator;
+        if ($fnc1Mode !== null && $fnc1Mode !== 1 && $fnc1Mode !== 2) {
+            throw new \InvalidArgumentException('QR FNC1 mode must be 1 (GS1) or 2 (AIM)');
+        }
+        if ($fnc1Mode === 2 && $fnc1AimIndicator === null) {
+            throw new \InvalidArgumentException('QR FNC1 Mode 2 requires fnc1AimIndicator');
+        }
+        if ($fnc1Mode !== 2 && $fnc1AimIndicator !== null) {
+            throw new \InvalidArgumentException('fnc1AimIndicator только relevant для FNC1 Mode 2');
+        }
+        if ($fnc1AimIndicator !== null && ($fnc1AimIndicator < 0 || $fnc1AimIndicator > 255)) {
+            throw new \InvalidArgumentException('FNC1 AIM indicator must be 0..255 (8-bit)');
+        }
+        $this->fnc1Mode = $fnc1Mode;
+        $this->fnc1AimIndicator = $fnc1AimIndicator;
         if ($data === '') {
             throw new \InvalidArgumentException('QR input must be non-empty');
         }
@@ -266,7 +295,14 @@ final class QrEncoder
             if ($this->eciDesignator !== null) {
                 $eciBits = 4 + ($this->eciDesignator <= 127 ? 8 : ($this->eciDesignator <= 16383 ? 16 : 24));
             }
-            $needed = $structAppendBits + $eciBits + 4 + $this->mode->charCountIndicatorBits($v) + $this->mode->dataBitsFor($charCount);
+            // Phase 211: FNC1 mode 1 = 4 bits; mode 2 = 4 + 8 bits.
+            $fnc1Bits = 0;
+            if ($this->fnc1Mode === 1) {
+                $fnc1Bits = 4;
+            } elseif ($this->fnc1Mode === 2) {
+                $fnc1Bits = 12;
+            }
+            $needed = $structAppendBits + $eciBits + $fnc1Bits + 4 + $this->mode->charCountIndicatorBits($v) + $this->mode->dataBitsFor($charCount);
             if ($needed <= $capacityBits) {
                 $version = $v;
                 break;
@@ -359,6 +395,13 @@ final class QrEncoder
             } else { // up to 999999
                 $bits .= '110'.str_pad(decbin($eci), 21, '0', STR_PAD_LEFT);
             }
+        }
+        // Phase 211: FNC1 mode 1 (GS1) = '0101'. Mode 2 (AIM) = '1001' + 8-bit indicator.
+        if ($this->fnc1Mode === 1) {
+            $bits .= '0101';
+        } elseif ($this->fnc1Mode === 2) {
+            $bits .= '1001';
+            $bits .= str_pad(decbin($this->fnc1AimIndicator), 8, '0', STR_PAD_LEFT);
         }
         // Mode indicator — 4 bits.
         $bits .= str_pad(decbin($this->mode->indicatorBits()), 4, '0', STR_PAD_LEFT);
