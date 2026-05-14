@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 112 фаз закрыты (1040 + 194 printable = 1234 теста).
+**Текущий статус:** v1.1-dev — 118 фаз закрыты (1069 + 194 printable = 1263 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-114 closed (90 фаз):
+**v1.1 progress:** 25-120 closed (96 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -76,7 +76,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 111 Tiling Pattern Type 1 (repeating fills),
  - 112 Optional Content Groups (layers + /OCProperties),
  - 113 named/JavaScript/launch link actions,
- - 114 line dash pattern + caps + joins + miter limit.
+ - 114 line dash pattern + caps + joins + miter limit,
+ - 115 page /AA Open/Close JavaScript actions,
+ - 116 rectangular + polygon clipping paths,
+ - 117 DeviceCMYK color operators (k / K),
+ - 118 text rendering modes (Tr 0..7),
+ - 119 document-level /AA actions (WC/WS/DS/WP/DP),
+ - 120 Square/Circle/Line annotation shapes.
 
 ---
 
