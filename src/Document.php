@@ -53,6 +53,14 @@ final readonly class Document
          * к classic xref when signature configured.
          */
         public bool $useXrefStream = false,
+        /**
+         * Phase 210: target PDF version (header `%PDF-X.Y`). Defaults к null
+         * — Engine uses its default (`'1.7'`), и subsystems auto-bump if
+         * required (AES-128 → 1.6, AES-256 → 1.7, PDF 2.0 features → 2.0,
+         * XRef stream → 1.5). Set explicitly если требуется compatibility
+         * older readers (e.g., '1.4' для legacy printer firmware).
+         */
+        public ?string $pdfVersion = null,
     ) {}
 
     /**
@@ -67,6 +75,9 @@ final readonly class Document
     {
         $engine ??= new Engine;
         $pdf = $engine->render($this);
+        if ($this->pdfVersion !== null) {
+            $pdf->pdfVersion($this->pdfVersion);
+        }
         if ($this->metadata !== []) {
             $pdf->metadata(
                 title: $this->metadata['Title'] ?? null,
