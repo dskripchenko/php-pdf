@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 120 фаз закрыты (1082 + 194 printable = 1276 тестов).
+**Текущий статус:** v1.1-dev — 121 фаза закрыта (1094 + 194 printable = 1288 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-122 closed (98 фаз):
+**v1.1 progress:** 25-123 closed (99 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -84,7 +84,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 119 document-level /AA actions (WC/WS/DS/WP/DP),
  - 120 Square/Circle/Line annotation shapes,
  - 121 Stamp + Polygon + PolyLine annotations,
- - 122 Ink annotation (freehand drawing).
+ - 122 Ink annotation (freehand drawing),
+ - 123 AcroForm AppearanceStream /AP /N rendering.
 
 ---
 
@@ -327,6 +328,16 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Code 128 Set A (control chars)~~ ✅ **Phase 78 closed** (5c42a76).
 - ~~DataMatrix (ECC 200 square 10×10..26×26)~~ ✅ **Phase 104 closed** (f4d8752).
 - Barcode formats: PDF417, Aztec, DataMatrix rectangular + larger sizes (32×32+).
+  **Deferred** (research notes 2026-05-14):
+  - PDF417 заблокирован отсутствием доступа к ISO/IEC 15438 Annex 3 codeword
+    pattern table (929×3=2787 уникальных 17-битных паттернов). Все public
+    PHP-реализации (TCPDF/LGPL etc.) копируют таблицу из спецификации.
+    Algorithmic generation: пробовали 12+ формул cluster identification —
+    ни одна не даёт правильное partition. Reopen когда сможем извлечь
+    таблицу из MIT-licensed reference (например, BWIPP).
+  - Aztec — компактный вариант (1-4 layers) доступен algorithmically;
+    отложен из-за отсутствия decoder для verification в этой сессии.
+    ~600-800 LoC scope.
 - QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
   auto best-mask selection.
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
