@@ -269,6 +269,132 @@ final class TtfFile
         return $this->namesById[$nameId] ?? null;
     }
 
+    /** Phase 132: lazy avar/HVAR/MVAR parsers. */
+    private ?AvarReader $avar = null;
+
+    private bool $avarParsed = false;
+
+    private ?HvarReader $hvar = null;
+
+    private bool $hvarParsed = false;
+
+    private ?MvarReader $mvar = null;
+
+    private bool $mvarParsed = false;
+
+    public function avar(): ?AvarReader
+    {
+        if ($this->avarParsed) {
+            return $this->avar;
+        }
+        $this->avarParsed = true;
+        $info = $this->tableInfo('avar');
+        if ($info !== null) {
+            $this->avar = AvarReader::read($this->bytes, $info);
+        }
+
+        return $this->avar;
+    }
+
+    public function hvar(): ?HvarReader
+    {
+        if ($this->hvarParsed) {
+            return $this->hvar;
+        }
+        $this->hvarParsed = true;
+        $info = $this->tableInfo('HVAR');
+        if ($info !== null) {
+            $this->hvar = HvarReader::read($this->bytes, $info);
+        }
+
+        return $this->hvar;
+    }
+
+    public function mvar(): ?MvarReader
+    {
+        if ($this->mvarParsed) {
+            return $this->mvar;
+        }
+        $this->mvarParsed = true;
+        $info = $this->tableInfo('MVAR');
+        if ($info !== null) {
+            $this->mvar = MvarReader::read($this->bytes, $info);
+        }
+
+        return $this->mvar;
+    }
+
+    /**
+     * Phase 132: convert user-space axis coords к normalized -1..+1 space.
+     * Applies linear default normalization, then avar piecewise-linear remap
+     * если avar table present.
+     *
+     * @param  array<string, float>  $userCoords  axis tag → user value
+     * @return array<int, float>  axis index → normalized coord (-1..+1)
+     */
+    public function normalizeCoordinates(array $userCoords): array
+    {
+        $axes = $this->variationAxes();
+        $norm = [];
+        $avar = $this->avar();
+        foreach ($axes as $i => $axis) {
+            $val = $userCoords[$axis['tag']] ?? $axis['default'];
+            // Clamp к [min, max].
+            $val = max($axis['min'], min($axis['max'], $val));
+            // Linear default normalization.
+            if ($val < $axis['default']) {
+                $n = $axis['default'] - $axis['min'];
+                $linear = $n > 0 ? ($val - $axis['default']) / $n : 0.0;
+            } elseif ($val > $axis['default']) {
+                $n = $axis['max'] - $axis['default'];
+                $linear = $n > 0 ? ($val - $axis['default']) / $n : 0.0;
+            } else {
+                $linear = 0.0;
+            }
+            // Apply avar remap.
+            $norm[$i] = $avar !== null ? $avar->map($i, $linear) : $linear;
+        }
+
+        return $norm;
+    }
+
+    /**
+     * Phase 132: interpolated advance width для glyph под given axis coords.
+     * Falls back на default advanceWidth если font не variable или HVAR absent.
+     *
+     * @param  array<string, float>  $userCoords
+     */
+    public function advanceWidthForInstance(int $glyphId, array $userCoords): int
+    {
+        $default = $this->advanceWidth($glyphId);
+        $hvar = $this->hvar();
+        if ($hvar === null) {
+            return $default;
+        }
+        $norm = $this->normalizeCoordinates($userCoords);
+        $delta = $hvar->advanceDelta($glyphId, $norm);
+
+        return (int) round($default + $delta);
+    }
+
+    /**
+     * Phase 132: interpolated font metric (e.g., 'asc ', 'desc', 'cpht').
+     * Returns base metric value plus MVAR delta, или base value если no MVAR.
+     *
+     * @param  array<string, float>  $userCoords
+     */
+    public function metricForInstance(string $tag, int $baseValue, array $userCoords): int
+    {
+        $mvar = $this->mvar();
+        if ($mvar === null) {
+            return $baseValue;
+        }
+        $norm = $this->normalizeCoordinates($userCoords);
+        $delta = $mvar->metricDelta($tag, $norm);
+
+        return (int) round($baseValue + $delta);
+    }
+
     /**
      * Read header + table directory.
      * Header: scaler type (4) + numTables (2) + 3 × uint16 = 12 bytes.
