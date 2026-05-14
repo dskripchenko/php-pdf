@@ -1055,6 +1055,99 @@ final class Page
     }
 
     /**
+     * Phase 121: Stamp annotation — predefined rubber-stamp icon.
+     *
+     * @param  string  $stampName  one of Approved, Confidential, Draft,
+     *                             Experimental, Expired, Final, ForComment,
+     *                             ForPublicRelease, NotApproved, NotForPublicRelease,
+     *                             Sold, TopSecret.
+     */
+    public function addStampAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $stampName = 'Draft',
+        string $contents = '',
+    ): self {
+        $valid = [
+            'Approved', 'Confidential', 'Draft', 'Experimental', 'Expired',
+            'Final', 'ForComment', 'ForPublicRelease', 'NotApproved',
+            'NotForPublicRelease', 'Sold', 'TopSecret',
+        ];
+        if (! in_array($stampName, $valid, true)) {
+            throw new \InvalidArgumentException('Invalid stamp name: ' . $stampName);
+        }
+        $this->markupAnnotations[] = [
+            'kind' => 'stamp',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'contents' => $contents,
+            'stampName' => $stampName,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Phase 121: Polygon annotation — closed shape with vertex list.
+     *
+     * @param  list<array{0:float,1:float}>  $vertices
+     */
+    public function addPolygonAnnotation(
+        array $vertices,
+        ?array $strokeColor = null,
+        ?array $fillColor = null,
+        float $borderWidth = 1.0,
+    ): self {
+        if (count($vertices) < 3) {
+            throw new \InvalidArgumentException('Polygon annotation needs ≥3 vertices');
+        }
+
+        return $this->addPolyMarkup('polygon', $vertices, $strokeColor, $fillColor, $borderWidth);
+    }
+
+    /**
+     * Phase 121: PolyLine annotation — open polyline.
+     *
+     * @param  list<array{0:float,1:float}>  $vertices
+     */
+    public function addPolyLineAnnotation(
+        array $vertices,
+        ?array $strokeColor = null,
+        float $borderWidth = 1.0,
+    ): self {
+        if (count($vertices) < 2) {
+            throw new \InvalidArgumentException('PolyLine annotation needs ≥2 vertices');
+        }
+
+        return $this->addPolyMarkup('polyline', $vertices, $strokeColor, null, $borderWidth);
+    }
+
+    /**
+     * @param  list<array{0:float,1:float}>  $vertices
+     * @param  array{0:float,1:float,2:float}|null  $stroke
+     * @param  array{0:float,1:float,2:float}|null  $fill
+     */
+    private function addPolyMarkup(string $kind, array $vertices, ?array $stroke, ?array $fill, float $borderWidth): self
+    {
+        $xs = array_column($vertices, 0);
+        $ys = array_column($vertices, 1);
+        $this->markupAnnotations[] = [
+            'kind' => $kind,
+            'x1' => min($xs), 'y1' => min($ys),
+            'x2' => max($xs), 'y2' => max($ys),
+            'contents' => '',
+            'color' => $stroke,
+            'fillColor' => $fill,
+            'vertices' => $vertices,
+            'borderWidth' => $borderWidth,
+        ];
+
+        return $this;
+    }
+
+    /**
      * Phase 120: Line annotation — emits a thin line between two endpoints.
      */
     public function addLineAnnotation(

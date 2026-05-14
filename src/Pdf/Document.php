@@ -1930,6 +1930,31 @@ final class Document
                     '<< /Type /Annot /Subtype /Line /Rect %s%s%s%s%s >>',
                     $rect, $linePart, $colorPart, $bs, $contentsPart,
                 );
+            case 'stamp':
+                return sprintf(
+                    '<< /Type /Annot /Subtype /Stamp /Rect %s /Name /%s%s >>',
+                    $rect, $ann['stampName'], $contentsPart,
+                );
+            case 'polygon':
+            case 'polyline':
+                $subtype = $ann['kind'] === 'polygon' ? 'Polygon' : 'PolyLine';
+                $verts = [];
+                foreach ($ann['vertices'] as [$vx, $vy]) {
+                    $verts[] = $this->fmt((float) $vx) . ' ' . $this->fmt((float) $vy);
+                }
+                $verticesPart = ' /Vertices [' . implode(' ', $verts) . ']';
+                $icPart = '';
+                if (! empty($ann['fillColor'])) {
+                    $fc = $ann['fillColor'];
+                    $icPart = sprintf(' /IC [%s %s %s]',
+                        $this->fmt((float) $fc[0]), $this->fmt((float) $fc[1]), $this->fmt((float) $fc[2]));
+                }
+                $bs = sprintf(' /BS << /Type /Border /W %s /S /S >>', $this->fmt((float) $ann['borderWidth']));
+
+                return sprintf(
+                    '<< /Type /Annot /Subtype /%s /Rect %s%s%s%s%s%s >>',
+                    $subtype, $rect, $verticesPart, $colorPart, $icPart, $bs, $contentsPart,
+                );
             default:
                 throw new \LogicException('Unknown markup annotation kind: ' . $ann['kind']);
         }
