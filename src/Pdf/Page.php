@@ -61,6 +61,11 @@ final class Page
 
     private int $tilingPatternCounter = 0;
 
+    /** @var array<string, PdfLayer> name (resource) → layer (Phase 112) */
+    private array $layerProperties = [];
+
+    private int $layerCounter = 0;
+
     /** Phase 85: Page transition (slideshow effect) — emitted as /Trans dict. */
     private ?array $transition = null;
 
@@ -441,6 +446,52 @@ final class Page
         $this->stream->fillRectWithPattern($x, $y, $w, $h, $patternName);
 
         return $this;
+    }
+
+    /**
+     * Phase 112: begin Optional Content section. Content emitted между
+     * beginLayer/endLayer wrap'ится в `/OC /MCn BDC ... EMC` so layer
+     * visibility from /OCProperties toggles its rendering.
+     */
+    public function beginLayer(PdfLayer $layer): self
+    {
+        $name = $this->registerLayerProperty($layer);
+        $this->stream->beginLayerContent($name);
+
+        return $this;
+    }
+
+    /**
+     * Phase 112: end Optional Content section. Must match preceding beginLayer.
+     */
+    public function endLayer(): self
+    {
+        $this->stream->endLayerContent();
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, PdfLayer>
+     *
+     * @internal
+     */
+    public function layerProperties(): array
+    {
+        return $this->layerProperties;
+    }
+
+    private function registerLayerProperty(PdfLayer $layer): string
+    {
+        foreach ($this->layerProperties as $name => $l) {
+            if ($l === $layer) {
+                return $name;
+            }
+        }
+        $name = 'OC' . (++$this->layerCounter);
+        $this->layerProperties[$name] = $layer;
+
+        return $name;
     }
 
     /**

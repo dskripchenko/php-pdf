@@ -415,6 +415,26 @@ final class ContentStream
     }
 
     /**
+     * Phase 112: begin Optional Content section — `/OC /name BDC`.
+     */
+    public function beginLayerContent(string $resourceName): self
+    {
+        $this->body .= sprintf("/OC /%s BDC\n", $resourceName);
+
+        return $this;
+    }
+
+    /**
+     * Phase 112: end Optional Content section — `EMC`.
+     */
+    public function endLayerContent(): self
+    {
+        $this->body .= "EMC\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *

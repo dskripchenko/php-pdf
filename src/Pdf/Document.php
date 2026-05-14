@@ -70,6 +70,9 @@ final class Document
     /** Phase 108: PKCS#7 signing config (PDF signed at toBytes). */
     private ?SignatureConfig $signatureConfig = null;
 
+    /** @var list<PdfLayer> Phase 112: Optional Content Groups (layers). */
+    private array $layers = [];
+
     /** Phase 108: reserved sig dict ID, set transient during emit(). */
     private ?int $signatureDictId = null;
 
@@ -344,6 +347,28 @@ final class Document
     }
 
     /**
+     * Phase 112: register a layer (Optional Content Group). Returned
+     * instance is passed к Page::beginLayer() to mark content.
+     */
+    public function addLayer(string $name, bool $defaultVisible = true, string $intent = 'View'): PdfLayer
+    {
+        $layer = new PdfLayer($name, $defaultVisible, $intent);
+        $this->layers[] = $layer;
+
+        return $layer;
+    }
+
+    /**
+     * @return list<PdfLayer>
+     *
+     * @internal
+     */
+    public function layers(): array
+    {
+        return $this->layers;
+    }
+
+    /**
      * @param  array{0: float, 1: float}|null  $defaultCustomDimensionsPt
      */
     public function __construct(
@@ -532,6 +557,14 @@ final class Document
         //    Embedded fonts: один объект-граф per PdfFont instance.
         //    Images: один XObject per PdfImage instance.
 
+        // Phase 112: emit OCG objects upfront so page Properties references
+        // them by ID.
+        /** @var \SplObjectStorage<PdfLayer, int> */
+        $layerObjectIds = new \SplObjectStorage;
+        foreach ($this->layers as $layer) {
+            $layerObjectIds[$layer] = $writer->addObject($layer->dictBody());
+        }
+
         // Map StandardFont enum → object ID (single registration).
         /** @var array<string, int> */
         $standardFontObjectIds = [];
@@ -707,6 +740,15 @@ final class Document
                 $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $tpId);
             }
 
+            // Phase 112: /Properties для Optional Content references (`/OC /name BDC`).
+            $resourcesProperties = '';
+            foreach ($page->layerProperties() as $name => $layer) {
+                if (! isset($layerObjectIds[$layer])) {
+                    continue;
+                }
+                $resourcesProperties .= sprintf(' /%s %d 0 R', $name, $layerObjectIds[$layer]);
+            }
+
             $resourcesParts = [];
             if ($resourcesFont !== '') {
                 $resourcesParts[] = '/Font <<'.$resourcesFont.' >>';
@@ -719,6 +761,9 @@ final class Document
             }
             if ($resourcesPattern !== '') {
                 $resourcesParts[] = '/Pattern <<'.$resourcesPattern.' >>';
+            }
+            if ($resourcesProperties !== '') {
+                $resourcesParts[] = '/Properties <<'.$resourcesProperties.' >>';
             }
             $resourcesDict = $resourcesParts === []
                 ? '<< >>'
@@ -1207,7 +1252,35 @@ final class Document
             }
         }
 
-        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef$langRef >>");
+        // Phase 112: /OCProperties для Optional Content Groups (layers).
+        $ocPropertiesRef = '';
+        if ($this->layers !== []) {
+            $ocgArray = [];
+            $onArray = [];
+            $offArray = [];
+            $orderArray = [];
+            foreach ($this->layers as $layer) {
+                $id = $layerObjectIds[$layer];
+                $ocgArray[] = "$id 0 R";
+                $orderArray[] = "$id 0 R";
+                if ($layer->defaultVisible) {
+                    $onArray[] = "$id 0 R";
+                } else {
+                    $offArray[] = "$id 0 R";
+                }
+            }
+            $onPart = $onArray === [] ? '' : ' /ON ['.implode(' ', $onArray).']';
+            $offPart = $offArray === [] ? '' : ' /OFF ['.implode(' ', $offArray).']';
+            $ocPropertiesRef = sprintf(
+                ' /OCProperties << /OCGs [%s] /D << /Order [%s]%s%s >> >>',
+                implode(' ', $ocgArray),
+                implode(' ', $orderArray),
+                $onPart,
+                $offPart,
+            );
+        }
+
+        $writer->setObject($catalogId, "<< /Type /Catalog /Pages $pagesId 0 R$namesRef$outlinesRef$acroFormRef$pdfARef$taggedRef$openActionRef$pageModeRef$pageLayoutRef$pageLabelsRef$viewerPrefsRef$langRef$ocPropertiesRef >>");
 
         $writer->setRoot($catalogId);
 
