@@ -1377,19 +1377,43 @@ final class Engine
 
         $colorWheel = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0', 'f542a7', '8c8c8c'];
         $angle = -M_PI / 2; // start at top.
-        $segmentsPerFullCircle = 60;
 
+        // Phase 166: cubic Bezier arc rendering вместо polygon approximation.
+        // Each slice как PDF path: M center → L arc-start → C ... (Bezier arcs)
+        // → close → fill. Sub-arc cap 90° for accuracy. k = 4/3*tan(θ/4)*r.
         foreach ($pc->slices as $idx => $slice) {
             $sliceAngle = ($slice['value'] / $total) * 2 * M_PI;
-            $segments = max(1, (int) ceil($sliceAngle / (2 * M_PI) * $segmentsPerFullCircle));
-            $points = [[$cx, $cy]];
-            for ($i = 0; $i <= $segments; $i++) {
-                $a = $angle + ($sliceAngle * $i / $segments);
-                $points[] = [$cx + cos($a) * $radius, $cy + sin($a) * $radius];
+            $arcStartX = $cx + cos($angle) * $radius;
+            $arcStartY = $cy + sin($angle) * $radius;
+            $commands = [
+                ['M', $cx, $cy],
+                ['L', $arcStartX, $arcStartY],
+            ];
+            // Subdivide slice angle на chunks ≤ 90°.
+            $subArcs = max(1, (int) ceil($sliceAngle / (M_PI / 2)));
+            $perArc = $sliceAngle / $subArcs;
+            $a0 = $angle;
+            for ($k = 0; $k < $subArcs; $k++) {
+                $a1 = $a0 + $perArc;
+                // Bezier control distance: 4/3 * tan(θ/4) * r
+                $k_factor = (4.0 / 3.0) * tan($perArc / 4.0) * $radius;
+                $p0x = $cx + cos($a0) * $radius;
+                $p0y = $cy + sin($a0) * $radius;
+                $p3x = $cx + cos($a1) * $radius;
+                $p3y = $cy + sin($a1) * $radius;
+                // C1 = P0 + tangent at P0 (perpendicular to radius, rotation direction).
+                $p1x = $p0x + cos($a0 + M_PI / 2) * $k_factor;
+                $p1y = $p0y + sin($a0 + M_PI / 2) * $k_factor;
+                // C2 = P3 - tangent at P3
+                $p2x = $p3x - cos($a1 + M_PI / 2) * $k_factor;
+                $p2y = $p3y - sin($a1 + M_PI / 2) * $k_factor;
+                $commands[] = ['C', $p1x, $p1y, $p2x, $p2y, $p3x, $p3y];
+                $a0 = $a1;
             }
+            $commands[] = 'Z';
             $hex = $slice['color'] ?? $colorWheel[$idx % count($colorWheel)];
             [$r, $g, $b] = $this->hexToRgb($hex);
-            $ctx->currentPage->fillPolygon($points, $r, $g, $b);
+            $ctx->currentPage->emitPath($commands, 'fill', fillRgb: ['r' => $r, 'g' => $g, 'b' => $b]);
             $angle += $sliceAngle;
         }
 
