@@ -281,6 +281,15 @@ final class Engine
                 $this->applyPerPageMargins($context);
                 $context->cursorY = $context->topY;
             }
+
+            // Phase 222: footnote per-page bottom mode. Reduce bottomY чтобы
+            // body content shrink upward, leaving zone для footnotes.
+            $context->footnoteReserveBottomPt = $section->footnoteBottomReservedPt;
+            $context->pageFootnoteStart = count($context->footnotes);
+            if ($section->footnoteBottomReservedPt !== null) {
+                $context->bottomY += $section->footnoteBottomReservedPt;
+            }
+
             $sectionStartIdx = count($pdf->pages()) - 1;
             // Render header/footer на новой first page section'а.
             $this->renderHeaderFooter($context);
@@ -289,8 +298,14 @@ final class Engine
                 $this->renderBlock($block, $context);
             }
 
-            // Phase 40: emit collected endnotes per section (если есть).
-            if ($context->footnotes !== []) {
+            if ($section->footnoteBottomReservedPt !== null) {
+                // Phase 222: flush last page's footnotes at its bottom.
+                $this->renderPageBottomFootnotes($context);
+                $context->footnotes = [];
+                // Restore bottomY (next section может не иметь reservation).
+                $context->bottomY -= $section->footnoteBottomReservedPt;
+            } elseif ($context->footnotes !== []) {
+                // Phase 40: emit collected endnotes per section (если есть).
                 $this->renderEndnotes($context);
                 $context->footnotes = [];
             }
@@ -1857,6 +1872,13 @@ final class Engine
             return;
         }
 
+        // Phase 222: per-page footnote bottom — flush current page's
+        // footnotes до switching pages.
+        if ($ctx->footnoteReserveBottomPt !== null) {
+            $this->renderPageBottomFootnotes($ctx);
+            $ctx->pageFootnoteStart = count($ctx->footnotes);
+        }
+
         // Phase 39: внутри ColumnSet overflow → next column, не page break,
         // пока не исчерпаны columns.
         if ($ctx->columnCount > 1 && $ctx->currentColumn + 1 < $ctx->columnCount) {
@@ -2726,6 +2748,58 @@ final class Engine
 
         $ctx->cursorY -= $totalHeight;
         $ctx->cursorY -= $bc->spaceAfterPt;
+    }
+
+    /**
+     * Phase 222: render current page's footnotes at page bottom (per-page mode).
+     *
+     * Saves cursorY, jumps к reserved zone Y, renders separator + numbered
+     * footnotes, restores cursorY. Footnotes drawn from
+     * `footnotes[pageFootnoteStart..end]`.
+     */
+    private function renderPageBottomFootnotes(LayoutContext $ctx): void
+    {
+        if ($ctx->footnoteReserveBottomPt === null) {
+            return;
+        }
+        $start = $ctx->pageFootnoteStart;
+        if ($start >= count($ctx->footnotes)) {
+            return; // no footnotes on current page
+        }
+
+        $savedCursorY = $ctx->cursorY;
+        $savedBottomY = $ctx->bottomY;
+
+        // Compute footnote zone top Y. bottomY shifted up by reserved size
+        // earlier — so original page bottom = bottomY - reservedPt. The zone
+        // spans (bottomY - reservedPt) to bottomY. Render footnotes downward
+        // from top of zone.
+        $zoneTop = $ctx->bottomY; // current adjusted bottomY = top of zone
+        $zoneBottom = $zoneTop - $ctx->footnoteReserveBottomPt;
+
+        // Temporarily allow rendering в zone area: extend bottomY down.
+        $ctx->bottomY = $zoneBottom;
+        $ctx->cursorY = $zoneTop;
+
+        // Thin separator line.
+        $ctx->currentPage->fillRect(
+            $ctx->leftX, $ctx->cursorY, $ctx->contentWidth * 0.3, 0.5,
+            0.5, 0.5, 0.5,
+        );
+        $ctx->cursorY -= 6.0;
+
+        // Render footnotes (1-indexed numbering across whole section's
+        // accumulated $footnotes — keeps consistent reference numbers).
+        for ($idx = $start; $idx < count($ctx->footnotes); $idx++) {
+            $marker = ($idx + 1).'. ';
+            $p = new Paragraph([new Run($marker.$ctx->footnotes[$idx])]);
+            // Use renderBlock но avoid recursion на footnote rendering itself.
+            $this->renderBlock($p, $ctx);
+        }
+
+        // Restore.
+        $ctx->bottomY = $savedBottomY;
+        $ctx->cursorY = $savedCursorY;
     }
 
     /**

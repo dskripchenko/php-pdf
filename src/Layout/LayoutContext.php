@@ -54,5 +54,18 @@ final class LayoutContext
         // суппрессирует header/footer на новой page если мы уже в header/footer
         // render path; также суппрессирует sам forcePageBreak (overflow truncates).
         public bool $inHeaderFooterRender = false,
+        /**
+         * Phase 222: per-page footnote bottom reservation (in points). null =
+         * endnotes mode (current behavior — all footnotes at section's end).
+         * > 0 = footnote zone reserved at each page bottom, footnotes for
+         * current page rendered before page break.
+         */
+        public ?float $footnoteReserveBottomPt = null,
+        /**
+         * Phase 222: footnote count в $footnotes[] до начала current page.
+         * Footnotes added since this index = "current page's footnotes",
+         * rendered at page bottom on page break.
+         */
+        public int $pageFootnoteStart = 0,
     ) {}
 }

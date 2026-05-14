@@ -51,6 +51,16 @@ final readonly class Section
         // null = full opacity. Range (0, 1) применяет alpha; ≥1 → no-op.
         public ?float $watermarkImageOpacity = null,
         public ?float $watermarkTextOpacity = null,
+        /**
+         * Phase 222: footnotes mode.
+         *  - null (default): endnotes-style — все footnotes at section's end body
+         *  - float > 0: reserve N points at each page bottom для footnotes,
+         *               render them per-page below body content.
+         *
+         * Use ≈12-15pt per expected footnote line (font size 9-10pt + 2pt
+         * leading). E.g., 5 short footnotes на page → footnoteBottomReservedPt: 80.
+         */
+        public ?float $footnoteBottomReservedPt = null,
     ) {}
 
     public function hasHeader(): bool
