@@ -198,7 +198,9 @@ final class HtmlParser
             $inlines = array_merge($inlines, $this->walkInlines($child));
         }
 
-        return new Paragraph($inlines);
+        $style = $this->parseBlockCssStyle($node);
+
+        return new Paragraph($inlines, style: $style);
     }
 
     private function parseHeading(\DOMElement $node, int $level): Heading
@@ -208,7 +210,109 @@ final class HtmlParser
             $inlines = array_merge($inlines, $this->walkInlines($child));
         }
 
-        return new Heading($level, $inlines);
+        $style = $this->parseBlockCssStyle($node);
+
+        return new Heading($level, $inlines, $style);
+    }
+
+    /**
+     * Phase 224: parse block-level CSS attributes (text-align, margin,
+     * padding, background-color, line-height) → ParagraphStyle.
+     */
+    private function parseBlockCssStyle(\DOMElement $node): \Dskripchenko\PhpPdf\Style\ParagraphStyle
+    {
+        $defaults = new \Dskripchenko\PhpPdf\Style\ParagraphStyle;
+        $css = $node->getAttribute('style');
+        if ($css === '') {
+            return $defaults;
+        }
+        $decl = $this->parseCssDeclarations($css);
+
+        $alignment = $defaults->alignment;
+        if (isset($decl['text-align'])) {
+            $alignment = match (strtolower(trim($decl['text-align']))) {
+                'left', 'start' => \Dskripchenko\PhpPdf\Style\Alignment::Start,
+                'right', 'end' => \Dskripchenko\PhpPdf\Style\Alignment::End,
+                'center' => \Dskripchenko\PhpPdf\Style\Alignment::Center,
+                'justify' => \Dskripchenko\PhpPdf\Style\Alignment::Both,
+                default => $alignment,
+            };
+        }
+
+        $bgColor = $defaults->backgroundColor;
+        if (isset($decl['background-color'])) {
+            $parsed = $this->parseColor($decl['background-color']);
+            if ($parsed !== null) {
+                $bgColor = $parsed;
+            }
+        }
+
+        $lineHeightMult = $defaults->lineHeightMult;
+        if (isset($decl['line-height'])) {
+            $lh = trim($decl['line-height']);
+            if (preg_match('/^([\d.]+)$/', $lh, $m)) {
+                $lineHeightMult = (float) $m[1]; // unitless = multiplier
+            } elseif (preg_match('/^([\d.]+)%$/', $lh, $m)) {
+                $lineHeightMult = (float) $m[1] / 100.0;
+            }
+        }
+
+        [$pt, $pr, $pb, $pl] = $this->parseBoxShorthand($decl['padding'] ?? null);
+        $padTop = $pt ?? $this->parseLengthOrNull($decl['padding-top'] ?? '') ?? $defaults->paddingTopPt;
+        $padRight = $pr ?? $this->parseLengthOrNull($decl['padding-right'] ?? '') ?? $defaults->paddingRightPt;
+        $padBottom = $pb ?? $this->parseLengthOrNull($decl['padding-bottom'] ?? '') ?? $defaults->paddingBottomPt;
+        $padLeft = $pl ?? $this->parseLengthOrNull($decl['padding-left'] ?? '') ?? $defaults->paddingLeftPt;
+
+        [$mt, $mr, $mb, $ml] = $this->parseBoxShorthand($decl['margin'] ?? null);
+        $spaceBefore = $mt ?? $this->parseLengthOrNull($decl['margin-top'] ?? '') ?? $defaults->spaceBeforePt;
+        $spaceAfter = $mb ?? $this->parseLengthOrNull($decl['margin-bottom'] ?? '') ?? $defaults->spaceAfterPt;
+        $indentLeft = $ml ?? $this->parseLengthOrNull($decl['margin-left'] ?? '') ?? $defaults->indentLeftPt;
+        $indentRight = $mr ?? $this->parseLengthOrNull($decl['margin-right'] ?? '') ?? $defaults->indentRightPt;
+
+        return new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
+            alignment: $alignment,
+            spaceBeforePt: $spaceBefore,
+            spaceAfterPt: $spaceAfter,
+            indentLeftPt: $indentLeft,
+            indentRightPt: $indentRight,
+            indentFirstLinePt: $defaults->indentFirstLinePt,
+            lineHeightMult: $lineHeightMult,
+            lineHeightPt: $defaults->lineHeightPt,
+            pageBreakBefore: $defaults->pageBreakBefore,
+            borders: $defaults->borders,
+            paddingTopPt: $padTop,
+            paddingRightPt: $padRight,
+            paddingBottomPt: $padBottom,
+            paddingLeftPt: $padLeft,
+            backgroundColor: $bgColor,
+        );
+    }
+
+    /**
+     * Parse CSS box shorthand (margin/padding) — 1/2/3/4 value semantics.
+     *
+     * @return array{0: ?float, 1: ?float, 2: ?float, 3: ?float}  [top, right, bottom, left] or null если не задано
+     */
+    private function parseBoxShorthand(?string $value): array
+    {
+        if ($value === null || trim($value) === '') {
+            return [null, null, null, null];
+        }
+        $parts = preg_split('/\s+/', trim($value)) ?: [];
+        $parsed = array_map(fn ($p) => $this->parseLengthOrNull($p), $parts);
+
+        // CSS box shorthand semantics:
+        // 1 value: all sides
+        // 2 values: vertical, horizontal
+        // 3 values: top, horizontal, bottom
+        // 4 values: top, right, bottom, left
+        return match (count($parsed)) {
+            1 => [$parsed[0], $parsed[0], $parsed[0], $parsed[0]],
+            2 => [$parsed[0], $parsed[1], $parsed[0], $parsed[1]],
+            3 => [$parsed[0], $parsed[1], $parsed[2], $parsed[1]],
+            4 => [$parsed[0], $parsed[1], $parsed[2], $parsed[3]],
+            default => [null, null, null, null],
+        };
     }
 
     private function parseList(\DOMElement $node, bool $ordered): ListNode
