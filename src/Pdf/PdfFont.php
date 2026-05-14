@@ -204,42 +204,95 @@ final class PdfFont
         return true;
     }
 
+    /** Phase 135: enable Arabic contextual shaping (init/medi/fina/isol + RTL). */
+    private bool $arabicShapingEnabled = true;
+
+    /**
+     * Phase 135: disable Arabic shaping (для debug или если font handles
+     * shaping itself через GSUB rather than Presentation Forms B).
+     */
+    public function disableArabicShaping(): void
+    {
+        $this->arabicShapingEnabled = false;
+    }
+
     /**
      * Decode UTF-8 в list (codepoint, glyphId) — низкоуровневый decoder.
      * НЕ применяет ligature substitution. Side-effect: НЕ накапливает в
      * usedGlyphs (это делает shapedGlyphs/encodeText).
      *
+     * Phase 135: если text содержит Arabic chars, runs through ArabicShaper
+     * BEFORE cmap lookup. Shaper produces visually-ordered Presentation
+     * Forms B codepoints, looked up в cmap as usual.
+     *
      * @return list<array{cp: int, gid: int}>
      */
     public function decodeUtf8(string $utf8): array
     {
+        $cps = self::utf8ToCps($utf8);
+
+        // Phase 135: Arabic shaping (codepoint-level, before cmap).
+        if ($this->arabicShapingEnabled && self::containsArabic($cps)) {
+            $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::utf8ToCodepoints($utf8);
+            // Re-run через shaper using public API (also reverses RTL runs).
+            $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shape($utf8);
+        }
+
         $out = [];
+        foreach ($cps as $cp) {
+            $out[] = ['cp' => $cp, 'gid' => $this->ttf->glyphIdForChar($cp)];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function utf8ToCps(string $utf8): array
+    {
+        $cps = [];
         $i = 0;
         $len = strlen($utf8);
         while ($i < $len) {
             $b1 = ord($utf8[$i]);
             if ($b1 < 0x80) {
-                $cp = $b1;
+                $cps[] = $b1;
                 $i++;
             } elseif (($b1 & 0xE0) === 0xC0) {
-                $cp = (($b1 & 0x1F) << 6) | (ord($utf8[$i + 1]) & 0x3F);
+                $cps[] = (($b1 & 0x1F) << 6) | (ord($utf8[$i + 1]) & 0x3F);
                 $i += 2;
             } elseif (($b1 & 0xF0) === 0xE0) {
-                $cp = (($b1 & 0x0F) << 12)
+                $cps[] = (($b1 & 0x0F) << 12)
                     | ((ord($utf8[$i + 1]) & 0x3F) << 6)
                     | (ord($utf8[$i + 2]) & 0x3F);
                 $i += 3;
             } else {
-                $cp = (($b1 & 0x07) << 18)
+                $cps[] = (($b1 & 0x07) << 18)
                     | ((ord($utf8[$i + 1]) & 0x3F) << 12)
                     | ((ord($utf8[$i + 2]) & 0x3F) << 6)
                     | (ord($utf8[$i + 3]) & 0x3F);
                 $i += 4;
             }
-            $out[] = ['cp' => $cp, 'gid' => $this->ttf->glyphIdForChar($cp)];
         }
 
-        return $out;
+        return $cps;
+    }
+
+    /** @param list<int> $cps */
+    private static function containsArabic(array $cps): bool
+    {
+        foreach ($cps as $cp) {
+            if (($cp >= 0x0600 && $cp <= 0x06FF)
+                || ($cp >= 0x0750 && $cp <= 0x077F)
+                || ($cp >= 0x08A0 && $cp <= 0x08FF)
+                || ($cp >= 0xFB50 && $cp <= 0xFDFF)
+                || ($cp >= 0xFE70 && $cp <= 0xFEFF)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
