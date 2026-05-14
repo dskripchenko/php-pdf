@@ -46,7 +46,7 @@ final class DataMatrixTest extends TestCase
     public function reed_solomon_known_pattern(): void
     {
         // 3 zero data codewords + 5 ECC.
-        $ecc = DataMatrixEncoder::reedSolomon([0, 0, 0], 5);
+        $ecc = DataMatrixEncoder::createEccBlock([0, 0, 0], 5);
         self::assertCount(5, $ecc);
         // All zeros for zero data.
         self::assertSame([0, 0, 0, 0, 0], $ecc);
@@ -55,7 +55,7 @@ final class DataMatrixTest extends TestCase
     #[Test]
     public function reed_solomon_non_zero(): void
     {
-        $ecc = DataMatrixEncoder::reedSolomon([1, 2, 3], 5);
+        $ecc = DataMatrixEncoder::createEccBlock([1, 2, 3], 5);
         self::assertCount(5, $ecc);
         // ECC should be non-zero for non-zero input.
         self::assertGreaterThan(0, array_sum($ecc));
@@ -84,18 +84,52 @@ final class DataMatrixTest extends TestCase
     }
 
     #[Test]
-    public function non_ascii_byte_rejected(): void
+    public function high_byte_uses_upper_shift(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        new DataMatrixEncoder("\xFF\xFF"); // byte > 127.
+        // Bytes > 127 encoded as 235 (UpperShift) + (byte - 128 + 1).
+        // 2 bytes → 4 codewords → fits 12×12.
+        $enc = new DataMatrixEncoder("\xFF\xFF");
+        self::assertSame(12, $enc->size());
+    }
+
+    #[Test]
+    public function rectangular_size_selected_for_appropriate_data(): void
+    {
+        // Rectangular 8×18 fits 5 codewords.
+        $enc = new DataMatrixEncoder('Hi!', allowRectangular: true);
+        self::assertTrue($enc->rectangular || $enc->symbolWidth === $enc->symbolHeight);
+    }
+
+    #[Test]
+    public function force_square_skips_rectangular(): void
+    {
+        $enc = new DataMatrixEncoder('Hi!', allowRectangular: false);
+        self::assertFalse($enc->rectangular);
+        self::assertSame($enc->symbolWidth, $enc->symbolHeight);
+    }
+
+    #[Test]
+    public function large_input_uses_multi_region(): void
+    {
+        // 50 chars → fits 32×32 (62 data, 4 regions of 14×14).
+        $enc = new DataMatrixEncoder(str_repeat('A', 50));
+        self::assertSame(32, $enc->size());
+    }
+
+    #[Test]
+    public function huge_input_uses_interleaved_ecc(): void
+    {
+        // 250 chars → 52×52 size (2 RS blocks).
+        $enc = new DataMatrixEncoder(str_repeat('A', 250));
+        self::assertGreaterThanOrEqual(52, $enc->size());
     }
 
     #[Test]
     public function oversized_input_rejected(): void
     {
-        // 26×26 holds 44 data codewords. 100 chars → too long.
+        // Beyond max DataMatrix (1304 data codewords).
         $this->expectException(\InvalidArgumentException::class);
-        new DataMatrixEncoder(str_repeat('A', 200));
+        new DataMatrixEncoder(str_repeat('A', 5000));
     }
 
     #[Test]
