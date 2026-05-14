@@ -95,6 +95,74 @@ final readonly class Document
         return [$this->section, ...$this->additionalSections];
     }
 
+    /**
+     * Phase 219: Convenience factory — parse HTML и wrap в Document.
+     *
+     * Supports HTML5 subset:
+     *  - Block tags: p, div, section, article, h1-h6, hr, ul/ol/li,
+     *    table/tr/td/th (с thead/tbody/tfoot wrappers), blockquote, pre
+     *  - Inline: span, b/strong, i/em, u, s/strike/del, sup/sub, br, img, a
+     *  - Inline CSS via style="" attribute (color, font-family, font-size,
+     *    font-weight, font-style, text-decoration, letter-spacing,
+     *    background-color)
+     *
+     * NOT supported: external CSS, <style>, complex selectors, JS, forms.
+     * Preprocess HTML через external CSS inliner (tijsverkoyen/css-to-
+     * inline-styles) если нужна <style>-blocks или class-based styling.
+     *
+     * @param  string  $html  HTML markup (no <html>/<body> wrapper required)
+     * @param  array<string, string>  $metadata  Optional /Info fields
+     */
+    public static function fromHtml(
+        string $html,
+        array $metadata = [],
+        ?Section $sectionTemplate = null,
+        bool $tagged = false,
+        ?string $lang = null,
+        bool $useXrefStream = false,
+        ?string $pdfVersion = null,
+        bool $useObjectStreams = false,
+        ?EncryptionParams $encryption = null,
+        ?\Dskripchenko\PhpPdf\Pdf\SignatureConfig $signature = null,
+        ?\Dskripchenko\PhpPdf\Pdf\PdfAConfig $pdfA = null,
+    ): self {
+        $parser = new \Dskripchenko\PhpPdf\Html\HtmlParser;
+        $blocks = $parser->parse($html);
+
+        if ($sectionTemplate !== null) {
+            // Preserve template's page setup / headers / footers / watermark,
+            // override body с parsed blocks.
+            $section = new Section(
+                body: $blocks,
+                pageSetup: $sectionTemplate->pageSetup,
+                headerBlocks: $sectionTemplate->headerBlocks,
+                footerBlocks: $sectionTemplate->footerBlocks,
+                watermarkText: $sectionTemplate->watermarkText,
+                firstPageHeaderBlocks: $sectionTemplate->firstPageHeaderBlocks,
+                firstPageFooterBlocks: $sectionTemplate->firstPageFooterBlocks,
+                watermarkImage: $sectionTemplate->watermarkImage,
+                watermarkImageWidthPt: $sectionTemplate->watermarkImageWidthPt,
+                watermarkImageOpacity: $sectionTemplate->watermarkImageOpacity,
+                watermarkTextOpacity: $sectionTemplate->watermarkTextOpacity,
+            );
+        } else {
+            $section = new Section($blocks);
+        }
+
+        return new self(
+            section: $section,
+            metadata: $metadata,
+            tagged: $tagged,
+            lang: $lang,
+            useXrefStream: $useXrefStream,
+            pdfVersion: $pdfVersion,
+            useObjectStreams: $useObjectStreams,
+            encryption: $encryption,
+            signature: $signature,
+            pdfA: $pdfA,
+        );
+    }
+
     public function toBytes(?Engine $engine = null): string
     {
         return $this->prepare($engine)->toBytes();
