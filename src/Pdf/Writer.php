@@ -74,10 +74,17 @@ final class Writer
      *                                (binary packed + FlateDecode). Auto-disabled
      *                                для signed documents (PKCS#7 path keeps
      *                                classic xref для simpler /ByteRange patching).
+     * @param  bool  $useObjectStreams  Phase 214: pack non-stream uncompressed
+     *                                   objects (catalog, page tree, info, etc.)
+     *                                   в single compressed Object Stream (PDF 1.5+).
+     *                                   Requires `useXrefStream: true` (objects use
+     *                                   type-2 xref entries). Auto-disabled при
+     *                                   encryption или signing.
      */
     public function __construct(
         private readonly string $version = '1.7',
         private readonly bool $useXrefStream = false,
+        private readonly bool $useObjectStreams = false,
     ) {}
 
     /**
@@ -241,24 +248,59 @@ final class Writer
             return self::writeAll($stream, $bytes);
         }
 
+        // Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
+        // в single FlateDecode stream. Requires XRef stream (type-2 entries).
+        // Disabled при encryption / signing для simplicity.
+        $useObjStm = $this->useObjectStreams
+            && $this->useXrefStream
+            && $this->encryption === null
+            && $this->signature === null;
+
         $written = 0;
         $written += self::writeAll($stream, '%PDF-' . $this->version . self::LINE_ENDING);
         $written += self::writeAll($stream, "%\xE2\xE3\xCF\xD3" . self::LINE_ENDING);
 
-        // Emit objects incrementally; record offsets for xref.
         $offsets = [];
-        foreach ($this->objects as $id => $body) {
-            if ($this->encryption !== null && $id !== $this->encryptId) {
-                $body = $this->encryptStreamsInBody($body, $id);
+        $compressedEntries = []; // Phase 214: id → [objStreamId, indexInStream] для type-2 xref
+
+        if ($useObjStm) {
+            [$packed, $direct, $objStreamId, $objStreamBody] = $this->buildObjectStream();
+
+            // Emit direct objects normally.
+            foreach ($direct as $id => $body) {
+                $offsets[$id] = $written;
+                $written += self::writeAll($stream, $id . ' 0 obj' . self::LINE_ENDING);
+                $written += self::writeAll($stream, $body . self::LINE_ENDING);
+                $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
             }
-            $offsets[$id] = $written;
-            $written += self::writeAll($stream, $id . ' 0 obj' . self::LINE_ENDING);
-            $written += self::writeAll($stream, $body . self::LINE_ENDING);
-            $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
+
+            // Emit object stream itself как direct stream object.
+            if ($objStreamBody !== null) {
+                $offsets[$objStreamId] = $written;
+                $written += self::writeAll($stream, $objStreamId . ' 0 obj' . self::LINE_ENDING);
+                $written += self::writeAll($stream, $objStreamBody . self::LINE_ENDING);
+                $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
+            }
+
+            // Track compressed entries для xref.
+            foreach ($packed as $index => $packedId) {
+                $compressedEntries[$packedId] = [$objStreamId, $index];
+            }
+        } else {
+            // Standard path: emit objects incrementally; record offsets for xref.
+            foreach ($this->objects as $id => $body) {
+                if ($this->encryption !== null && $id !== $this->encryptId) {
+                    $body = $this->encryptStreamsInBody($body, $id);
+                }
+                $offsets[$id] = $written;
+                $written += self::writeAll($stream, $id . ' 0 obj' . self::LINE_ENDING);
+                $written += self::writeAll($stream, $body . self::LINE_ENDING);
+                $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
+            }
         }
 
         if ($this->useXrefStream) {
-            return $written + $this->writeXrefStream($stream, $written, $offsets);
+            return $written + $this->writeXrefStream($stream, $written, $offsets, $compressedEntries);
         }
 
         // xref table.
@@ -290,6 +332,78 @@ final class Writer
     }
 
     /**
+     * Phase 214: partition objects на "packable" (могут быть в Object Stream)
+     * и "direct" (streams, encryption dict, signature dict).
+     *
+     * Spec §7.5.7: object stream может содержать только uncompressed direct
+     * objects без stream payload, generation 0.
+     *
+     * Heuristic для detecting stream object: ищем `\nstream\n` substring
+     * в body (надёжный signal — все stream objects содержат этот marker).
+     *
+     * @return array{0: list<int>, 1: array<int, string>, 2: int, 3: ?string}
+     *   [list of packed object IDs (в order), direct objects (id→body),
+     *    objStreamId, compressed object stream body или null если nothing к pack]
+     */
+    private function buildObjectStream(): array
+    {
+        $packable = [];
+        $direct = [];
+
+        foreach ($this->objects as $id => $body) {
+            if ($body === null) {
+                continue;
+            }
+            if ($id === $this->encryptId
+                || $id === $this->signatureDictId
+                || str_contains($body, "\nstream\n")
+                || str_starts_with($body, "stream\n")
+            ) {
+                $direct[$id] = $body;
+            } else {
+                $packable[$id] = $body;
+            }
+        }
+
+        // Если packable too few — overhead > savings; fall back to all-direct.
+        if (count($packable) < 3) {
+            return [[], $this->objects, $this->nextId, null];
+        }
+
+        // Allocate object stream ID (consumes nextId slot).
+        $objStreamId = $this->nextId;
+        $this->nextId++;
+
+        // Build object stream content: header (id offset pairs) + bodies.
+        $header = '';
+        $bodies = '';
+        $bodyOffset = 0;
+        $packedIds = [];
+        foreach ($packable as $id => $body) {
+            $packedIds[] = $id;
+            $header .= $id.' '.$bodyOffset.' ';
+            $bodies .= $body.self::LINE_ENDING;
+            $bodyOffset += strlen($body) + strlen(self::LINE_ENDING);
+        }
+        $header = rtrim($header);
+        $first = strlen($header) + strlen(self::LINE_ENDING);
+        $content = $header.self::LINE_ENDING.$bodies;
+
+        $compressed = gzcompress($content, 9);
+        if ($compressed === false) {
+            throw new \RuntimeException('Failed to compress object stream');
+        }
+
+        $n = count($packable);
+        $dict = '<< /Type /ObjStm /N '.$n.' /First '.$first
+            .' /Length '.strlen($compressed).' /Filter /FlateDecode >>';
+        $objStreamBody = $dict.self::LINE_ENDING.'stream'.self::LINE_ENDING
+            .$compressed.self::LINE_ENDING.'endstream';
+
+        return [$packedIds, $direct, $objStreamId, $objStreamBody];
+    }
+
+    /**
      * Phase 208: emit cross-reference table as XRef stream object (PDF 1.5+).
      *
      * Replaces classic `xref...trailer` keywords с binary-packed FlateDecode
@@ -297,10 +411,14 @@ final class Writer
      * The xref stream object получает own id = current nextId, is registered
      * в /Size, и its own entry is included в the table.
      *
+     * Phase 214: support type-2 entries для objects packed в Object Stream.
+     * Type 2 entry: type(1)=2 + objStmId(4 bytes) + indexInStream(2 bytes).
+     *
      * @param  resource  $stream
      * @param  array<int, int>  $offsets
+     * @param  array<int, array{0: int, 1: int}>  $compressedEntries  id → [objStreamId, index]
      */
-    private function writeXrefStream($stream, int $startWritten, array $offsets): int
+    private function writeXrefStream($stream, int $startWritten, array $offsets, array $compressedEntries = []): int
     {
         $xrefObjId = $this->nextId;
         $xrefOffset = $startWritten;
@@ -308,13 +426,19 @@ final class Writer
         $offsets[$xrefObjId] = $xrefOffset;
         $sizeCount = $xrefObjId + 1; // entries 0..xrefObjId inclusive
 
-        // W = [1 4 2]: type(1 byte) + offset(4 bytes) + gen(2 bytes).
+        // W = [1 4 2]: type(1 byte) + offset/objStmId(4 bytes) + gen/index(2 bytes).
         $entries = '';
         // Entry 0: free, offset 0, gen 65535.
         $entries .= chr(0).pack('N', 0).pack('n', 65535);
         for ($id = 1; $id < $sizeCount; $id++) {
-            $off = $offsets[$id] ?? 0;
-            $entries .= chr(1).pack('N', $off).pack('n', 0);
+            if (isset($compressedEntries[$id])) {
+                // Type 2: compressed — refers к ObjStm + index.
+                [$objStmId, $index] = $compressedEntries[$id];
+                $entries .= chr(2).pack('N', $objStmId).pack('n', $index);
+            } else {
+                $off = $offsets[$id] ?? 0;
+                $entries .= chr(1).pack('N', $off).pack('n', 0);
+            }
         }
 
         // FlateDecode compress.

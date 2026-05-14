@@ -61,6 +61,13 @@ final readonly class Document
          * older readers (e.g., '1.4' для legacy printer firmware).
          */
         public ?string $pdfVersion = null,
+        /**
+         * Phase 214: emit Object Streams (PDF 1.5+) — pack uncompressed dict
+         * objects в single FlateDecode-compressed stream. Saves additional
+         * ~15-30% output size beyond XRef streams. Auto-enables `useXrefStream`.
+         * Не compatible с PKCS#7 signing / encryption.
+         */
+        public bool $useObjectStreams = false,
     ) {}
 
     /**
@@ -90,6 +97,9 @@ final readonly class Document
         }
         if ($this->useXrefStream) {
             $pdf->useXrefStream();
+        }
+        if ($this->useObjectStreams) {
+            $pdf->useObjectStreams();
         }
 
         return $pdf->toBytes();

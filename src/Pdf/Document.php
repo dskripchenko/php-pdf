@@ -55,6 +55,9 @@ final class Document
     /** Phase 208: emit xref как XRef stream object (PDF 1.5+) instead of classic table. */
     private bool $useXrefStream = false;
 
+    /** Phase 214: pack non-stream objects в Object Stream (PDF 1.5+). */
+    private bool $useObjectStreams = false;
+
     /**
      * @var array<string, string>  metadata fields (Title, Author, Subject,
      *                              Keywords, Creator, Producer). Values
@@ -469,6 +472,31 @@ final class Document
     }
 
     /**
+     * Phase 214: enable Object Streams (PDF 1.5+) — pack uncompressed dict
+     * objects (catalog, page tree, info, font dicts без streams, etc.) в
+     * один FlateDecode-compressed stream. Saves ~15-30% output size на
+     * documents с many small objects.
+     *
+     * Implies XRef streams (type-2 entries для compressed objects need new
+     * xref encoding). Auto-enables `useXrefStream` если не set. Bumps PDF
+     * version к 1.5+.
+     *
+     * Auto-disabled при encryption или PKCS#7 signing.
+     */
+    public function useObjectStreams(bool $enabled = true): self
+    {
+        $this->useObjectStreams = $enabled;
+        if ($enabled) {
+            $this->useXrefStream = true;
+            if (version_compare($this->pdfVersion, '1.5', '<')) {
+                $this->pdfVersion = '1.5';
+            }
+        }
+
+        return $this;
+    }
+
+    /**
      * Устанавливает PDF metadata (/Info dict). Все параметры optional.
      * Только заданные fields эмитятся (не-null). CreationDate авто-
      * заполняется если не передан.
@@ -616,7 +644,15 @@ final class Document
         // Phase 208: xref streams auto-disabled при PKCS#7 signing — that
         // path patches /ByteRange + /Contents в classic xref layout.
         $useXref = $this->useXrefStream && $this->signatureConfig === null;
-        $writer = new Writer($this->pdfVersion, useXrefStream: $useXref);
+        $useObjStm = $this->useObjectStreams
+            && $useXref
+            && $this->encryption === null
+            && $this->signatureConfig === null;
+        $writer = new Writer(
+            $this->pdfVersion,
+            useXrefStream: $useXref,
+            useObjectStreams: $useObjStm,
+        );
 
         // 1. Резервируем top-level IDs.
         $catalogId = $writer->reserveObject();
