@@ -67,17 +67,17 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  *  - Page overflow → automatic new page
  *  - Alignment: Start/Center/End на line level
  *
- * Phase 3 НЕ покрывает (deferred):
- *  - Headers/footers/watermarks (Phase 8)
- *  - Tables (Phase 5)
- *  - Lists (Phase 6)
- *  - Hyperlinks active rendering (Phase 7 — пока text-only, links — TODO)
- *  - Bookmarks named destinations (Phase 7)
- *  - Fields PAGE/NUMPAGES resolution (Phase 8)
- *  - Image positioning внутри текста (Phase 4)
- *  - Justified text (Phase L)
- *  - Hyphenation (Phase L)
- *  - Auto-bold/italic font switching (Phase 4 font matcher)
+ * Phase 3 не покрывал — closed в later phases:
+ *  - Headers/footers/watermarks → Phase 8
+ *  - Tables → Phase 5
+ *  - Lists → Phase 6
+ *  - Hyperlinks active rendering → Phase 7
+ *  - Bookmarks named destinations → Phase 7
+ *  - Fields PAGE/NUMPAGES resolution → Phase 8
+ *  - Image positioning внутри текста → Phase 16 (inline images)
+ *  - Justified text → Phase 15
+ *  - Hyphenation + soft-hyphen → Phase 33
+ *  - Auto-bold/italic font switching → Phase 4 (FontProvider)
  *
  * Font resolution (Phase 3 simple):
  *  - $defaultFont (PdfFont) если задан — все text rendered им
@@ -586,6 +586,8 @@ final class Engine
             $plotLeft - $maxLabelW - 2, $plotTop - $ac->axisLabelSizePt * 0.5, $ac->axisLabelSizePt);
 
         $stepX = $n > 1 ? $plotW / ($n - 1) : 0;
+        $acRotRad = $ac->xLabelRotationDeg * M_PI / 180.0;
+        $acRotated = abs($ac->xLabelRotationDeg) > 0.01;
 
         // X-axis labels.
         foreach ($ac->xLabels as $i => $label) {
@@ -593,8 +595,12 @@ final class Engine
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $ac->axisLabelSizePt))->widthPt($label)
                 : mb_strlen($label, 'UTF-8') * $ac->axisLabelSizePt * 0.5;
-            $this->chartText($ctx->currentPage, $label,
-                $x - $labelW / 2, $plotBottom - $ac->axisLabelSizePt - 2, $ac->axisLabelSizePt);
+            if ($acRotated) {
+                $this->chartTextRotated($ctx->currentPage, $label, $x, $plotBottom - 2.0, $labelW, $ac->axisLabelSizePt, $acRotRad);
+            } else {
+                $this->chartText($ctx->currentPage, $label,
+                    $x - $labelW / 2, $plotBottom - $ac->axisLabelSizePt - 2, $ac->axisLabelSizePt);
+            }
         }
 
         // Build series y-tops; для stacked — cumulative bottoms.
@@ -751,6 +757,11 @@ final class Engine
             }
         }
 
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $sc->xAxisTitle, $sc->yAxisTitle, $sc->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
+
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $sc->spaceAfterPt;
     }
@@ -875,6 +886,8 @@ final class Engine
         $groupW = $slotW * (1 - $groupPadding);
         $barW = $groupW / $nSeries;
 
+        $gbcRotRad = $gbc->xLabelRotationDeg * M_PI / 180.0;
+        $gbcRotated = abs($gbc->xLabelRotationDeg) > 0.01;
         foreach ($gbc->bars as $bi => $bar) {
             $slotLeftX = $plotLeft + $bi * $slotW + ($slotW - $groupW) / 2;
             foreach ($bar['values'] as $si => $value) {
@@ -889,10 +902,20 @@ final class Engine
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $gbc->axisLabelSizePt))->widthPt($label)
                 : mb_strlen($label, 'UTF-8') * $gbc->axisLabelSizePt * 0.5;
-            $labelX = $slotLeftX + ($groupW - $labelW) / 2;
-            $this->chartText($ctx->currentPage, $label,
-                $labelX, $plotBottom - $gbc->axisLabelSizePt - 2, $gbc->axisLabelSizePt);
+            if ($gbcRotated) {
+                $anchorX = $slotLeftX + $groupW / 2;
+                $this->chartTextRotated($ctx->currentPage, $label, $anchorX, $plotBottom - 2.0, $labelW, $gbc->axisLabelSizePt, $gbcRotRad);
+            } else {
+                $labelX = $slotLeftX + ($groupW - $labelW) / 2;
+                $this->chartText($ctx->currentPage, $label,
+                    $labelX, $plotBottom - $gbc->axisLabelSizePt - 2, $gbc->axisLabelSizePt);
+            }
         }
+
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $gbc->xAxisTitle, $gbc->yAxisTitle, $gbc->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
 
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $gbc->spaceAfterPt;
@@ -994,6 +1017,8 @@ final class Engine
         $gapRatio = 0.3;
         $barW = $slotW * (1 - $gapRatio);
 
+        $sbcRotRad = $sbc->xLabelRotationDeg * M_PI / 180.0;
+        $sbcRotated = abs($sbc->xLabelRotationDeg) > 0.01;
         foreach ($sbc->bars as $bi => $bar) {
             $barX = $plotLeft + $bi * $slotW + ($slotW - $barW) / 2;
             $stackY = $plotBottom;
@@ -1011,10 +1036,19 @@ final class Engine
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $sbc->axisLabelSizePt))->widthPt($label)
                 : mb_strlen($label, 'UTF-8') * $sbc->axisLabelSizePt * 0.5;
-            $labelX = $barX + ($barW - $labelW) / 2;
-            $this->chartText($ctx->currentPage, $label,
-                $labelX, $plotBottom - $sbc->axisLabelSizePt - 2, $sbc->axisLabelSizePt);
+            if ($sbcRotated) {
+                $this->chartTextRotated($ctx->currentPage, $label, $barX + $barW / 2, $plotBottom - 2.0, $labelW, $sbc->axisLabelSizePt, $sbcRotRad);
+            } else {
+                $labelX = $barX + ($barW - $labelW) / 2;
+                $this->chartText($ctx->currentPage, $label,
+                    $labelX, $plotBottom - $sbc->axisLabelSizePt - 2, $sbc->axisLabelSizePt);
+            }
         }
+
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $sbc->xAxisTitle, $sbc->yAxisTitle, $sbc->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
 
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $sbc->spaceAfterPt;
@@ -1108,6 +1142,8 @@ final class Engine
 
         $n = count($mlc->xLabels);
         $stepX = $n > 1 ? $plotW / ($n - 1) : 0;
+        $mlcRotRad = $mlc->xLabelRotationDeg * M_PI / 180.0;
+        $mlcRotated = abs($mlc->xLabelRotationDeg) > 0.01;
 
         // X-axis labels.
         foreach ($mlc->xLabels as $i => $label) {
@@ -1115,8 +1151,12 @@ final class Engine
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $mlc->axisLabelSizePt))->widthPt($label)
                 : mb_strlen($label, 'UTF-8') * $mlc->axisLabelSizePt * 0.5;
-            $this->chartText($ctx->currentPage, $label,
-                $x - $labelW / 2, $plotBottom - $mlc->axisLabelSizePt - 2, $mlc->axisLabelSizePt);
+            if ($mlcRotated) {
+                $this->chartTextRotated($ctx->currentPage, $label, $x, $plotBottom - 2.0, $labelW, $mlc->axisLabelSizePt, $mlcRotRad);
+            } else {
+                $this->chartText($ctx->currentPage, $label,
+                    $x - $labelW / 2, $plotBottom - $mlc->axisLabelSizePt - 2, $mlc->axisLabelSizePt);
+            }
         }
 
         // Each series → polyline.
@@ -1136,6 +1176,11 @@ final class Engine
                 }
             }
         }
+
+        $this->drawChartAxisTitles(
+            $ctx->currentPage, $mlc->xAxisTitle, $mlc->yAxisTitle, $mlc->axisTitleSizePt,
+            $plotLeft, $plotRight, $plotBottom, $plotTop,
+        );
 
         $ctx->cursorY -= $totalH;
         $ctx->cursorY -= $mlc->spaceAfterPt;
@@ -1214,6 +1259,8 @@ final class Engine
 
         // Compute polyline points.
         $coords = [];
+        $lcRotRad = $lc->xLabelRotationDeg * M_PI / 180.0;
+        $lcRotated = abs($lc->xLabelRotationDeg) > 0.01;
         foreach ($lc->points as $i => $p) {
             $x = $plotLeft + $i * $stepX;
             $y = $plotBottom + ($p['value'] / $maxValue) * $plotH;
@@ -1224,8 +1271,12 @@ final class Engine
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $lc->axisLabelSizePt))->widthPt($label)
                 : mb_strlen($label, 'UTF-8') * $lc->axisLabelSizePt * 0.5;
-            $this->chartText($ctx->currentPage, $label,
-                $x - $labelW / 2, $plotBottom - $lc->axisLabelSizePt - 2, $lc->axisLabelSizePt);
+            if ($lcRotated) {
+                $this->chartTextRotated($ctx->currentPage, $label, $x, $plotBottom - 2.0, $labelW, $lc->axisLabelSizePt, $lcRotRad);
+            } else {
+                $this->chartText($ctx->currentPage, $label,
+                    $x - $labelW / 2, $plotBottom - $lc->axisLabelSizePt - 2, $lc->axisLabelSizePt);
+            }
         }
 
         // Phase 98: smoothed (Catmull-Rom → cubic Bezier) или straight polyline.
@@ -1428,6 +1479,8 @@ final class Engine
         $slotW = $plotW / max($n, 1);
         $barW = $slotW * (1 - $gapRatio);
 
+        $rotationRad = $bc->xLabelRotationDeg * M_PI / 180.0;
+        $rotated = abs($bc->xLabelRotationDeg) > 0.01;
         foreach ($bc->bars as $i => $bar) {
             $h = ($bar['value'] / $maxValue) * $plotH;
             $x = $plotLeft + $i * $slotW + ($slotW - $barW) / 2;
@@ -1441,8 +1494,15 @@ final class Engine
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $bc->axisLabelSizePt))->widthPt($label)
                 : mb_strlen($label, 'UTF-8') * $bc->axisLabelSizePt * 0.5;
-            $labelX = $x + ($barW - $labelW) / 2;
-            $this->chartText($ctx->currentPage, $label, $labelX, $plotBottom - $bc->axisLabelSizePt - 2, $bc->axisLabelSizePt);
+            if ($rotated) {
+                // End-anchor: right end of label at tick position (bar center, just below axis).
+                $anchorX = $x + $barW / 2;
+                $anchorY = $plotBottom - 2.0;
+                $this->chartTextRotated($ctx->currentPage, $label, $anchorX, $anchorY, $labelW, $bc->axisLabelSizePt, $rotationRad);
+            } else {
+                $labelX = $x + ($barW - $labelW) / 2;
+                $this->chartText($ctx->currentPage, $label, $labelX, $plotBottom - $bc->axisLabelSizePt - 2, $bc->axisLabelSizePt);
+            }
         }
 
         // Phase 70: axis titles.
@@ -1536,6 +1596,27 @@ final class Engine
             $page->showEmbeddedText($text, $x, $y, $this->defaultFont, $sizePt);
         } else {
             $page->showText($text, $x, $y, $this->fallbackStandard, $sizePt);
+        }
+    }
+
+    /**
+     * Phase 140: Draw chart label rotated by $angleRad. End-anchor convention:
+     * label's natural right-end (in unrotated frame) lands at ($anchorX, $anchorY).
+     * Caller computes label width up-front.
+     */
+    private function chartTextRotated(
+        \Dskripchenko\PhpPdf\Pdf\Page $page,
+        string $text, float $anchorX, float $anchorY,
+        float $labelW, float $sizePt, float $angleRad,
+    ): void {
+        $cos = cos($angleRad);
+        $sin = sin($angleRad);
+        $originX = $anchorX - $labelW * $cos;
+        $originY = $anchorY - $labelW * $sin;
+        if ($this->defaultFont !== null) {
+            $page->drawWatermarkEmbedded($text, $originX, $originY, $this->defaultFont, $sizePt, $angleRad, 0, 0, 0);
+        } else {
+            $page->drawWatermark($text, $originX, $originY, $this->fallbackStandard, $sizePt, $angleRad, 0, 0, 0);
         }
     }
 
@@ -1998,8 +2079,8 @@ final class Engine
      * ratio, page-overflow detection. Image-as-inline (text wrap) — Phase L.
      *
      * Если image слишком high для current page → forcePageBreak'аем,
-     * затем рендерим вверху новой page. Если image больше contentHeight'а —
-     * скейлим down пропорционально (TODO Phase L; пока ассертируем).
+     * затем рендерим вверху новой page. Если image больше всей contentHeight'а
+     * (i.e. не fits даже в empty page) — скейлим down пропорционально.
      */
     /**
      * Phase 32: Code 128 barcode block.
@@ -3244,24 +3325,28 @@ final class Engine
         $headerRows = array_values(array_filter($t->rows, fn (Row $r): bool => $r->isHeader));
 
         $totalRows = count($t->rows);
+        // Phase 153: cross-row border priority tracking. Reset on page break
+        // (repeated header rows form a fresh row sequence).
+        $prevRowBottomByCol = [];
         foreach ($t->rows as $rowIdx => $row) {
             $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
             $isLastRow = $rowIdx === $totalRows - 1;
 
             if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
                 $this->forcePageBreak($ctx);
+                $prevRowBottomByCol = [];
                 if (! $row->isHeader) {
                     foreach ($headerRows as $hr) {
                         $hh = $this->measureRowHeight($t, $hr, $colWidths);
                         // На repeat'е header row не считаем last (это всё
                         // ещё начало page, дальше будут data rows).
-                        $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx, false);
+                        $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx, false, $prevRowBottomByCol);
                         $ctx->cursorY -= $hh;
                     }
                 }
             }
 
-            $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx, $isLastRow);
+            $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx, $isLastRow, $prevRowBottomByCol);
             $ctx->cursorY -= $rowHeight;
         }
 
@@ -3349,7 +3434,13 @@ final class Engine
     /**
      * @param  list<float>  $colWidths
      */
-    private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false): void
+    /**
+     * @param  array<int, \Dskripchenko\PhpPdf\Style\Border>  &$prevRowBottomByCol
+     *   Map column-index → bottom border of the cell occupying it в prior row.
+     *   Modified в-place: после renderRow() contains current row's bottoms
+     *   keyed by column position (учитывая column spans).
+     */
+    private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false, array &$prevRowBottomByCol = []): void
     {
         // Phase 65: tagged PDF — wrap row в /TR struct.
         $taggedPdf = $ctx->pdf->isTagged();
@@ -3370,6 +3461,9 @@ final class Engine
         // Phase 28: track previous cell's right border для "thicker wins"
         // priority resolution on shared left/right edges в collapse mode.
         $prevCellRight = null;
+        // Phase 153: collect this row's bottom borders by column index —
+        // assigned к caller's $prevRowBottomByCol для next row's top compare.
+        $currentRowBottoms = [];
 
         // 1. Backgrounds + content + borders в три pass'а (background ниже,
         //    borders сверху, content между).
@@ -3461,22 +3555,30 @@ final class Engine
                     );
                 } elseif ($collapse) {
                     $isLastCol = ($colIdx + $cell->columnSpan) >= $columnCount;
-                    // Phase 28: "thicker wins" — для shared left edge сравниваем
-                    // current.left vs previous cell's right. Top edge — current.top
-                    // (cross-row priority требует state между renderRow calls,
-                    // deferred к full implementation).
+                    // Phase 28 + Phase 153: "thicker wins" — within-row сравниваем
+                    // current.left vs previous cell's right; cross-row сравниваем
+                    // current.top vs previous row's bottom (по column index).
                     $leftBorder = $borders->left;
                     if ($prevCellRight !== null) {
                         $leftBorder = $this->moreProminent($leftBorder, $prevCellRight);
                     }
+                    $topBorder = $borders->top;
+                    if (isset($prevRowBottomByCol[$colIdx])) {
+                        $topBorder = $this->moreProminent($topBorder, $prevRowBottomByCol[$colIdx]);
+                    }
                     $collapsed = new BorderSet(
-                        top: $borders->top,
+                        top: $topBorder,
                         left: $leftBorder,
                         bottom: $isLastRow ? $borders->bottom : null,
                         right: $isLastCol ? $borders->right : null,
                     );
                     $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $collapsed);
                     $prevCellRight = $borders->right;
+                    // Record this cell's bottom border on all spanned columns
+                    // для cross-row priority comparison в next row.
+                    for ($k = $colIdx; $k < $colIdx + $cell->columnSpan; $k++) {
+                        $currentRowBottoms[$k] = $borders->bottom;
+                    }
                 } else {
                     $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $borders);
                 }
@@ -3485,6 +3587,9 @@ final class Engine
             $cellX += $cellWidth;
             $colIdx += $cell->columnSpan;
         }
+
+        // Phase 153: pass current row's bottom borders к caller for next row.
+        $prevRowBottomByCol = $currentRowBottoms;
 
         // Phase 65: end /TR struct.
         if ($taggedPdf && $rowMcid !== null) {

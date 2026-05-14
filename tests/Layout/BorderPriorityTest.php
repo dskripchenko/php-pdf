@@ -97,4 +97,79 @@ final class BorderPriorityTest extends TestCase
         // Red color confirms double won.
         self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+RG@', $bytes);
     }
+
+    // -------- Phase 153: cross-row "thicker wins" --------
+
+    #[Test]
+    public function thick_bottom_of_row_one_wins_over_thin_top_of_row_two(): void
+    {
+        // Row 1 cell A: bottom thick (3pt red).
+        // Row 2 cell B (same column): top thin (1pt black).
+        // Expected: thick red wins на shared edge.
+        $thin = new Border(BorderStyle::Single, 8, '000000');
+        $thick = new Border(BorderStyle::Single, 24, 'cc0000');
+
+        $cellA = $this->cell('A', new BorderSet(top: $thin, bottom: $thick, left: $thin, right: $thin));
+        $cellB = $this->cell('B', new BorderSet(top: $thin, bottom: $thin, left: $thin, right: $thin));
+
+        $doc = new Document(new Section([
+            new Table(
+                rows: [new Row([$cellA]), new Row([$cellB])],
+                style: new TableStyle(borderCollapse: true),
+            ),
+        ]));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
+        // 3pt stroke и red color мapping на shared edge.
+        self::assertStringContainsString("\n3 w", $bytes);
+        self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+RG@', $bytes);
+    }
+
+    #[Test]
+    public function thick_top_of_row_two_wins_over_thin_bottom_of_row_one(): void
+    {
+        // Inverse: row 2 top is thicker.
+        $thin = new Border(BorderStyle::Single, 8, '000000');
+        $thick = new Border(BorderStyle::Single, 24, 'cc0000');
+
+        $cellA = $this->cell('A', new BorderSet(top: $thin, bottom: $thin, left: $thin, right: $thin));
+        $cellB = $this->cell('B', new BorderSet(top: $thick, bottom: $thin, left: $thin, right: $thin));
+
+        $doc = new Document(new Section([
+            new Table(
+                rows: [new Row([$cellA]), new Row([$cellB])],
+                style: new TableStyle(borderCollapse: true),
+            ),
+        ]));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
+        self::assertStringContainsString("\n3 w", $bytes);
+        self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+RG@', $bytes);
+    }
+
+    #[Test]
+    public function cross_row_span_propagates_bottom_to_two_columns(): void
+    {
+        // Row 1: один колспан=2 cell с thick bottom.
+        // Row 2: две cells с thin tops.
+        // Expected: каждая cell в row 2 inherit thick top (по своему col index).
+        $thin = new Border(BorderStyle::Single, 8, '000000');
+        $thick = new Border(BorderStyle::Single, 24, 'cc0000');
+
+        $spanCell = new Cell(
+            children: [new Paragraph([new Run('Span')])],
+            columnSpan: 2,
+            style: new CellStyle(borders: new BorderSet(top: $thin, bottom: $thick, left: $thin, right: $thin)),
+        );
+        $cellB = $this->cell('B', new BorderSet(top: $thin, bottom: $thin, left: $thin, right: $thin));
+        $cellC = $this->cell('C', new BorderSet(top: $thin, bottom: $thin, left: $thin, right: $thin));
+
+        $doc = new Document(new Section([
+            new Table(
+                rows: [new Row([$spanCell]), new Row([$cellB, $cellC])],
+                style: new TableStyle(borderCollapse: true),
+            ),
+        ]));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false));
+        // Thick red должен render-иться (минимум один раз).
+        self::assertStringContainsString("\n3 w", $bytes);
+    }
 }
