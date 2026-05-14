@@ -561,8 +561,10 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 ### Font / text shaping
 
 - **CIDFont vertical writing** — Type 0 + UniJIS-UTF16-V CMap + /WMode 1 + vmtx.
-  Requires bundling Adobe-Japan1 CMap data (~50KB), new vmtx parser в TtfFile,
-  reworking ResourceWriter для Type 0 composite fonts с CIDFontType2.
+  *Partial progress (Phase 192):* vmtx/vhea parser в TtfFile добавлен —
+  `TtfFile::advanceHeight($glyphId)` + `::hasVerticalMetrics()`.
+  Остаётся: bundle Adobe-Japan1 CMap data (~50KB), Type 0 composite font emit
+  с CIDFontType2 + /WMode 1.
 - **CFF2 variable fonts** — currently only TrueType glyf-based supported.
   Requires full CFF Type 2 interpreter (CharString operators, blend operator,
   Item Variation Store integration, CIDKeyed CFFs). Scope similar к Phase 131-134.

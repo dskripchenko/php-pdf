@@ -549,6 +549,56 @@ final class TtfFile
     }
 
     /**
+     * Phase 192: vertical metrics support.
+     *
+     * `vhea` table (vertical header) — analog hhea но для vertical writing.
+     * Offsets: 4..5 ascent, 6..7 descent, 34..35 numOfLongVerMetrics.
+     *
+     * `vmtx` table — analog hmtx с advance height + topSideBearing pairs.
+     * Used for CJK vertical writing /WMode 1.
+     */
+    /** @var array<int, int>|null Lazy-parsed advance heights (vertical advance per glyph) */
+    private ?array $advanceHeights = null;
+
+    public function advanceHeight(int $glyphId): ?int
+    {
+        if ($this->advanceHeights === null) {
+            $this->parseVmtx();
+        }
+
+        return $this->advanceHeights[$glyphId] ?? null;
+    }
+
+    public function hasVerticalMetrics(): bool
+    {
+        return $this->tableInfo('vhea') !== null && $this->tableInfo('vmtx') !== null;
+    }
+
+    private function parseVmtx(): void
+    {
+        $this->advanceHeights = [];
+        if (! $this->hasVerticalMetrics()) {
+            return;
+        }
+        // Read vhea для numOfLongVerMetrics.
+        $vheaOffset = $this->requireTable('vhea');
+        $this->reader->seek($vheaOffset + 34);
+        $numVMetrics = $this->reader->readUInt16();
+
+        $vmtxOffset = $this->requireTable('vmtx');
+        $this->reader->seek($vmtxOffset);
+        $lastHeight = 0;
+        for ($i = 0; $i < $numVMetrics; $i++) {
+            $lastHeight = $this->reader->readUInt16();
+            $this->reader->skip(2); // topSideBearing
+            $this->advanceHeights[$i] = $lastHeight;
+        }
+        for ($i = $numVMetrics; $i < $this->numGlyphs; $i++) {
+            $this->advanceHeights[$i] = $lastHeight;
+        }
+    }
+
+    /**
      * `cmap` — character-to-glyph mapping. Содержит несколько subtables;
      * мы ищем сначала format 12 (full Unicode), потом format 4 (BMP).
      *
