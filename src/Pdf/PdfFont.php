@@ -52,7 +52,14 @@ final class PdfFont
      */
     private array $usedGlyphs = [];
 
-    private ?int $fontObjectId = null;
+    /**
+     * Phase 130: per-Writer registration cache. Allows safe reuse of same
+     * PdfFont instance across multiple Documents — каждый writer gets свой
+     * fontObjectId.
+     *
+     * @var \SplObjectStorage<Writer, int>
+     */
+    private \SplObjectStorage $writerRegistrations;
 
     /**
      * @var bool  Применять ligature substitutions из GSUB ('liga' feature).
@@ -69,7 +76,23 @@ final class PdfFont
     public function __construct(
         private readonly TtfFile $ttf,
         private readonly bool $subset = true,
-    ) {}
+    ) {
+        $this->writerRegistrations = new \SplObjectStorage;
+    }
+
+    /**
+     * Phase 130: explicitly clear per-Writer registration cache + used glyphs.
+     * Use case: same PdfFont instance reused across many Documents где каждый
+     * doc должен иметь fresh subset (containing only ITS glyphs).
+     *
+     * Без reset() usedGlyphs accumulates across docs (each subsequent doc
+     * embeds superset). С reset() — per-doc subset точный к данным doc'у.
+     */
+    public function reset(): void
+    {
+        $this->usedGlyphs = [];
+        $this->writerRegistrations = new \SplObjectStorage;
+    }
 
     /**
      * Регистрирует font в Writer'е. Создаёт все необходимые объекты,
@@ -78,8 +101,9 @@ final class PdfFont
      */
     public function registerWith(Writer $writer, bool $compressStreams = true): int
     {
-        if ($this->fontObjectId !== null) {
-            return $this->fontObjectId;
+        // Phase 130: per-Writer cache (instead of single $fontObjectId).
+        if (isset($this->writerRegistrations[$writer])) {
+            return $this->writerRegistrations[$writer];
         }
 
         // 1. Embed TTF binary как FontFile2 stream object. С FlateDecode
@@ -126,9 +150,10 @@ final class PdfFont
             $cidFontId,
             $toUnicodeId,
         );
-        $this->fontObjectId = $writer->addObject($type0Body);
+        $fontObjectId = $writer->addObject($type0Body);
+        $this->writerRegistrations[$writer] = $fontObjectId;
 
-        return $this->fontObjectId;
+        return $fontObjectId;
     }
 
     /**
