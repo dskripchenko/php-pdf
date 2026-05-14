@@ -36,11 +36,40 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
 final class TtfSubsetter
 {
     /**
+     * Phase 215: LRU cache для cross-Writer subset dedup.
+     *
+     * Same TtfFile instance + same glyph set + same variation axes →
+     * bit-identical subset bytes. Caching saves subsetting + serialization
+     * compute time на batch scenarios (e.g., generating 100 invoices от
+     * same template font).
+     *
+     * @var array<string, string>  key → subset bytes
+     */
+    private static array $cache = [];
+
+    /** LRU cache size limit (oldest entries evicted on overflow). */
+    private const CACHE_MAX = 32;
+
+    /** Force-clear cache (mostly для testing). */
+    public static function clearCache(): void
+    {
+        self::$cache = [];
+    }
+
+    /** Current cache size (для testing / monitoring). */
+    public static function cacheSize(): int
+    {
+        return count(self::$cache);
+    }
+
+    /**
      * Subset full TTF в minimal version с only указанными glyph IDs.
      *
      * Phase 134: если задан $variableInstance, glyph outlines preinterpolate
      * via gvar deltas (FontFile2 stream становится "frozen" к chosen axis
      * values — variation tables не embed'ятся в subset).
+     *
+     * Phase 215: LRU caching по (source identity, sorted glyphs, axes).
      *
      * @param  array<int, bool>|list<int>  $usedGlyphIds  Если list — преобразуется
      *                                            во flipped map для O(1) lookup.
@@ -52,6 +81,23 @@ final class TtfSubsetter
         $used = $this->normalizeUsedGlyphs($usedGlyphIds);
         // Glyph 0 (.notdef) — ВСЕГДА.
         $used[0] = true;
+
+        // Phase 215: cache key — source instance ID + sorted glyphs + axes.
+        $glyphList = array_keys($used);
+        sort($glyphList);
+        $axesKey = $variableInstance !== null
+            ? serialize($variableInstance->userCoords)
+            : '';
+        $cacheKey = spl_object_id($source).'|'.implode(',', $glyphList).'|'.$axesKey;
+
+        if (isset(self::$cache[$cacheKey])) {
+            // LRU touch — move к end (most recently used).
+            $value = self::$cache[$cacheKey];
+            unset(self::$cache[$cacheKey]);
+            self::$cache[$cacheKey] = $value;
+
+            return $value;
+        }
 
         // Чтение глобальных параметров TTF.
         $sourceBytes = $source->rawBytes();
@@ -83,7 +129,16 @@ final class TtfSubsetter
         $newLoca = $this->packLoca($newLocaOffsets, $indexToLocFormat);
 
         // Эмитим subset TTF. Все tables (кроме glyf/loca) копируются as-is.
-        return $this->buildOutputTtf($sourceBytes, $tables, $newGlyf, $newLoca);
+        $result = $this->buildOutputTtf($sourceBytes, $tables, $newGlyf, $newLoca);
+
+        // Phase 215: store в LRU cache; evict oldest if over limit.
+        if (count(self::$cache) >= self::CACHE_MAX) {
+            // PHP arrays preserve insertion order — array_shift evicts oldest.
+            array_shift(self::$cache);
+        }
+        self::$cache[$cacheKey] = $result;
+
+        return $result;
     }
 
     /**
