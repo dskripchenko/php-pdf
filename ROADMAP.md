@@ -680,6 +680,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   с 4 zero-suppression правилами (D6=0..2/3/4/≥5), L/G parity pattern table
   по check digit для NSD=0, инверсия для NSD=1. 51 модуль (start 101 + 6
   digits 42 + end "010101" 6). `BarcodeFormat::UpcE` + Engine dispatch.
+- ~~Code 39 alphanumeric variable-length~~ ✅ **Phase 202 closed**.
+  ISO/IEC 16388 — 43 chars (0-9, A-Z, `-`, `.`, ` `, `$`, `/`, `+`, `%`)
+  + `*` start/stop. 9 elements/char (5 bars + 4 spaces), 3 wide @ 3:1 ratio
+  + 1-narrow inter-char gap = 16 modules per char-with-gap. Optional Mod-43
+  self-check digit via `withCheckDigit: true`. `BarcodeFormat::Code39` +
+  Engine dispatch.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.
