@@ -615,6 +615,10 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - ~~MathExpression custom font / styling~~ ✅ **Phase 173 closed** (fontFamily param).
 - ~~MathExpression LaTeX environments~~ ✅ **Phase 174 closed** (begin/end stripping
   для align/aligned/gather/eqnarray/cases/matrix variants).
+- ~~LineBreaker tab-stops~~ ✅ **Phase 188 closed** (Engine.tabStopPt + 'tab'
+  item type + x advancement к next stop в emitLine).
+- ~~LineBreaker hanging punctuation~~ ✅ **Phase 189 closed** (Engine.hangingPunctuation
+  + trailing-punct width discount в wrap decision).
 
 ### PDF features
 
