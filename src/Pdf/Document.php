@@ -58,6 +58,71 @@ final class Document
     /** Phase 214: pack non-stream objects в Object Stream (PDF 1.5+). */
     private bool $useObjectStreams = false;
 
+    /** Phase 220: page count threshold для switching из flat → balanced tree. */
+    private const PAGE_TREE_THRESHOLD = 32;
+
+    /** Phase 220: max children per /Pages node (PDF spec recommends ≤ 16-20). */
+    private const PAGE_TREE_FANOUT = 16;
+
+    /**
+     * Phase 220: build balanced Page Tree structure.
+     *
+     * PDF spec §7.7.3.3 рекомендует balanced /Pages tree для efficient reader
+     * navigation. Flat tree (default) acceptable but performant tree noticeably
+     * faster для documents > 100 pages.
+     *
+     * Strategy: single intermediate level с adaptive chunk size. Up к
+     * FANOUT² ≈ 256 pages fits с chunkSize=FANOUT (16). Larger documents
+     * use larger chunks к keep root /Kids ≤ FANOUT.
+     *
+     * @param  list<int>  $pageIds
+     * @param  resource|null  $unused  unused (kept for signature consistency)
+     * @return array{parentOf: list<int>, rootKids: list<int>, intermediates: list<array{id: int, kids: list<int>, count: int}>}
+     */
+    private function buildPageTree(array $pageIds, int $rootId, Writer $writer): array
+    {
+        $n = count($pageIds);
+
+        // Small documents — flat tree, root is direct parent of all pages.
+        if ($n <= self::PAGE_TREE_THRESHOLD) {
+            return [
+                'parentOf' => array_fill(0, $n, $rootId),
+                'rootKids' => $pageIds,
+                'intermediates' => [],
+            ];
+        }
+
+        // Adaptive chunk size — каждый chunk gets ~FANOUT pages но root /Kids ≤ FANOUT.
+        $fanout = self::PAGE_TREE_FANOUT;
+        $chunkSize = max($fanout, (int) ceil($n / $fanout));
+
+        $parentOf = array_fill(0, $n, 0);
+        $rootKids = [];
+        $intermediates = [];
+
+        $offset = 0;
+        while ($offset < $n) {
+            $end = min($offset + $chunkSize, $n);
+            $intermediateId = $writer->reserveObject();
+            for ($i = $offset; $i < $end; $i++) {
+                $parentOf[$i] = $intermediateId;
+            }
+            $rootKids[] = $intermediateId;
+            $intermediates[] = [
+                'id' => $intermediateId,
+                'kids' => array_slice($pageIds, $offset, $end - $offset),
+                'count' => $end - $offset,
+            ];
+            $offset = $end;
+        }
+
+        return [
+            'parentOf' => $parentOf,
+            'rootKids' => $rootKids,
+            'intermediates' => $intermediates,
+        ];
+    }
+
     /**
      * @var array<string, string>  metadata fields (Title, Author, Subject,
      *                              Keywords, Creator, Producer). Values
@@ -774,6 +839,12 @@ final class Document
             $pageObjectIdMap[$page] = $pageIds[$i];
         }
 
+        // Phase 220: balanced Page Tree для документов с many pages.
+        // Threshold 32: < 32 pages = flat tree (current behavior); else
+        // chunked intermediate level. Each page's /Parent points к its
+        // immediate intermediate /Pages node.
+        $pageTree = $this->buildPageTree($pageIds, $pagesId, $writer);
+
         // 4. Создаём Page objects + content streams + annotations.
         foreach ($this->pages as $i => $page) {
             $contentStreamBody = $page->buildContentStream();
@@ -1061,10 +1132,12 @@ final class Document
                 $aaRef = ' /AA << ' . implode(' ', $aaParts) . ' >>';
             }
 
+            // Phase 220: /Parent points к immediate parent (root или intermediate).
+            $parentId = $pageTree['parentOf'][$i];
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
                 .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s%s >>',
-                $pagesId,
+                $parentId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
                 $contentId,
@@ -1076,6 +1149,15 @@ final class Document
                 $rotateRef,
                 $boxRef,
                 $aaRef,
+            ));
+        }
+
+        // Phase 220: emit intermediate /Pages nodes (если balanced tree).
+        foreach ($pageTree['intermediates'] as $node) {
+            $kidsList = implode(' ', array_map(fn ($id) => "$id 0 R", $node['kids']));
+            $writer->setObject($node['id'], sprintf(
+                '<< /Type /Pages /Parent %d 0 R /Kids [%s] /Count %d >>',
+                $pagesId, $kidsList, $node['count'],
             ));
         }
 
@@ -1152,10 +1234,12 @@ final class Document
         }
 
         // 5. Pages tree (after все pages созданы — знаем все IDs).
-        $kidsRefs = implode(' ', array_map(fn ($id) => "$id 0 R", $pageIds));
+        // Phase 220: root /Kids — либо list of pages (flat), либо list of
+        // intermediate /Pages nodes (balanced).
+        $rootKidsRefs = implode(' ', array_map(fn ($id) => "$id 0 R", $pageTree['rootKids']));
         $writer->setObject($pagesId, sprintf(
             '<< /Type /Pages /Kids [%s] /Count %d >>',
-            $kidsRefs, count($pageIds),
+            $rootKidsRefs, count($pageIds),
         ));
 
         // Phase 43+97+99: AcroForm reference в Catalog.
