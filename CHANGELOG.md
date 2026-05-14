@@ -2,9 +2,15 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-218
+## v1.6.0-dev (unreleased) — Phases 214-219
 
-PDF output optimization + top-level API integration + typography.
+PDF output optimization + top-level API integration + typography + HTML input.
+
+### HTML/CSS input
+- Phase 219: `HtmlParser` + `Document::fromHtml()` factory. Supports
+  HTML5 subset (12 block tags, 10 inline tags) + 8 inline CSS properties.
+  Closes biggest user-facing gap — direct HTML → PDF without manual AST
+  construction.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
@@ -24,7 +30,7 @@ PDF output optimization + top-level API integration + typography.
   не интегрирован в Engine default (substantial inline emitLine() refactor
   required + visual regression testing).
 
-**Tests:** 1683 → 1732 (+49 new tests across batch).
+**Tests:** 1683 → 1772 (+89 new tests across batch).
 
 ## v1.5.0 — 2026-05-14
 
