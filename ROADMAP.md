@@ -579,17 +579,21 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - **QR V11-V40 large versions** — ~120 additional ECC_PARAMS entries, extended
   ALIGN_POSITIONS, version-info BCH(18,6) encoding near BL/TR finders.
   Recommend separate phase с real QR decoder verification per version.
-- **QR ECI / Structured Append** — multi-symbol concatenation, extended
-  channel interpretation.
+- ~~QR ECI~~ ✅ **Phase 184 closed** (4-bit mode 0111 + 8/16/24-bit designator).
+- ~~QR Structured Append~~ ✅ **Phase 183 closed** (20-bit header + parity factory).
 - **DataMatrix 144×144** — special interleaved layout (different from
   standard square sizes); needs custom ZXing-spec placement.
-- **DataMatrix encoding modes** — C40 / Text / X12 / EDIFACT / Base 256
-  (currently ASCII only). Each mode requires separate encoding table.
-- **PDF417 Text/Numeric compaction** (codewords 900/902) — denser encoding
-  для alphanumeric и digit-only payloads.
-- **PDF417 Macro PDF417** — multi-symbol concatenation.
-- **Aztec Rune mode** — single-character symbol variant.
+- ~~DataMatrix encoding modes~~ ✅ **Phase 176-180 closed** (Base 256, C40,
+  Text, X12, EDIFACT + auto-mode heuristic).
+- ~~PDF417 Text/Numeric compaction~~ ✅ **Phase 181-182 closed** (3 modes +
+  auto: byte/text/numeric с big-int base-900 conversion).
+- ~~PDF417 Macro PDF417~~ ✅ **Phase 185 closed** (macroSegment factory с
+  CW 928/922/923 control block).
+- **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format
+  отдельный от regular Aztec — нужен separate placement algorithm.
 - **Aztec Structured Append / ECI / FLG(n)** — extended channel interpretation.
+  Inserted в encoded data stream через FLG escapes — needs Aztec encoder
+  internals refactor.
 - ~~Code 128 auto-mode switching~~ ✅ **Phase 164 closed**.
 - ~~Code 128 GS1-128~~ ✅ **Phase 165 closed**.
 
