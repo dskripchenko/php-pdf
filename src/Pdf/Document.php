@@ -82,6 +82,12 @@ final class Document
     /** Phase 108: tracks whether /V was already attached to one widget. */
     private bool $signatureFieldLinked = false;
 
+    /** Phase 123: reserved Helvetica font ID for AcroForm AppearanceStreams. */
+    private ?int $appearanceFontId = null;
+
+    /** Phase 123: reserved ZapfDingbats font ID for checkbox/radio glyphs. */
+    private ?int $appearanceZapfId = null;
+
     /** @var list<int> Phase 43: form field object IDs (filled во время toBytes). */
     private array $collectedFormFieldIds = [];
 
@@ -576,6 +582,10 @@ final class Document
             $this->signatureDictId = $writer->reserveObject();
         }
 
+        // Phase 123: reset appearance font IDs — assigned lazy in buildAppearance*.
+        $this->appearanceFontId = null;
+        $this->appearanceZapfId = null;
+
         // 2. Регистрируем все unique fonts/images через identity-dedupe.
         //    Standard fonts: один PDF object per unique StandardFont enum.
         //    Embedded fonts: один объект-граф per PdfFont instance.
@@ -874,7 +884,7 @@ final class Document
                 // Phase 67: emit JavaScript action objects + /AA dict ref.
                 $aaPart = $this->emitFieldActions($writer, $field);
 
-                $body = $this->buildSimpleFieldObject($field, $pageIds[$i], $namePart, $tooltipPart, $aaPart);
+                $body = $this->buildSimpleFieldObject($writer, $field, $pageIds[$i], $namePart, $tooltipPart, $aaPart);
                 $fieldId = $writer->addObject($body);
                 $annotIds[] = $fieldId;
                 $this->collectedFormFieldIds[] = $fieldId;
@@ -1058,10 +1068,9 @@ final class Document
                 $coRef = " /CO [$coArray]";
             }
             // Phase 99: default appearance — Helvetica 11pt black.
-            $defaultFontId = $writer->addObject(
-                '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica '
-                .'/Encoding /WinAnsiEncoding >>',
-            );
+            // Phase 123: reuse appearance font ID if already emitted by
+            // appearance-stream builders to avoid duplicate Helvetica objects.
+            $defaultFontId = $this->ensureAppearanceFont($writer);
             $daPart = ' /DA (/Helv 11 Tf 0 g)';
             $drPart = sprintf(' /DR << /Font << /Helv %d 0 R >> >>', $defaultFontId);
             // Phase 108: /SigFlags 3 (SignaturesExist | AppendOnly) when signing.
@@ -1610,7 +1619,7 @@ final class Document
      *
      * @param  array<string, mixed>  $field
      */
-    private function buildSimpleFieldObject(array $field, int $pageId, string $namePart, string $tooltipPart, string $aaPart = ''): string
+    private function buildSimpleFieldObject(Writer $writer, array $field, int $pageId, string $namePart, string $tooltipPart, string $aaPart = ''): string
     {
         $rect = sprintf(
             '[%s %s %s %s]',
@@ -1642,11 +1651,19 @@ final class Document
                 ? ' /V '.$this->pdfString($field['defaultValue'])
                     .' /DV '.$this->pdfString($field['defaultValue'])
                 : '';
+            // Phase 123: appearance stream rendering the field value.
+            $apId = $this->buildTextFieldAppearance(
+                $writer,
+                (float) $field['w'], (float) $field['h'],
+                $type === 'password' ? str_repeat('*', mb_strlen((string) $field['defaultValue'], 'UTF-8')) : (string) $field['defaultValue'],
+                multiline: $type === 'text-multiline',
+            );
+            $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
-                .'%s%s%s /Ff %d /P %d 0 R%s >>',
-                $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId, $aaPart,
+                .'%s%s%s /Ff %d /P %d 0 R%s%s >>',
+                $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId, $apRef, $aaPart,
             );
         }
         if ($type === 'checkbox') {
@@ -1654,13 +1671,17 @@ final class Document
                 || strcasecmp($field['defaultValue'], 'yes') === 0
                 || $field['defaultValue'] === '1';
             $vPart = $isChecked ? ' /V /Yes /DV /Yes' : ' /V /Off /DV /Off';
+            // Phase 123: AP dict with both states (Yes + Off).
+            $yesId = $this->buildCheckboxAppearance($writer, (float) $field['w'], (float) $field['h'], checked: true);
+            $offId = $this->buildCheckboxAppearance($writer, (float) $field['w'], (float) $field['h'], checked: false);
+            $apRef = sprintf(' /AP << /N << /Yes %d 0 R /Off %d 0 R >> >>', $yesId, $offId);
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
-                .'%s%s%s /Ff %d /P %d 0 R /AS %s%s >>',
+                .'%s%s%s /Ff %d /P %d 0 R /AS %s%s%s >>',
                 $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId,
                 $isChecked ? '/Yes' : '/Off',
-                $aaPart,
+                $apRef, $aaPart,
             );
         }
         if ($type === 'signature') {
@@ -1672,11 +1693,14 @@ final class Document
                 $vPart = sprintf(' /V %d 0 R', $this->signatureDictId);
                 $this->signatureFieldLinked = true;
             }
+            // Phase 123: minimal appearance (blank box with optional caption).
+            $apId = $this->buildSignatureAppearance($writer, (float) $field['w'], (float) $field['h']);
+            $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Sig /Rect %s '
-                .'%s%s%s /Ff %d /P %d 0 R%s >>',
-                $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId, $aaPart,
+                .'%s%s%s /Ff %d /P %d 0 R%s%s >>',
+                $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId, $apRef, $aaPart,
             );
         }
         if ($type === 'submit' || $type === 'reset' || $type === 'push') {
@@ -1700,12 +1724,17 @@ final class Document
                     $this->pdfString($field['clickScript']),
                 );
             }
+            // Phase 123: appearance — bordered rectangle с caption.
+            $apId = $this->buildButtonAppearance(
+                $writer, (float) $field['w'], (float) $field['h'], (string) $caption,
+            );
+            $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
-                .'%s%s /Ff %d /P %d 0 R%s%s%s >>',
+                .'%s%s /Ff %d /P %d 0 R%s%s%s%s >>',
                 $rect, $namePart, $tooltipPart, $flags, $pageId,
-                $mkPart, $actionPart, $aaPart,
+                $mkPart, $actionPart, $apRef, $aaPart,
             );
         }
         if ($type === 'combo' || $type === 'list') {
@@ -1714,11 +1743,17 @@ final class Document
                 ? ' /V '.$this->pdfString($field['defaultValue'])
                     .' /DV '.$this->pdfString($field['defaultValue'])
                 : '';
+            // Phase 123: appearance shows the selected value (single line).
+            $apId = $this->buildTextFieldAppearance(
+                $writer, (float) $field['w'], (float) $field['h'],
+                (string) $field['defaultValue'], multiline: false,
+            );
+            $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
                 '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s '
-                .'%s%s%s /Opt %s /Ff %d /P %d 0 R%s >>',
-                $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId, $aaPart,
+                .'%s%s%s /Opt %s /Ff %d /P %d 0 R%s%s >>',
+                $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId, $apRef, $aaPart,
             );
         }
         throw new \LogicException("Unsupported field type: $type");
@@ -1757,10 +1792,15 @@ final class Document
             // Child widget — pure annotation, /T inherited от parent.
             // /AS = export value (escaped как name); /Off если не selected.
             $exportName = '/'.preg_replace('@[^A-Za-z0-9_-]@', '_', $optionLabel);
+            // Phase 123: appearance — selected (filled circle) + Off (empty).
+            $onId = $this->buildRadioAppearance($writer, (float) $widget['w'], (float) $widget['h'], selected: true);
+            $offId = $this->buildRadioAppearance($writer, (float) $widget['w'], (float) $widget['h'], selected: false);
+            $exportKey = ltrim($exportName, '/');
+            $apRef = sprintf(' /AP << /N << /%s %d 0 R /Off %d 0 R >> >>', $exportKey, $onId, $offId);
             $body = sprintf(
                 '<< /Type /Annot /Subtype /Widget /Rect %s '
-                .'/Parent %d 0 R /AS %s >>',
-                $rect, $parentId, $isChecked ? $exportName : '/Off',
+                .'/Parent %d 0 R /AS %s%s >>',
+                $rect, $parentId, $isChecked ? $exportName : '/Off', $apRef,
             );
             $childIds[] = $writer->addObject($body);
         }
@@ -1827,6 +1867,226 @@ final class Document
     private function pdfString(string $s): string
     {
         return '('.strtr($s, ['\\' => '\\\\', '(' => '\\(', ')' => '\\)']).')';
+    }
+
+    /**
+     * Phase 123: lazy-init Helvetica font object для appearance streams.
+     */
+    private function ensureAppearanceFont(Writer $writer): int
+    {
+        if ($this->appearanceFontId === null) {
+            $this->appearanceFontId = $writer->addObject(
+                '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica '
+                .'/Encoding /WinAnsiEncoding >>',
+            );
+        }
+
+        return $this->appearanceFontId;
+    }
+
+    /**
+     * Phase 123: lazy-init ZapfDingbats font для checkbox/radio glyphs.
+     */
+    private function ensureAppearanceZapfFont(Writer $writer): int
+    {
+        if ($this->appearanceZapfId === null) {
+            $this->appearanceZapfId = $writer->addObject(
+                '<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>',
+            );
+        }
+
+        return $this->appearanceZapfId;
+    }
+
+    /**
+     * Phase 123: emit a Form XObject as appearance stream.
+     */
+    private function emitAppearanceStream(Writer $writer, float $w, float $h, string $content, string $resources): int
+    {
+        $bbox = sprintf('[0 0 %s %s]', $this->fmt($w), $this->fmt($h));
+        if ($this->compressStreams) {
+            $compressed = (string) gzcompress($content, 6);
+            $body = sprintf(
+                "<< /Type /XObject /Subtype /Form /BBox %s /Resources %s /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                $bbox, $resources, strlen($compressed), $compressed,
+            );
+        } else {
+            $body = sprintf(
+                "<< /Type /XObject /Subtype /Form /BBox %s /Resources %s /Length %d >>\nstream\n%s\nendstream",
+                $bbox, $resources, strlen($content), $content,
+            );
+        }
+
+        return $writer->addObject($body);
+    }
+
+    /**
+     * Phase 123: build text field appearance Form XObject.
+     */
+    private function buildTextFieldAppearance(Writer $writer, float $w, float $h, string $text, bool $multiline): int
+    {
+        $fontId = $this->ensureAppearanceFont($writer);
+        $resources = sprintf('<< /Font << /Helv %d 0 R >> >>', $fontId);
+
+        $fontSize = 11.0;
+        // Vertical center for single-line; top-aligned для multiline.
+        $padding = 2.0;
+        $textY = $multiline
+            ? ($h - $fontSize - $padding)
+            : (($h - $fontSize) / 2.0 + 1.0);
+        $textPdf = $text === ''
+            ? ''
+            : sprintf("BT\n/Helv %s Tf\n0 g\n%s %s Td\n%s Tj\nET\n",
+                $this->fmt($fontSize),
+                $this->fmt($padding), $this->fmt($textY),
+                $this->pdfString($text),
+            );
+        // q .. Q wrap + clip к bbox.
+        $content = sprintf(
+            "q\n0 0 %s %s re W n\n%sQ\n",
+            $this->fmt($w), $this->fmt($h), $textPdf,
+        );
+
+        return $this->emitAppearanceStream($writer, $w, $h, $content, $resources);
+    }
+
+    /**
+     * Phase 123: build checkbox appearance Form XObject — uses ZapfDingbats
+     * check mark glyph для checked state.
+     */
+    private function buildCheckboxAppearance(Writer $writer, float $w, float $h, bool $checked): int
+    {
+        $resources = '<< >>';
+        if ($checked) {
+            $zaId = $this->ensureAppearanceZapfFont($writer);
+            $resources = sprintf('<< /Font << /ZaDb %d 0 R >> >>', $zaId);
+            // ZapfDingbats octal 064 (decimal 52) = '4' code = ✓.
+            $fontSize = min($w, $h) * 0.85;
+            $tx = ($w - $fontSize * 0.7) / 2.0;
+            $ty = ($h - $fontSize) / 2.0 + $fontSize * 0.15;
+            $content = sprintf(
+                "q\n1 w\n0 0 %s %s re S\nBT\n/ZaDb %s Tf\n0 g\n%s %s Td\n(4) Tj\nET\nQ\n",
+                $this->fmt($w), $this->fmt($h),
+                $this->fmt($fontSize),
+                $this->fmt($tx), $this->fmt($ty),
+            );
+        } else {
+            // Empty bordered box.
+            $content = sprintf(
+                "q\n1 w\n0 0 %s %s re S\nQ\n",
+                $this->fmt($w), $this->fmt($h),
+            );
+        }
+
+        return $this->emitAppearanceStream($writer, $w, $h, $content, $resources);
+    }
+
+    /**
+     * Phase 123: build push/submit/reset button appearance — bordered grey
+     * box с centered caption.
+     */
+    private function buildButtonAppearance(Writer $writer, float $w, float $h, string $caption): int
+    {
+        $fontId = $this->ensureAppearanceFont($writer);
+        $resources = sprintf('<< /Font << /Helv %d 0 R >> >>', $fontId);
+        $fontSize = 11.0;
+        // Approximate caption width — Helvetica avg ~5pt per char @ 11pt.
+        $captionWidth = strlen($caption) * $fontSize * 0.5;
+        $tx = max(2.0, ($w - $captionWidth) / 2.0);
+        $ty = ($h - $fontSize) / 2.0 + 1.0;
+        $content = sprintf(
+            "q\n0.9 0.9 0.9 rg\n0 0 %s %s re f\n0.5 w\n0 0 %s %s re S\nBT\n/Helv %s Tf\n0 g\n%s %s Td\n%s Tj\nET\nQ\n",
+            $this->fmt($w), $this->fmt($h),
+            $this->fmt($w), $this->fmt($h),
+            $this->fmt($fontSize),
+            $this->fmt($tx), $this->fmt($ty),
+            $this->pdfString($caption),
+        );
+
+        return $this->emitAppearanceStream($writer, $w, $h, $content, $resources);
+    }
+
+    /**
+     * Phase 123: build signature widget appearance — empty bordered box.
+     */
+    private function buildSignatureAppearance(Writer $writer, float $w, float $h): int
+    {
+        $content = sprintf(
+            "q\n0.5 w\n0 0 %s %s re S\nQ\n",
+            $this->fmt($w), $this->fmt($h),
+        );
+
+        return $this->emitAppearanceStream($writer, $w, $h, $content, '<< >>');
+    }
+
+    /**
+     * Phase 123: build radio button appearance (selected = filled circle,
+     * unselected = empty circle).
+     */
+    private function buildRadioAppearance(Writer $writer, float $w, float $h, bool $selected): int
+    {
+        $resources = '<< >>';
+        $cx = $w / 2.0;
+        $cy = $h / 2.0;
+        $r = min($w, $h) / 2.0 - 1.0;
+        // Cubic-bezier circle approximation (kappa ≈ 0.5523).
+        $k = $r * 0.5523;
+        $border = sprintf(
+            "%s %s m\n"
+            ."%s %s %s %s %s %s c\n"
+            ."%s %s %s %s %s %s c\n"
+            ."%s %s %s %s %s %s c\n"
+            ."%s %s %s %s %s %s c\n",
+            $this->fmt($cx + $r), $this->fmt($cy),
+            $this->fmt($cx + $r), $this->fmt($cy + $k),
+            $this->fmt($cx + $k), $this->fmt($cy + $r),
+            $this->fmt($cx),      $this->fmt($cy + $r),
+            $this->fmt($cx - $k), $this->fmt($cy + $r),
+            $this->fmt($cx - $r), $this->fmt($cy + $k),
+            $this->fmt($cx - $r), $this->fmt($cy),
+            $this->fmt($cx - $r), $this->fmt($cy - $k),
+            $this->fmt($cx - $k), $this->fmt($cy - $r),
+            $this->fmt($cx),      $this->fmt($cy - $r),
+            $this->fmt($cx + $k), $this->fmt($cy - $r),
+            $this->fmt($cx + $r), $this->fmt($cy - $k),
+            $this->fmt($cx + $r), $this->fmt($cy),
+        );
+        if ($selected) {
+            // Filled smaller circle inside.
+            $rIn = $r * 0.55;
+            $kIn = $rIn * 0.5523;
+            $fill = sprintf(
+                "%s %s m\n"
+                ."%s %s %s %s %s %s c\n"
+                ."%s %s %s %s %s %s c\n"
+                ."%s %s %s %s %s %s c\n"
+                ."%s %s %s %s %s %s c\n",
+                $this->fmt($cx + $rIn), $this->fmt($cy),
+                $this->fmt($cx + $rIn), $this->fmt($cy + $kIn),
+                $this->fmt($cx + $kIn), $this->fmt($cy + $rIn),
+                $this->fmt($cx),        $this->fmt($cy + $rIn),
+                $this->fmt($cx - $kIn), $this->fmt($cy + $rIn),
+                $this->fmt($cx - $rIn), $this->fmt($cy + $kIn),
+                $this->fmt($cx - $rIn), $this->fmt($cy),
+                $this->fmt($cx - $rIn), $this->fmt($cy - $kIn),
+                $this->fmt($cx - $kIn), $this->fmt($cy - $rIn),
+                $this->fmt($cx),        $this->fmt($cy - $rIn),
+                $this->fmt($cx + $kIn), $this->fmt($cy - $rIn),
+                $this->fmt($cx + $rIn), $this->fmt($cy - $kIn),
+                $this->fmt($cx + $rIn), $this->fmt($cy),
+            );
+            $content = sprintf(
+                "q\n1 w\n%sS\n0 g\n%sf\nQ\n",
+                $border, $fill,
+            );
+        } else {
+            $content = sprintf(
+                "q\n1 w\n%sS\nQ\n",
+                $border,
+            );
+        }
+
+        return $this->emitAppearanceStream($writer, $w, $h, $content, $resources);
     }
 
     /**
