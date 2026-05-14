@@ -187,4 +187,58 @@ final class Pdf417CompactionModesTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         Pdf417Encoder::macroSegment('data', 0, 3, 9999); // > 899
     }
+
+    // -------- Phase 198: GS1 FNC1 + ECI markers --------
+
+    #[Test]
+    public function gs1_marker_prepends_fnc1(): void
+    {
+        $enc = new Pdf417Encoder('01095060001343528200', gs1: true);
+        self::assertContains(920, $enc->codewords);
+    }
+
+    #[Test]
+    public function fnc1_constant_is_920(): void
+    {
+        self::assertSame(920, Pdf417Encoder::FNC1);
+    }
+
+    #[Test]
+    public function eci_short_designator(): void
+    {
+        $enc = new Pdf417Encoder('test', eciDesignator: 26);
+        self::assertContains(927, $enc->codewords);
+        self::assertContains(26, $enc->codewords);
+    }
+
+    #[Test]
+    public function eci_long_designator(): void
+    {
+        $enc = new Pdf417Encoder('test', eciDesignator: 5000);
+        self::assertContains(927, $enc->codewords);
+        // 5000 / 900 = 5, 5000 % 900 = 500.
+        self::assertContains(5, $enc->codewords);
+        self::assertContains(500, $enc->codewords);
+    }
+
+    #[Test]
+    public function eci_rejects_out_of_range(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        new Pdf417Encoder('test', eciDesignator: 900000);
+    }
+
+    #[Test]
+    public function eci_constant_is_927(): void
+    {
+        self::assertSame(927, Pdf417Encoder::ECI_CHARSET);
+    }
+
+    #[Test]
+    public function gs1_and_eci_combined(): void
+    {
+        $enc = new Pdf417Encoder('data', gs1: true, eciDesignator: 26);
+        self::assertContains(920, $enc->codewords); // FNC1
+        self::assertContains(927, $enc->codewords); // ECI
+    }
 }

@@ -59,6 +59,16 @@ final class Pdf417Encoder
 
     private const MACRO_FIELD_MARK = 923;
 
+    // Phase 198: ECI + FNC1 indicator codewords (ISO/IEC 15438 §5.4.1.5).
+    /** ECI Character Set — followed by designator (1-3 codewords). */
+    public const ECI_CHARSET = 927;
+
+    /** ECI General Purpose — alternative ECI form. */
+    public const ECI_GENERAL = 926;
+
+    /** FNC1 codeword — GS1 PDF417 marker. */
+    public const FNC1 = 920;
+
     public readonly int $rows;
 
     public readonly int $cols;
@@ -82,6 +92,8 @@ final class Pdf417Encoder
         float $aspectRatio = 2.0,
         string $mode = self::MODE_BYTE,
         ?array $macroSegment = null,
+        bool $gs1 = false,
+        ?int $eciDesignator = null,
     ) {
         if ($data === '') {
             throw new \InvalidArgumentException('PDF417 input must be non-empty');
@@ -126,6 +138,28 @@ final class Pdf417Encoder
                 $macroHeader[] = self::MACRO_TERMINATOR;
             }
             $codewords = array_merge($macroHeader, $codewords);
+        }
+        // Phase 198: GS1 FNC1 marker (CW 920) prepended.
+        if ($gs1) {
+            array_unshift($codewords, self::FNC1);
+        }
+        // Phase 198: ECI marker (CW 927) + designator codewords prepended.
+        if ($eciDesignator !== null) {
+            if ($eciDesignator < 0 || $eciDesignator > 811799) {
+                throw new \InvalidArgumentException('PDF417 ECI designator must be 0..811799');
+            }
+            // ECI encoding per ISO 15438 §5.4.1.5:
+            //  0..899: 1 codeword 927 + designator
+            //  900..810899: 2 codewords 927 + (designator / 900) + designator % 900
+            //  810900..811799: 3 codewords (not used широко).
+            $eciCw = [self::ECI_CHARSET];
+            if ($eciDesignator <= 899) {
+                $eciCw[] = $eciDesignator;
+            } else {
+                $eciCw[] = intdiv($eciDesignator, 900);
+                $eciCw[] = $eciDesignator % 900;
+            }
+            $codewords = array_merge($eciCw, $codewords);
         }
         $numDataCw = count($codewords);
 
