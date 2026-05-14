@@ -397,6 +397,43 @@ final class ContentStream
     }
 
     /**
+     * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
+     * angleRad — counter-clockwise (PDF convention).
+     *
+     * Composed CTM: T(cx, cy) · R(θ) · T(-cx, -cy) · S(w, h) · T(x, y).
+     */
+    public function drawImageRotated(
+        string $name, float $xPt, float $yPt, float $widthPt, float $heightPt, float $angleRad,
+    ): self {
+        $cx = $xPt + $widthPt / 2;
+        $cy = $yPt + $heightPt / 2;
+        $cos = cos($angleRad);
+        $sin = sin($angleRad);
+
+        $this->body .= "q\n";
+        // Translate к center, rotate, translate back, then scale + position.
+        // Combined matrix: precompute final CTM analytically.
+        // Image XObject 1×1 unit. Need transform: scale(w,h) → rotate around center → translate.
+        // Equivalently: a=cos, b=sin, c=-sin, d=cos для rotation around origin
+        // applied к scaled image, then translated так что center остаётся at (cx, cy).
+        $a = $cos * $widthPt;
+        $b = $sin * $widthPt;
+        $c = -$sin * $heightPt;
+        $d = $cos * $heightPt;
+        $e = $cx - ($a + $c) / 2;
+        $f = $cy - ($b + $d) / 2;
+        $this->body .= sprintf("%s %s %s %s %s %s cm\n",
+            $this->formatNumber($a), $this->formatNumber($b),
+            $this->formatNumber($c), $this->formatNumber($d),
+            $this->formatNumber($e), $this->formatNumber($f),
+        );
+        $this->body .= sprintf("/%s Do\n", $name);
+        $this->body .= "Q\n";
+
+        return $this;
+    }
+
+    /**
      * Phase 31: drawImage с применением ExtGState (opacity) перед draw.
      * Operator sequence: q / gs / cm / Do / Q — Q восстановит graphics
      * state, так что opacity не утечёт на последующий контент.

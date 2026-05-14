@@ -515,6 +515,18 @@ final class Page
     }
 
     /**
+     * Phase 102: drawImage с rotation around image center (counter-clockwise radians).
+     */
+    public function drawImageRotated(
+        PdfImage $image, float $x, float $y, float $widthPt, float $heightPt, float $angleRad,
+    ): self {
+        $resourceName = $this->registerImage($image);
+        $this->stream->drawImageRotated($resourceName, $x, $y, $widthPt, $heightPt, $angleRad);
+
+        return $this;
+    }
+
+    /**
      * Phase 31: drawImage с opacity. opacity ∈ (0, 1) — fill alpha
      * через ExtGState `/ca`. 1.0 эквивалентен plain drawImage.
      */
