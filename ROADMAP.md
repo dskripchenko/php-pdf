@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 123 фазы закрыты (1136 + 194 printable = 1330 тестов).
+**Текущий статус:** v1.1-dev — 124 фазы закрыты (1137 + 194 printable = 1331 тест).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-125 closed (101 фаза):
+**v1.1 progress:** 25-126 closed (102 фазы):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -88,9 +88,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 123 AcroForm AppearanceStream /AP /N rendering,
  - 124 PDF417 stacked linear 2D barcode (byte+multi-byte compaction,
    RS GF(929) ECC 0..8, all 929×3=2787 ISO codeword patterns),
- - 125 Aztec Compact 2D barcode (1-4 layers, 5 char modes + B/S,
-   RS GF(16/64/256), bullseye + mode message + data spiral; experimental
-   — требует verification против реальных ридеров).
+ - 125 Aztec Compact 2D barcode (1-4 layers, 15×15..27×27,
+   ZXing-verified),
+ - 126 Aztec Full mode (5-32 layers, up to 151×151, alignment grid,
+   7-ring bullseye, GF(1024)/(4096), ZXing-verified L9/L13/L26).
 
 ---
 
@@ -337,10 +338,11 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   RS GF(929), byte/multi-byte compaction, ECC 0..8.
   External verification рекомендуется через реальный PDF417 reader.
 - ~~Aztec Compact 1-4 layers~~ ✅ **Phase 125 closed** (5bedadd, c8be44d).
-  Ported ZXing's `Encoder.java` algorithm (Apache 2.0) для precise
-  matrix layout. ZXing CLI decoder verified L1/L2/L3 inputs включая
-  mixed case + digit mode transitions.
-- Aztec Full (5-32 layers) — отложен, ~400-600 LoC поверх compact.
+- ~~Aztec Full 5-32 layers~~ ✅ **Phase 126 closed** (0610bad).
+  Ported ZXing's `Encoder.java` algorithm (Apache 2.0) для precise matrix
+  layout (alignmentMap + 7-ring bullseye + 40-bit mode message + alignment
+  grid lines + GF(1024)/GF(4096) для word sizes 10/12). ZXing CLI decoder
+  verified across all 4 word sizes (L1/L3/L9/L26).
 - DataMatrix rectangular + larger sizes (32×32+) — отложен.
 - QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
   auto best-mask selection.
