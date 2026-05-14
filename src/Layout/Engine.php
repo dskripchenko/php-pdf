@@ -2344,6 +2344,11 @@ final class Engine
 
                 return [$e->modulesWithQuietZone(9), $e->canonical];
             })(),
+            \Dskripchenko\PhpPdf\Element\BarcodeFormat::UpcE => (function () use ($bc): array {
+                $e = new \Dskripchenko\PhpPdf\Barcode\UpcEEncoder($bc->value);
+
+                return [$e->modulesWithQuietZone(9), $e->canonical];
+            })(),
             default => throw new \LogicException('Linear barcode dispatch reached unreachable format'),
         };
         $moduleCount = count($modules);

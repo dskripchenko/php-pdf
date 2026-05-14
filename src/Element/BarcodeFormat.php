@@ -26,6 +26,7 @@ enum BarcodeFormat: string
     case Ean13 = 'ean13';
     case Ean8 = 'ean8';      // Phase 200: short EAN variant (7+1 digits).
     case UpcA = 'upca';
+    case UpcE = 'upce';      // Phase 201: zero-suppressed UPC-A (6+NSD+check).
     case Qr = 'qr';
     case DataMatrix = 'datamatrix';
     case Pdf417 = 'pdf417'; // Phase 124: stacked linear 2D barcode.

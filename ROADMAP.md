@@ -676,6 +676,10 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - ~~EAN-8 short variant~~ ✅ **Phase 200 closed**. Отдельный `Ean8Encoder`
   (7 data + 1 check digit, 67 modules, все 4 left digits L-coded без G-shift)
   + `BarcodeFormat::Ean8` + dispatch в Engine::renderBarcode.
+- ~~UPC-E zero-suppressed variant~~ ✅ **Phase 201 closed**. `UpcEEncoder`
+  с 4 zero-suppression правилами (D6=0..2/3/4/≥5), L/G parity pattern table
+  по check digit для NSD=0, инверсия для NSD=1. 51 модуль (start 101 + 6
+  digits 42 + end "010101" 6). `BarcodeFormat::UpcE` + Engine dispatch.
 - **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
 - **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
   internals refactor.
