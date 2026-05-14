@@ -908,9 +908,26 @@ final class Document
                 }
             }
 
+            // Phase 115: Page-level /AA Additional Actions (open/close JavaScript).
+            $aaRef = '';
+            $openScript = $page->openActionScript();
+            $closeScript = $page->closeActionScript();
+            if ($openScript !== null || $closeScript !== null) {
+                $aaParts = [];
+                if ($openScript !== null) {
+                    $aaParts[] = '/O << /Type /Action /S /JavaScript /JS '
+                        . $this->pdfString($openScript) . ' >>';
+                }
+                if ($closeScript !== null) {
+                    $aaParts[] = '/C << /Type /Action /S /JavaScript /JS '
+                        . $this->pdfString($closeScript) . ' >>';
+                }
+                $aaRef = ' /AA << ' . implode(' ', $aaParts) . ' >>';
+            }
+
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
-                .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s >>',
+                .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s%s >>',
                 $pagesId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
@@ -922,6 +939,7 @@ final class Document
                 $structParentsRef,
                 $rotateRef,
                 $boxRef,
+                $aaRef,
             ));
         }
 

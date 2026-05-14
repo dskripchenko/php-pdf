@@ -171,6 +171,42 @@ final class Page
     /** Phase 85: Auto-advance duration в seconds (display time). */
     private ?float $autoAdvanceDuration = null;
 
+    /** Phase 115: JavaScript executed когда page opens (/AA /O). */
+    private ?string $openActionScript = null;
+
+    /** Phase 115: JavaScript executed когда page closes (/AA /C). */
+    private ?string $closeActionScript = null;
+
+    /**
+     * Phase 115: set JavaScript executed when this page becomes visible.
+     */
+    public function setOpenActionScript(string $script): self
+    {
+        $this->openActionScript = $script;
+
+        return $this;
+    }
+
+    /**
+     * Phase 115: set JavaScript executed when reader navigates away from this page.
+     */
+    public function setCloseActionScript(string $script): self
+    {
+        $this->closeActionScript = $script;
+
+        return $this;
+    }
+
+    public function openActionScript(): ?string
+    {
+        return $this->openActionScript;
+    }
+
+    public function closeActionScript(): ?string
+    {
+        return $this->closeActionScript;
+    }
+
     /**
      * Phase 85: Set page transition effect.
      *
