@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 127 фаз закрыты (1156 + 194 printable = 1350 тестов).
+**Текущий статус:** v1.1-dev — 128 фаз закрыты (1161 + 194 printable = 1355 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-129 closed (105 фаз):
+**v1.1 progress:** 25-130 closed (106 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -97,7 +97,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 128 vertical text (CJK character stacking, showTextVertical +
    showEmbeddedTextVertical APIs),
  - 129 streaming PDF output (Writer::toStream + Document::toStream
-   + Document::toFile уrefactored к streaming).
+   + Document::toFile рефакторен к streaming),
+ - 130 lazy font subset (per-Writer registration cache + reset() API,
+   fixes multi-Document PdfFont reuse bug).
 
 ---
 
@@ -366,7 +368,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   Writer::toStream / Document::toStream API. PKCS#7 signature path still
   requires internal buffer (post-emit patching). Per-object content
   stream incremental emission — deferred (deeper API rewrite).
-- Lazy font subset (currently every used glyph embedded).
+- ~~Lazy font subset~~ ✅ **Phase 130 closed** (347bf8b).
+  Per-Writer registration (fixes multi-Document PdfFont reuse bug) +
+  reset() API для per-doc minimal subsets.
 - ~~Image deduplication by content hash~~ ✅ **Phase 29 closed** (f47c1f9).
 
 ---
