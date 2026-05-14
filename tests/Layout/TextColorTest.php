@@ -28,29 +28,30 @@ final class TextColorTest extends TestCase
     }
 
     #[Test]
-    public function colored_text_emits_rg_operator_before_BT(): void
+    public function colored_text_emits_rg_operator(): void
     {
         $doc = new Document(new Section([
             new Paragraph([new Run('red text', (new RunStyle)->withColor('cc0000'))]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        // 0xcc/255 ≈ 0.8 → должно появиться 'q' + '0.8 0 0 rg' перед BT.
-        self::assertMatchesRegularExpression('@q\n0\.8\s+0\s+0\s+rg\nBT@', $bytes);
+        // Phase 160: rg emitted без q/Q wrap (persisting gstate). 0xcc/255 ≈ 0.8.
+        self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+rg@', $bytes);
     }
 
     #[Test]
-    public function colored_text_emits_Q_after_ET(): void
+    public function colored_text_rg_appears_before_BT(): void
     {
         $doc = new Document(new Section([
             new Paragraph([new Run('blue text', (new RunStyle)->withColor('0000ff'))]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
-        self::assertMatchesRegularExpression('@ET\nQ\n@', $bytes);
+        // Phase 160: rg precedes BT для text emission, no q/Q wrap.
+        self::assertMatchesRegularExpression('@0\s+0\s+1\s+rg\nBT@', $bytes);
     }
 
     #[Test]
-    public function plain_text_without_color_no_q_Q_wrapper(): void
+    public function plain_text_no_rg_emitted(): void
     {
         $docPlain = new Document(new Section([
             new Paragraph([new Run('no color')]),
@@ -61,10 +62,11 @@ final class TextColorTest extends TestCase
         $bytesPlain = $docPlain->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $bytesColored = $docColored->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        $qCountPlain = substr_count($bytesPlain, "q\n");
-        $qCountColored = substr_count($bytesColored, "q\n");
-        self::assertGreaterThan($qCountPlain, $qCountColored,
-            'Colored text должен добавить q/Q wrappers');
+        // Phase 160: colored variant имеет 1 rg op (red), plain — 0.
+        $rgCountPlain = substr_count($bytesPlain, ' rg');
+        $rgCountColored = substr_count($bytesColored, ' rg');
+        self::assertGreaterThan($rgCountPlain, $rgCountColored,
+            'Colored text должен добавить rg operator');
     }
 
     #[Test]

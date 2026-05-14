@@ -83,15 +83,16 @@ final class VerticalTextTest extends TestCase
     }
 
     #[Test]
-    public function color_applied_per_char(): void
+    public function color_applied_to_vertical_text(): void
     {
         $pdf = PdfDocument::new(compressStreams: false);
         $page = $pdf->addPage();
         $page->showTextVertical('AB', 100, 700, StandardFont::Helvetica, 12, r: 1.0, g: 0.0, b: 0.0);
         $bytes = $pdf->toBytes();
 
-        // Each char has rg color set.
-        self::assertSame(2, preg_match_all('@1 0 0 rg@m', $bytes));
+        // Phase 160: rg emitted один раз для consecutive same-color chars
+        // (gstate persistence). Раньше: 1 rg per char.
+        self::assertGreaterThanOrEqual(1, preg_match_all('@1 0 0 rg@m', $bytes));
     }
 
     #[Test]

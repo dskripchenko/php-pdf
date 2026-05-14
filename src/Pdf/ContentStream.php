@@ -25,6 +25,13 @@ final class ContentStream
 {
     private string $body = '';
 
+    // Phase 160: cache last emitted graphics state. Drop redundant q/rg/Q
+    // wraps when consecutive operations use same fill color.
+    private ?float $lastFillR = null;
+    private ?float $lastFillG = null;
+    private ?float $lastFillB = null;
+    private bool $lastWasTextColorQ = false; // true если последний emit был q/rg wrap
+
     /**
      * Текстовая операция. Координаты в pt от origin (левый-нижний).
      */
@@ -111,28 +118,43 @@ final class ContentStream
     }
 
     /**
-     * Wraps text-show operator с q + rg для colored text. Если $r=null —
-     * no-op (используется current graphics state color, обычно чёрный).
+     * Phase 160: persistent fill-color tracking. Старый подход — обернуть
+     * каждый text emit в q/Q wrap (изолировать color change) — тратил
+     * ~30-50 bytes per emit. Новый подход:
+     *  - Drop q/Q wrap entirely (rely on PDF gstate persistence)
+     *  - Emit `rg` ТОЛЬКО когда color реально меняется
+     *  - fillRectangle и similar ops wrap своими q/Q (isolate их state)
+     *
+     * Caveat: caller отвечает за clean state — если кто-то external меняет
+     * gstate fill color (fillRect внутри own q/Q OK, но persistant rg —
+     * нет), tracker рассинхронится. Все эмиттеры в этом классе используют
+     * q/Q wrap для own state changes.
      */
     private function openTextColor(?float $r, ?float $g, ?float $b): void
     {
         if ($r === null) {
             return;
         }
-        $this->body .= "q\n";
+        $g ??= 0;
+        $b ??= 0;
+        // Skip emit если color уже в gstate.
+        if ($this->lastFillR === $r && $this->lastFillG === $g && $this->lastFillB === $b) {
+            return;
+        }
         $this->body .= sprintf("%s %s %s rg\n",
             $this->formatNumber($r),
-            $this->formatNumber($g ?? 0),
-            $this->formatNumber($b ?? 0),
+            $this->formatNumber($g),
+            $this->formatNumber($b),
         );
+        $this->lastFillR = $r;
+        $this->lastFillG = $g;
+        $this->lastFillB = $b;
     }
 
     private function closeTextColor(?float $r): void
     {
-        if ($r === null) {
-            return;
-        }
-        $this->body .= "Q\n";
+        // Phase 160: no-op. Color persists в gstate — нет нужды restore.
+        // Метод оставлен для compat с existing call sites.
     }
 
     /**
