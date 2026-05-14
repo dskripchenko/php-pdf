@@ -1228,8 +1228,18 @@ final class Engine
                 $x - $labelW / 2, $plotBottom - $lc->axisLabelSizePt - 2, $lc->axisLabelSizePt);
         }
 
-        // Polyline.
-        $ctx->currentPage->strokePolyline($coords, 1.5, $lr, $lg, $lb);
+        // Phase 98: smoothed (Catmull-Rom → cubic Bezier) или straight polyline.
+        if ($lc->smoothed && count($coords) >= 2) {
+            $commands = self::catmullRomToBezierPath($coords);
+            $ctx->currentPage->emitPath(
+                $commands,
+                'stroke',
+                strokeRgb: ['r' => $lr, 'g' => $lg, 'b' => $lb],
+                lineWidthPt: 1.5,
+            );
+        } else {
+            $ctx->currentPage->strokePolyline($coords, 1.5, $lr, $lg, $lb);
+        }
 
         // Markers (filled small rects по точкам — fast вместо circles).
         if ($lc->showMarkers) {
@@ -1485,6 +1495,39 @@ final class Engine
             $y = $plotBottom + $h * $frac;
             $page->strokeLine($plotLeft, $y, $plotRight, $y, 0.3, 0.85, 0.85, 0.85);
         }
+    }
+
+    /**
+     * Phase 98: Convert Catmull-Rom spline через points → cubic Bezier
+     * path commands. Endpoints virtually duplicated.
+     *
+     * Per pair (P_i, P_{i+1}), control points:
+     *   C1 = P_i + (P_{i+1} - P_{i-1}) / 6
+     *   C2 = P_{i+1} - (P_{i+2} - P_i) / 6
+     *
+     * @param  list<array{0: float, 1: float}>  $points
+     * @return list<array|string>
+     */
+    private static function catmullRomToBezierPath(array $points): array
+    {
+        $n = count($points);
+        if ($n < 2) {
+            return [];
+        }
+        $cmds = [['M', $points[0][0], $points[0][1]]];
+        for ($i = 0; $i < $n - 1; $i++) {
+            $p0 = $points[$i - 1] ?? $points[0];
+            $p1 = $points[$i];
+            $p2 = $points[$i + 1];
+            $p3 = $points[$i + 2] ?? $points[$n - 1];
+            $c1x = $p1[0] + ($p2[0] - $p0[0]) / 6;
+            $c1y = $p1[1] + ($p2[1] - $p0[1]) / 6;
+            $c2x = $p2[0] - ($p3[0] - $p1[0]) / 6;
+            $c2y = $p2[1] - ($p3[1] - $p1[1]) / 6;
+            $cmds[] = ['C', $c1x, $c1y, $c2x, $c2y, $p2[0], $p2[1]];
+        }
+
+        return $cmds;
     }
 
     private function chartText(\Dskripchenko\PhpPdf\Pdf\Page $page, string $text, float $x, float $y, float $sizePt): void

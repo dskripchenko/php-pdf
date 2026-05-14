@@ -35,6 +35,7 @@ final readonly class LineChart implements BlockElement
         public string $lineColor = '4287f5',
         public bool $showMarkers = true,
         public bool $showGridLines = false,
+        public bool $smoothed = false,
         public ?float $yMin = null,
         public ?float $yMax = null,
         public ?string $xAxisTitle = null,
