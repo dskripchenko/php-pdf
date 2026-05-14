@@ -80,6 +80,41 @@ final readonly class Document
 
     public function toBytes(?Engine $engine = null): string
     {
+        return $this->prepare($engine)->toBytes();
+    }
+
+    /**
+     * Phase 216: streaming output — emits PDF к writable stream resource без
+     * accumulating full document в memory string. Use case: large documents,
+     * HTTP response (php://output), file uploads.
+     *
+     * @param  resource  $stream  Writable stream resource (fopen, php://memory etc).
+     * @return int  Bytes written.
+     */
+    public function toStream($stream, ?Engine $engine = null): int
+    {
+        return $this->prepare($engine)->toStream($stream);
+    }
+
+    public function toFile(string $path, ?Engine $engine = null): int
+    {
+        $fp = @fopen($path, 'wb');
+        if ($fp === false) {
+            throw new \RuntimeException('Failed to open PDF file для writing: '.$path);
+        }
+        try {
+            return $this->toStream($fp, $engine);
+        } finally {
+            fclose($fp);
+        }
+    }
+
+    /**
+     * Phase 216: shared preparation — runs Engine + applies metadata/xref/objstm
+     * flags. Returns ready-to-emit Pdf\Document.
+     */
+    private function prepare(?Engine $engine): \Dskripchenko\PhpPdf\Pdf\Document
+    {
         $engine ??= new Engine;
         $pdf = $engine->render($this);
         if ($this->pdfVersion !== null) {
@@ -102,17 +137,6 @@ final readonly class Document
             $pdf->useObjectStreams();
         }
 
-        return $pdf->toBytes();
-    }
-
-    public function toFile(string $path, ?Engine $engine = null): int
-    {
-        $bytes = $this->toBytes($engine);
-        $written = file_put_contents($path, $bytes);
-        if ($written === false) {
-            throw new \RuntimeException('Failed to write PDF to '.$path);
-        }
-
-        return $written;
+        return $pdf;
     }
 }
