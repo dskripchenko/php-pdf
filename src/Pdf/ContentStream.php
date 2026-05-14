@@ -435,6 +435,62 @@ final class ContentStream
     }
 
     /**
+     * Phase 114: set line dash pattern. `[a b c d] phase d`.
+     * Empty array resets к solid line.
+     *
+     * @param  list<float>  $pattern  alternating on/off lengths (PDF units)
+     */
+    public function setLineDashPattern(array $pattern, float $phase = 0.0): self
+    {
+        $arr = implode(' ', array_map([$this, 'formatNumber'], $pattern));
+        $this->body .= sprintf("[%s] %s d\n", $arr, $this->formatNumber($phase));
+
+        return $this;
+    }
+
+    /** Phase 114: reset к solid line. */
+    public function resetLineDashPattern(): self
+    {
+        $this->body .= "[] 0 d\n";
+
+        return $this;
+    }
+
+    /**
+     * Phase 114: set line cap style. 0=butt, 1=round, 2=projecting square.
+     */
+    public function setLineCap(int $cap): self
+    {
+        if ($cap < 0 || $cap > 2) {
+            throw new \InvalidArgumentException('Line cap must be 0..2');
+        }
+        $this->body .= sprintf("%d J\n", $cap);
+
+        return $this;
+    }
+
+    /**
+     * Phase 114: set line join style. 0=miter, 1=round, 2=bevel.
+     */
+    public function setLineJoin(int $join): self
+    {
+        if ($join < 0 || $join > 2) {
+            throw new \InvalidArgumentException('Line join must be 0..2');
+        }
+        $this->body .= sprintf("%d j\n", $join);
+
+        return $this;
+    }
+
+    /** Phase 114: set miter limit (controls miter→bevel switchover). */
+    public function setMiterLimit(float $limit): self
+    {
+        $this->body .= sprintf("%s M\n", $this->formatNumber($limit));
+
+        return $this;
+    }
+
+    /**
      * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *

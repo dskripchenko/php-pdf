@@ -449,6 +449,50 @@ final class Page
     }
 
     /**
+     * Phase 114: set line dash pattern для subsequent stroke ops.
+     *
+     * @param  list<float>  $pattern  alternating on/off lengths
+     */
+    public function setLineDashPattern(array $pattern, float $phase = 0.0): self
+    {
+        $this->stream->setLineDashPattern($pattern, $phase);
+
+        return $this;
+    }
+
+    /** Phase 114: reset к solid line. */
+    public function resetLineDashPattern(): self
+    {
+        $this->stream->resetLineDashPattern();
+
+        return $this;
+    }
+
+    /** Phase 114: set line cap (0=butt, 1=round, 2=projecting square). */
+    public function setLineCap(int $cap): self
+    {
+        $this->stream->setLineCap($cap);
+
+        return $this;
+    }
+
+    /** Phase 114: set line join (0=miter, 1=round, 2=bevel). */
+    public function setLineJoin(int $join): self
+    {
+        $this->stream->setLineJoin($join);
+
+        return $this;
+    }
+
+    /** Phase 114: set miter limit. */
+    public function setMiterLimit(float $limit): self
+    {
+        $this->stream->setMiterLimit($limit);
+
+        return $this;
+    }
+
+    /**
      * Phase 112: begin Optional Content section. Content emitted между
      * beginLayer/endLayer wrap'ится в `/OC /MCn BDC ... EMC` so layer
      * visibility from /OCProperties toggles its rendering.
