@@ -2,35 +2,46 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-219
+## v1.6.0-dev (unreleased) — Phases 214-224
 
-PDF output optimization + top-level API integration + typography + HTML input.
+Major dev cycle: HTML input + PDF output optimization + layout enhancements
++ barcode coverage + API ergonomics.
 
-### HTML/CSS input
-- Phase 219: `HtmlParser` + `Document::fromHtml()` factory. Supports
-  HTML5 subset (12 block tags, 10 inline tags) + 8 inline CSS properties.
-  Closes biggest user-facing gap — direct HTML → PDF without manual AST
-  construction.
+### HTML/CSS input (closes biggest user-facing gap)
+- Phase 219: `HtmlParser` + `Document::fromHtml()` factory. HTML5 subset:
+  12 block tags + 10 inline tags + 8 inline CSS properties.
+- Phase 224: Block-level CSS support — text-align, margin/padding shorthand
+  (1/2/3/4 values), line-height (mult/percent), background-color.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
   в single FlateDecode stream. ~15-30% additional output reduction.
-- Phase 215: Cross-Writer font subset dedup LRU cache — saves subsetting
-  compute time на batch scenarios.
+- Phase 215: Cross-Writer font subset dedup LRU cache.
+- Phase 220: Balanced Page Tree (PDF spec §7.7.3.3) — auto-applied для
+  documents > 32 pages, FANOUT=16 chunks.
 
 ### API ergonomics
 - Phase 216: `Document::toStream()` + true-streaming `toFile()` на
   top-level API.
 - Phase 217: declarative encryption/signing/PDF-A via constructor params.
   New `EncryptionParams` VO + Engine auto-tagged for PDF/A-1a.
+- Phase 223: `Document::concat()` static factory для merging multiple
+  Documents (batch generation use case).
+
+### Layout
+- Phase 222: Footnote per-page bottom positioning (opt-in via
+  `Section::footnoteBottomReservedPt`). Reserves N pt zone at each page
+  bottom; footnotes rendered per-page вместо section endnotes.
 
 ### Typography
-- Phase 218: `KnuthPlassLineBreaker` — classic optimal line-breaking
-  algorithm (box-glue-penalty model + DP). Stand-alone library utility;
-  не интегрирован в Engine default (substantial inline emitLine() refactor
-  required + visual regression testing).
+- Phase 218: `KnuthPlassLineBreaker` — optimal box-glue-penalty
+  line-breaking. Stand-alone library utility.
 
-**Tests:** 1683 → 1772 (+89 new tests across batch).
+### Barcodes
+- Phase 221: Aztec Structured Append (ISO 24778 §8.4) — multi-symbol
+  concatenated sets (up to 26 symbols), optional alphanumeric fileID.
+
+**Tests:** 1683 → 1828 (+145 new tests across 11-phase batch).
 
 ## v1.5.0 — 2026-05-14
 

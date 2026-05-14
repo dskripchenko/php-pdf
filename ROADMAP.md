@@ -21,9 +21,12 @@ Production-ready. Active backlog: v1.6+ scope items.
 - **DataMatrix 144×144** — special interleaved layout (different placement
   algorithm от standard square sizes).
 - **Aztec Rune mode** — single-character symbol variant, 11×11 fixed format.
-  Различает orientation marks от regular Aztec symbols.
-- **Aztec Structured Append / FLG(n) ECI** — needs Aztec encoder internals
-  refactor для multi-symbol concatenation.
+  XOR mask spec uncertain.
+- ~~Aztec Structured Append~~ ✅ **Phase 221 closed** (ISO 24778 §8.4 —
+  header-prefixed " AB<data>" or "fileID AB<data>" format, up to 26 symbols).
+- **Aztec FLG(n) ECI escape** — still open. Inserts ECI/SA markers внутри
+  encoded data stream через FLG escape codes — needs Aztec encoder
+  internals refactor.
 
 ### Multi-day / multi-week refactors
 
@@ -35,8 +38,9 @@ Production-ready. Active backlog: v1.6+ scope items.
   CFFs). Scope similar к Phase 131-134 для glyf-based variable fonts.
 - **Public-key encryption** (`/Filter /PubSec`) — X.509 certificate-based
   access control. Significant Encryption class refactor.
-- **Footnote true page-bottom positioning** — per-page reserved zone
-  (currently inline at end of body). Multi-pass layout architecture needed.
+- ~~Footnote true page-bottom positioning~~ ✅ **Phase 222 closed** (opt-in
+  via `Section::footnoteBottomReservedPt`). Fixed bottom reservation;
+  per-page footnote flush at page break. Endnote mode остаётся default.
 - ~~LineBreaker Knuth-Plass optimal~~ ✅ **Phase 218 closed** (library class).
   `KnuthPlassLineBreaker` доступен как stand-alone utility с same `wrap()`
   interface как greedy `LineBreaker`. DP-based optimal break-point search
@@ -64,6 +68,12 @@ Production-ready. Active backlog: v1.6+ scope items.
   **Phase 217 closed**. Declarative configuration via constructor params
   (`EncryptionParams`, `SignatureConfig`, `PdfAConfig`); больше не нужно
   drop'ить в low-level API.
+- ~~HTML/CSS parser + `Document::fromHtml()`~~ ✅ **Phase 219 closed**
+  (basic HTML5 + inline CSS) + **Phase 224 closed** (block-level CSS:
+  text-align, margin/padding, line-height, background-color).
+- ~~Balanced Page Tree (PDF spec §7.7.3.3)~~ ✅ **Phase 220 closed**.
+  Auto для documents > 32 pages, FANOUT=16 chunks.
+- ~~`Document::concat()` multi-document merge~~ ✅ **Phase 223 closed**.
 - **Type0 → Type1 Latin re-encoding** — biggest potential output-size win
   (~20-25% per-doc для Latin-heavy text). Major font subsetter refactor.
 
