@@ -568,22 +568,163 @@ final class QrEncoder
         // 7. Place data bits using zigzag pattern.
         $this->placeData($matrix, $reserved, $codewords);
 
-        // 8. Apply mask 0 (i+j mod 2 == 0) к non-reserved модулям.
+        // Phase 105: try all 8 mask patterns, pick min penalty.
+        $bestMask = 0;
+        $bestPenalty = PHP_INT_MAX;
+        $bestMatrix = $matrix;
+        for ($mask = 0; $mask < 8; $mask++) {
+            $candidate = $matrix;
+            self::applyMask($candidate, $reserved, $mask, $size);
+            $this->writeFormatInfo($candidate, $size, $mask);
+            $penalty = self::computeMaskPenalty($candidate, $size);
+            if ($penalty < $bestPenalty) {
+                $bestPenalty = $penalty;
+                $bestMask = $mask;
+                $bestMatrix = $candidate;
+            }
+        }
+        $this->selectedMask = $bestMask;
+
+        return $bestMatrix;
+    }
+
+    public readonly int $selectedMask;
+
+    /**
+     * Phase 105: Apply mask pattern N к non-reserved modules.
+     *
+     * @param  array<int, array<int, bool>>  $matrix
+     * @param  array<int, array<int, bool>>  $reserved
+     */
+    private static function applyMask(array &$matrix, array $reserved, int $mask, int $size): void
+    {
         for ($y = 0; $y < $size; $y++) {
             for ($x = 0; $x < $size; $x++) {
                 if ($reserved[$y][$x]) {
                     continue;
                 }
-                if (($x + $y) % 2 === 0) {
+                $invert = match ($mask) {
+                    0 => ($x + $y) % 2 === 0,
+                    1 => $y % 2 === 0,
+                    2 => $x % 3 === 0,
+                    3 => ($x + $y) % 3 === 0,
+                    4 => (intdiv($y, 2) + intdiv($x, 3)) % 2 === 0,
+                    5 => ($x * $y) % 2 + ($x * $y) % 3 === 0,
+                    6 => (($x * $y) % 2 + ($x * $y) % 3) % 2 === 0,
+                    7 => (($x + $y) % 2 + ($x * $y) % 3) % 2 === 0,
+                    default => false,
+                };
+                if ($invert) {
                     $matrix[$y][$x] = ! $matrix[$y][$x];
                 }
             }
         }
+    }
 
-        // 9. Write format info bits (ECC level L = 01, mask 0 = 000).
-        $this->writeFormatInfo($matrix, $size);
+    /**
+     * Phase 105: penalty score per ISO/IEC 18004 §7.8.3. Sum 4 rules:
+     *  N1 = 3 + (run - 5) for run ≥ 5 consecutive same-color в row/col.
+     *  N2 = 3 per 2×2 block of same color.
+     *  N3 = 40 per finder-pattern-like sequence (1:1:3:1:1).
+     *  N4 = 10 × steps_of_5pct от 50% dark.
+     *
+     * @param  list<list<bool>>  $matrix
+     */
+    private static function computeMaskPenalty(array $matrix, int $size): int
+    {
+        $penalty = 0;
 
-        return $matrix;
+        // Rule 1: row runs.
+        for ($y = 0; $y < $size; $y++) {
+            $run = 1;
+            for ($x = 1; $x < $size; $x++) {
+                if ($matrix[$y][$x] === $matrix[$y][$x - 1]) {
+                    $run++;
+                } else {
+                    if ($run >= 5) {
+                        $penalty += 3 + ($run - 5);
+                    }
+                    $run = 1;
+                }
+            }
+            if ($run >= 5) {
+                $penalty += 3 + ($run - 5);
+            }
+        }
+        // Rule 1: column runs.
+        for ($x = 0; $x < $size; $x++) {
+            $run = 1;
+            for ($y = 1; $y < $size; $y++) {
+                if ($matrix[$y][$x] === $matrix[$y - 1][$x]) {
+                    $run++;
+                } else {
+                    if ($run >= 5) {
+                        $penalty += 3 + ($run - 5);
+                    }
+                    $run = 1;
+                }
+            }
+            if ($run >= 5) {
+                $penalty += 3 + ($run - 5);
+            }
+        }
+
+        // Rule 2: 2×2 blocks.
+        for ($y = 0; $y < $size - 1; $y++) {
+            for ($x = 0; $x < $size - 1; $x++) {
+                $c = $matrix[$y][$x];
+                if ($matrix[$y][$x + 1] === $c && $matrix[$y + 1][$x] === $c && $matrix[$y + 1][$x + 1] === $c) {
+                    $penalty += 3;
+                }
+            }
+        }
+
+        // Rule 3: 1:1:3:1:1 patterns.
+        $pattern = [true, false, true, true, true, false, true]; // BWBBBWB
+        for ($y = 0; $y < $size; $y++) {
+            for ($x = 0; $x <= $size - 7; $x++) {
+                $match = true;
+                for ($k = 0; $k < 7; $k++) {
+                    if ($matrix[$y][$x + $k] !== $pattern[$k]) {
+                        $match = false;
+                        break;
+                    }
+                }
+                if ($match) {
+                    $penalty += 40;
+                }
+            }
+        }
+        for ($x = 0; $x < $size; $x++) {
+            for ($y = 0; $y <= $size - 7; $y++) {
+                $match = true;
+                for ($k = 0; $k < 7; $k++) {
+                    if ($matrix[$y + $k][$x] !== $pattern[$k]) {
+                        $match = false;
+                        break;
+                    }
+                }
+                if ($match) {
+                    $penalty += 40;
+                }
+            }
+        }
+
+        // Rule 4: percentage dark.
+        $darkCount = 0;
+        for ($y = 0; $y < $size; $y++) {
+            for ($x = 0; $x < $size; $x++) {
+                if ($matrix[$y][$x]) {
+                    $darkCount++;
+                }
+            }
+        }
+        $total = $size * $size;
+        $pct = ($darkCount * 100) / $total;
+        $deviation = abs($pct - 50);
+        $penalty += (int) (floor($deviation / 5) * 10);
+
+        return $penalty;
     }
 
     /**
@@ -712,11 +853,11 @@ final class QrEncoder
      *
      * @param  array<int, array<int, bool>>  $matrix
      */
-    private function writeFormatInfo(array &$matrix, int $size): void
+    private function writeFormatInfo(array &$matrix, int $size, int $mask = 0): void
     {
-        // ECC level (2 bits) + mask 000 (3 bits) = 5 bits.
+        // ECC level (2 bits) + mask (3 bits) = 5 bits.
         // L=01, M=00, Q=11, H=10 — left-shifted в high 2 bits.
-        $data = ($this->eccLevel->formatBits() << 3) | 0b000;
+        $data = ($this->eccLevel->formatBits() << 3) | ($mask & 0b111);
         // BCH(15,5) — divide by generator 0b10100110111.
         $bits = $data << 10;
         for ($i = 4; $i >= 0; $i--) {
