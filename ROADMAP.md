@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 132 фазы закрыты (1186 + 194 printable = 1380 тестов).
+**Текущий статус:** v1.1-dev — 133 фазы закрыты (1196 + 194 printable = 1390 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-134 closed (110 фаз):
+**v1.1 progress:** 25-135 closed (111 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -106,7 +106,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 133 variable fonts: gvar glyph shape delta computation
    (tuple variation headers, packed point numbers, packed deltas),
  - 134 variable fonts: PDF integration — frozen subset
-   (SimpleGlyph parser/serializer + IUP + axes param на PdfFont).
+   (SimpleGlyph parser/serializer + IUP + axes param на PdfFont),
+ - 135 Arabic basic shaping (joining classes + Pres Forms B mapping +
+   RTL reversal + lam-alef ligature, integrated в PdfFont).
 
 ---
 
@@ -261,7 +263,11 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Hyphenation (soft-hyphen `&shy;`)~~ ✅ **Phase 33 closed** (309f5d8).
 - ~~Paragraph padding + background~~ ✅ **Phase 25 closed** (ee907af + fb8580e).
 - ~~Inline letter-spacing через `<span>`~~ ✅ **Phase 27 closed** (6209791).
-- Complex script shaping (Arabic ligatures, Indic combining marks).
+- Complex script shaping:
+  - ~~Arabic basic shaping~~ ✅ **Phase 135 closed** (189cd78).
+    Joining classes + Pres Forms B + lam-alef ligature + RTL reversal.
+    Bidi algorithm not implemented (pure Arabic works; mixed LTR/RTL needs UAX 9).
+  - Indic combining marks — deferred (complex reordering rules per script).
 - ~~Line-height absolute (`line-height: 18pt`)~~ ✅ **Phase 79 closed** (9a33ed7).
 
 ### Typography
