@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Tests\Layout;
 
 use Dskripchenko\PhpPdf\Document;
+use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Field;
 use Dskripchenko\PhpPdf\Element\Paragraph;
+use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
+use Dskripchenko\PhpPdf\Element\Table;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
 use Dskripchenko\PhpPdf\Section;
 use Dskripchenko\PhpPdf\Style\Alignment;
 use Dskripchenko\PhpPdf\Style\ParagraphStyle;
+use Dskripchenko\PhpPdf\Style\TableStyle;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -123,5 +127,38 @@ final class HeaderFooterTest extends TestCase
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
         self::assertStringContainsString('Plain body', $text);
+    }
+
+    /**
+     * Phase 155: regression — Table в header не должен вызывать infinite
+     * forcePageBreak recursion. Bug raised на template 13 у printable где
+     * 3-cell branding table в header висла навсегда (forcePageBreak →
+     * renderHeaderFooter → renderTable → row не fits в header zone →
+     * forcePageBreak → ...).
+     */
+    #[Test]
+    public function table_in_header_does_not_infinite_loop(): void
+    {
+        $startTime = microtime(true);
+        $headerTable = new Table(
+            rows: [
+                new Row([
+                    new Cell([new Paragraph([new Run('LOGO')])]),
+                    new Cell([new Paragraph([new Run('Company Name')])]),
+                    new Cell([new Paragraph([new Run('Address line 1; Address line 2; +1 555-1234')])]),
+                ]),
+            ],
+            style: new TableStyle(widthPercent: 100),
+        );
+        $doc = new Document(new Section(
+            body: [new Paragraph([new Run('Body content')])],
+            headerBlocks: [$headerTable],
+        ));
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+
+        // Must finish quickly — pre-fix this hung forever.
+        $elapsed = microtime(true) - $startTime;
+        self::assertLessThan(5.0, $elapsed, "Render took {$elapsed}s — likely infinite loop");
+        self::assertStringContainsString('%PDF-', substr($bytes, 0, 8));
     }
 }

@@ -48,5 +48,11 @@ final class LayoutContext
         // Phase 61: suppress paragraph BDC/EMC wrapping (used когда heading
         // sets own H1-H6 tagging вокруг paragraph render).
         public bool $skipParagraphTag = false,
+        // Phase 155: re-entrance guard для header/footer rendering. forcePageBreak
+        // вызывает renderHeaderFooter; если внутри header rendering сам block
+        // не fits и пытается forcePageBreak — infinite loop. Этот флаг
+        // суппрессирует header/footer на новой page если мы уже в header/footer
+        // render path; также суппрессирует sам forcePageBreak (overflow truncates).
+        public bool $inHeaderFooterRender = false,
     ) {}
 }

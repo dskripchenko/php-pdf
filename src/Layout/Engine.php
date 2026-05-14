@@ -1737,6 +1737,15 @@ final class Engine
 
     private function forcePageBreak(LayoutContext $ctx): void
     {
+        // Phase 155: re-entrance guard. Если уже рендерим header/footer и
+        // оттуда block try'нул forcePageBreak — это overflow в header zone.
+        // Don't recurse — truncate header content вместо infinite loop.
+        if ($ctx->inHeaderFooterRender) {
+            $ctx->cursorY = $ctx->bottomY;
+
+            return;
+        }
+
         // Phase 39: внутри ColumnSet overflow → next column, не page break,
         // пока не исчерпаны columns.
         if ($ctx->columnCount > 1 && $ctx->currentColumn + 1 < $ctx->columnCount) {
@@ -1918,6 +1927,7 @@ final class Engine
                 topY: $pageHeight - 8.0,
                 pageSetup: $setup,
                 skipParagraphTag: $ctx->skipParagraphTag,
+                inHeaderFooterRender: true,
             );
             foreach ($headerBlocks as $block) {
                 $this->renderBlock($block, $headerArea);
@@ -1940,6 +1950,7 @@ final class Engine
                 topY: $setup->margins->bottomPt - 4.0 + $footerHeight,
                 pageSetup: $setup,
                 skipParagraphTag: $ctx->skipParagraphTag,
+                inHeaderFooterRender: true,
             );
             foreach ($footerBlocks as $block) {
                 $this->renderBlock($block, $footerArea);
