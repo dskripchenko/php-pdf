@@ -12,7 +12,7 @@ namespace Dskripchenko\PhpPdf\Barcode;
  *  - Alphanumeric (0-9, A-Z, space, $%*+-./:) — 11 bits per 2 chars.
  *  - Byte (any 8-bit data) — 8 bits per char.
  *
- * Kanji / ECI / Structured Append — deferred.
+ * Kanji mode → Phase 101. Structured Append → Phase 183. ECI → Phase 184.
  */
 enum QrEncodingMode: int
 {

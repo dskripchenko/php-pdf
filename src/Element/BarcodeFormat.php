@@ -7,15 +7,18 @@ namespace Dskripchenko\PhpPdf\Element;
 /**
  * Phase 32: Поддерживаемые форматы barcode.
  *
- * Code128 — линейный barcode, Set B (ASCII 32..126). Самый универсальный
- * для бизнес-документов (invoices, shipping labels, SKU).
+ * Все 6 форматов production-ready (по состоянию v1.3+):
+ *  - Code128 — Set A/B/C auto-switching + GS1-128 (Phase 164-165)
+ *  - Ean13/UpcA — Phase 35
+ *  - Qr — V1-V10 + L/M/Q/H + Numeric/Alphanumeric/Byte/Kanji
+ *    + Structured Append + ECI (Phase 36-38, 101, 183-184)
+ *  - DataMatrix — ECC 200 square/rect + multi-region
+ *    + C40/Text/X12/EDIFACT/Base 256 (Phase 104, 127, 176-180)
+ *  - Pdf417 — stacked + Text/Numeric compaction + Macro (Phase 124, 181-182, 185)
+ *  - Aztec — Compact 1-4L + Full 5-32L (Phase 125-126)
  *
- * Будущие форматы (deferred):
- *  - Code 128 Set A (control chars)
- *  - Code 128 Set C (compressed numeric)
- *  - EAN-13 / UPC-A (products)
- *  - QR Code (2D, Reed-Solomon)
- *  - DataMatrix (2D)
+ * Deferred к v1.4+: QR V11-V40, DataMatrix 144×144, Aztec Rune mode,
+ * Aztec Structured Append/ECI.
  */
 enum BarcodeFormat: string
 {

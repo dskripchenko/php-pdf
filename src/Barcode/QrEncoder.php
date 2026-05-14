@@ -14,7 +14,7 @@ namespace Dskripchenko\PhpPdf\Barcode;
  *    - Numeric mode (0-9 only) — 3 chars / 10 bits.
  *    - Alphanumeric (0-9, A-Z, space, $%*+-./:) — 2 chars / 11 bits.
  *    - Byte mode (everything else) — 1 char / 8 bits.
- *    - Kanji / ECI / structured-append — deferred.
+ *    - Kanji mode (Phase 101 closed), Structured Append (Phase 183), ECI (Phase 184).
  *  - Error correction levels L / M / Q / H:
  *    - V1..V4: все 4 levels.
  *    - V5..V10: все 4 ECC levels (L/M/Q/H) с mixed-block layout (Phase 146).
