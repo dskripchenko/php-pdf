@@ -100,6 +100,7 @@ final class PdfFont
     {
         $this->usedGlyphs = [];
         $this->writerRegistrations = new \SplObjectStorage;
+        $this->decodeCache = [];
     }
 
     /**
@@ -214,6 +215,17 @@ final class PdfFont
     private bool $indicShapingEnabled = true;
 
     /**
+     * Phase 154: bounded LRU cache для decodeUtf8 results — TextMeasurer
+     * (Engine layout) повторно вызывает на тех же словах при measuring
+     * line-fits, justification, и т.п.
+     *
+     * @var array<string, list<array{cp: int, gid: int}>>
+     */
+    private array $decodeCache = [];
+
+    private const DECODE_CACHE_MAX = 2048;
+
+    /**
      * Phase 135: disable Arabic shaping (для debug или если font handles
      * shaping itself через GSUB rather than Presentation Forms B).
      */
@@ -254,6 +266,14 @@ final class PdfFont
      */
     public function decodeUtf8(string $utf8): array
     {
+        // Phase 154: memo cache. TextMeasurer повторно зовёт decodeUtf8
+        // на одних и тех же словах при layout passes; без cache pipeline
+        // (utf8→cps + Arabic/Indic shape + Bidi + cmap + rphf) запускается
+        // каждый раз и blows memory. Bounded FIFO cap = 2048 entries.
+        if (isset($this->decodeCache[$utf8])) {
+            return $this->decodeCache[$utf8];
+        }
+
         $cps = self::utf8ToCps($utf8);
 
         // Phase 135: Arabic contextual shaping в logical order.
@@ -292,6 +312,12 @@ final class PdfFont
                 }
             }
         }
+
+        // Bounded FIFO eviction: drop oldest entry when reached cap.
+        if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
+            array_shift($this->decodeCache);
+        }
+        $this->decodeCache[$utf8] = $out;
 
         return $out;
     }
