@@ -479,6 +479,76 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 
 ---
 
+## v1.2 — Output size optimization
+
+Motivation: benchmark template 13 (`docs/bench-pdf-vs-mpdf.md` в printable repo)
+показал php-pdf output 82KB vs mpdf 57KB (mpdf 1.44× компактнее). Анализ
+identified три причины:
+
+1. Каждый Run генерирует separate `BT … Tj … ET` block (нет TJ-array группировки)
+2. Page /Resources dict declare'ит все 4 font variants даже когда used только 1-2
+3. Нет post-emit content stream optimizer (whitespace, redundant gstate, repeated colors)
+
+Combined target: **-27..30% output reduction** (82KB → ~57KB, parity с mpdf).
+
+### Phase 158: TJ-array grouping (priority 1, est. -15%)
+
+**Scope:** соседние Run'ы того же font+size+color на одном baseline сливаются
+в один `BT [<hex1> -kern <hex2> …] TJ ET` блок. PdfFont::encodeTextTjArray()
+уже умеет TJ format — нужна Engine-level group/flush logic.
+
+**Где:** `Engine::renderParagraph` — добавить TextRunBuffer аккумулятор,
+flush при изменении font/size/color/position OR end of line.
+
+**Риск:** regression на kerning pairs — тщательно проверить через golden-file
+тесты + bench template 13 для compare.
+
+### Phase 159: Page Resources dict slimming (priority 2, est. -5%)
+
+**Scope:** Page::registerEmbeddedFont накапливает все fonts; на emit
+/Resources filter только actually-used per page. Same для /XObject,
+/Pattern, /ExtGState.
+
+**Где:** `Page::buildResourcesDict` (или равноценный метод emit).
+
+**Риск:** PDF/A validators требуют declared resources совпадают с usage —
+нужны PDF/A regression tests.
+
+### Phase 160: Content stream post-processing (priority 3, est. -10%)
+
+**Scope:** новый `ContentStreamOptimizer`. Pass через stream перед FlateDecode
+compression. Optimizations:
+- Drop redundant `q…Q` graphics state pairs с identical state
+- Merge consecutive `<same color> rg` ops
+- Skip `Tm` re-emit если matrix same as previous
+- Compact whitespace в operators (cur engine pretty-prints с \n)
+- Strip leading zeros в numbers (`0.500` → `.5`)
+
+**Где:** `Pdf\Writer` или `Pdf\Page::finalize` — pass через optimizer перед emit.
+
+**Риск:** incorrect parsing может сломать valid PDF. **Обязательно** PDF reader
+verification tests (parse output через настоящий PDF library, compare extracted
+text/positions с pre-optimization).
+
+### Phase 161: Cross-Writer font subset dedup (priority 4 bonus, batch-only)
+
+**Scope:** SHA-1 хеш subset glyph set, cache в process-level (или
+filesystem `storage/framework/cache/php-pdf-subsets/`). При batch rendering
+(N documents с same template) embed font bytes один раз.
+
+**Outcome:** per-doc нет улучшения; per-batch до -50% если same font+glyphs
+across documents.
+
+**Риск:** cache invalidation при font file update. Хеш должен включать
+font file hash, не только glyph set.
+
+### Method
+
+После каждой Phase rerun bench (`docs/bench-pdf-vs-mpdf.md` в printable),
+обновить metrics. Combined target — output parity с mpdf.
+
+---
+
 ## v1.3 — Backlog (substantively deferred)
 
 Категории по типу работы. Каждый пункт — separate phase с research+impl+tests scope.
