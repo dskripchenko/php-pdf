@@ -255,10 +255,15 @@ final class SvgRenderer
             $x2 = self::parsePctOrFloat((string) ($g['x2'] ?? '1'));
             $y2 = self::parsePctOrFloat((string) ($g['y2'] ?? '0'));
             $stops = self::parseGradientStops($g);
+            // Phase 95: gradientTransform attribute.
+            $gradTransform = isset($g['gradientTransform'])
+                ? self::parseTransform((string) $g['gradientTransform'])
+                : null;
             $out[$id] = [
                 'type' => 'linear',
                 'x1' => $x1, 'y1' => $y1, 'x2' => $x2, 'y2' => $y2,
                 'stops' => $stops,
+                'transform' => $gradTransform,
             ];
         }
         // Phase 91: radialGradient parsing.
@@ -273,10 +278,14 @@ final class SvgRenderer
             $fx = isset($g['fx']) ? self::parsePctOrFloat((string) $g['fx']) : $cx;
             $fy = isset($g['fy']) ? self::parsePctOrFloat((string) $g['fy']) : $cy;
             $stops = self::parseGradientStops($g);
+            $gradTransform = isset($g['gradientTransform'])
+                ? self::parseTransform((string) $g['gradientTransform'])
+                : null;
             $out[$id] = [
                 'type' => 'radial',
                 'cx' => $cx, 'cy' => $cy, 'r' => $r, 'fx' => $fx, 'fy' => $fy,
                 'stops' => $stops,
+                'transform' => $gradTransform,
             ];
         }
 
@@ -971,7 +980,9 @@ final class SvgRenderer
             coords: $coords,
             function: $function,
         );
-        $pattern = new \Dskripchenko\PhpPdf\Pdf\PdfPattern($shading);
+        // Phase 95: forward gradientTransform к pattern matrix.
+        $matrix = $gradient['transform'] ?? null;
+        $pattern = new \Dskripchenko\PhpPdf\Pdf\PdfPattern($shading, $matrix);
 
         return $page->registerShadingPattern($pattern);
     }
