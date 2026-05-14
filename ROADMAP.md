@@ -644,13 +644,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 ### Font systems (1-2 weeks each)
 
 - **CIDFont vertical writing** (Type 0 + UniJIS-UTF16-V CMap + vmtx) —
-  Adobe-Japan1 CMap data (~50KB) + vmtx parser + Type 0 composite fonts.
+  Adobe-Japan1 CMap data (~50KB) + Type 0 composite fonts. *(vmtx parser
+  + /WMode 1 emitter частично готовы в Phase 192/194.)*
 - **CFF2 variable fonts** — full CFF Type 2 interpreter (CharString ops,
   blend operator, Item Variation Store integration, CIDKeyed CFFs).
-- **Bidi X1-X8 explicit embedding/override stack** — 125-deep level stack
-  per UAX 9 §3.3.
-- **Composite glyph per-component dx/dy gvar deltas** — composite glyph
-  re-serialization с modified anchor offsets.
+- ~~Bidi X1-X8 explicit embedding/override stack~~ ✅ **Phase 187 closed**.
+- ~~Composite glyph per-component dx/dy gvar deltas~~ ✅ **Phase 186 closed**.
 
 ### Barcodes — encoding modes & large versions (1 day to 1 week each)
 
@@ -724,15 +723,15 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - **Footnote true page-bottom positioning** — per-page reserved zone,
   multi-pass layout architecture.
 - **LineBreaker Knuth-Plass optimal** — boxes-glues-penalties с backtrack.
-- **LineBreaker hanging punctuation** — Engine-level layout.
-- **LineBreaker tab-stops** — Engine-level layout.
+- ~~LineBreaker hanging punctuation~~ ✅ **Phase 189 closed**.
+- ~~LineBreaker tab-stops~~ ✅ **Phase 188 closed**.
 
 ### PDF features (1-2 weeks each)
 
 - **Public-key encryption** (/Filter /PubSec) — X.509 certificate-based
   access control. Significant Encryption class refactor.
-- **PDF/A-1a (accessible)** — semantic Tagged PDF conformance enforcement.
-- **Streaming PKCS#7 signing** — placeholder + offset patching без buffer.
+- ~~PDF/A-1a (accessible)~~ ✅ **Phase 190 closed**.
+- ~~Streaming PKCS#7 signing~~ ✅ **Phase 191 closed**.
 - **Per-object content stream incremental emission** — deep API rewrite.
 
 ### Output optimization (bonus)
@@ -741,7 +740,11 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   needs LRU cache + invalidation strategy.
 - **Type0 → Type1 Latin re-encoding** — biggest potential output-size win.
   Significant font subsetter refactor.
-- **xref streams (PDF 1.5)** — metadata table compaction.
+- ~~xref streams (PDF 1.5)~~ ✅ **Phase 208 closed**. `Document::useXrefStream`
+  constructor flag + `Pdf\Document::useXrefStream()` setter + `Writer::__construct`
+  `$useXrefStream` param. Binary-packed (W=[1 4 2]) FlateDecode XRef stream
+  object replaces classic `xref...trailer` keywords. Auto-bumps PDF version
+  к 1.5. Disabled for PKCS#7 signing path. Output ~50% smaller metadata.
 
 ### Pragmatic publication strategy
 

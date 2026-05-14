@@ -46,6 +46,13 @@ final readonly class Document
          * default speech locale.
          */
         public ?string $lang = null,
+        /**
+         * Phase 208: emit xref как PDF 1.5 XRef stream object instead of
+         * classic `xref...trailer` table. Saves ~50% metadata bytes для
+         * large object counts. Не compatible с PKCS#7 signing — fallback
+         * к classic xref when signature configured.
+         */
+        public bool $useXrefStream = false,
     ) {}
 
     /**
@@ -69,6 +76,9 @@ final readonly class Document
                 creator: $this->metadata['Creator'] ?? null,
                 producer: $this->metadata['Producer'] ?? null,
             );
+        }
+        if ($this->useXrefStream) {
+            $pdf->useXrefStream();
         }
 
         return $pdf->toBytes();

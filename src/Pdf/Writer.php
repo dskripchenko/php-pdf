@@ -63,8 +63,18 @@ final class Writer
 
     private ?int $signatureDictId = null;
 
+    /**
+     * @param  string  $version  PDF version header (e.g. '1.4', '1.7', '2.0').
+     * @param  bool  $useXrefStream  Phase 208: emit cross-reference table as
+     *                                XRef stream object (PDF 1.5+) instead of
+     *                                classic `xref...trailer` table. More compact
+     *                                (binary packed + FlateDecode). Auto-disabled
+     *                                для signed documents (PKCS#7 path keeps
+     *                                classic xref для simpler /ByteRange patching).
+     */
     public function __construct(
         private readonly string $version = '1.7',
+        private readonly bool $useXrefStream = false,
     ) {}
 
     /**
@@ -218,6 +228,10 @@ final class Writer
             $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
         }
 
+        if ($this->useXrefStream) {
+            return $written + $this->writeXrefStream($stream, $written, $offsets);
+        }
+
         // xref table.
         $xrefOffset = $written;
         $count = $this->nextId;
@@ -242,6 +256,72 @@ final class Writer
         $written += self::writeAll($stream, 'startxref' . self::LINE_ENDING);
         $written += self::writeAll($stream, $xrefOffset . self::LINE_ENDING);
         $written += self::writeAll($stream, '%%EOF' . self::LINE_ENDING);
+
+        return $written;
+    }
+
+    /**
+     * Phase 208: emit cross-reference table as XRef stream object (PDF 1.5+).
+     *
+     * Replaces classic `xref...trailer` keywords с binary-packed FlateDecode
+     * stream object. Entries packed as type(1) + offset(4) + gen(2) bytes.
+     * The xref stream object получает own id = current nextId, is registered
+     * в /Size, и its own entry is included в the table.
+     *
+     * @param  resource  $stream
+     * @param  array<int, int>  $offsets
+     */
+    private function writeXrefStream($stream, int $startWritten, array $offsets): int
+    {
+        $xrefObjId = $this->nextId;
+        $xrefOffset = $startWritten;
+        // Include xref stream object's own offset (it will be at $startWritten).
+        $offsets[$xrefObjId] = $xrefOffset;
+        $sizeCount = $xrefObjId + 1; // entries 0..xrefObjId inclusive
+
+        // W = [1 4 2]: type(1 byte) + offset(4 bytes) + gen(2 bytes).
+        $entries = '';
+        // Entry 0: free, offset 0, gen 65535.
+        $entries .= chr(0).pack('N', 0).pack('n', 65535);
+        for ($id = 1; $id < $sizeCount; $id++) {
+            $off = $offsets[$id] ?? 0;
+            $entries .= chr(1).pack('N', $off).pack('n', 0);
+        }
+
+        // FlateDecode compress.
+        $compressed = gzcompress($entries, 9);
+        if ($compressed === false) {
+            throw new \RuntimeException('Failed to compress xref stream');
+        }
+        $streamLen = strlen($compressed);
+
+        // Build dictionary.
+        $dict = '<< /Type /XRef';
+        $dict .= ' /Size '.$sizeCount;
+        $dict .= ' /Root '.$this->rootId.' 0 R';
+        if ($this->infoId !== null) {
+            $dict .= ' /Info '.$this->infoId.' 0 R';
+        }
+        if ($this->encryption !== null && $this->encryptId !== null) {
+            $dict .= ' /Encrypt '.$this->encryptId.' 0 R';
+            $idHex = bin2hex($this->encryption->fileId);
+            $dict .= ' /ID [<'.$idHex.'> <'.$idHex.'>]';
+        }
+        $dict .= ' /W [1 4 2]';
+        $dict .= ' /Filter /FlateDecode';
+        $dict .= ' /Length '.$streamLen;
+        $dict .= ' >>';
+
+        $written = 0;
+        $written += self::writeAll($stream, $xrefObjId.' 0 obj'.self::LINE_ENDING);
+        $written += self::writeAll($stream, $dict.self::LINE_ENDING);
+        $written += self::writeAll($stream, 'stream'.self::LINE_ENDING);
+        $written += self::writeAll($stream, $compressed.self::LINE_ENDING);
+        $written += self::writeAll($stream, 'endstream'.self::LINE_ENDING);
+        $written += self::writeAll($stream, 'endobj'.self::LINE_ENDING);
+        $written += self::writeAll($stream, 'startxref'.self::LINE_ENDING);
+        $written += self::writeAll($stream, $xrefOffset.self::LINE_ENDING);
+        $written += self::writeAll($stream, '%%EOF'.self::LINE_ENDING);
 
         return $written;
     }

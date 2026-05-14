@@ -52,6 +52,9 @@ final class Document
 
     private string $pdfVersion = '1.7';
 
+    /** Phase 208: emit xref как XRef stream object (PDF 1.5+) instead of classic table. */
+    private bool $useXrefStream = false;
+
     /**
      * @var array<string, string>  metadata fields (Title, Author, Subject,
      *                              Keywords, Creator, Producer). Values
@@ -447,6 +450,25 @@ final class Document
     }
 
     /**
+     * Phase 208: enable XRef stream cross-reference table (PDF 1.5+).
+     *
+     * Replaces classic `xref...trailer` keywords с binary-packed FlateDecode
+     * object — ~50% smaller metadata footprint. Auto-bumps PDF version к 1.5+
+     * если currently below. Не compatible с PKCS#7 signing (signing path
+     * keeps classic xref для simpler /ByteRange handling — when both are
+     * configured, classic xref wins).
+     */
+    public function useXrefStream(bool $enabled = true): self
+    {
+        $this->useXrefStream = $enabled;
+        if ($enabled && version_compare($this->pdfVersion, '1.5', '<')) {
+            $this->pdfVersion = '1.5';
+        }
+
+        return $this;
+    }
+
+    /**
      * Устанавливает PDF metadata (/Info dict). Все параметры optional.
      * Только заданные fields эмитятся (не-null). CreationDate авто-
      * заполняется если не передан.
@@ -591,7 +613,10 @@ final class Document
             $this->addPage();
         }
 
-        $writer = new Writer($this->pdfVersion);
+        // Phase 208: xref streams auto-disabled при PKCS#7 signing — that
+        // path patches /ByteRange + /Contents в classic xref layout.
+        $useXref = $this->useXrefStream && $this->signatureConfig === null;
+        $writer = new Writer($this->pdfVersion, useXrefStream: $useXref);
 
         // 1. Резервируем top-level IDs.
         $catalogId = $writer->reserveObject();
