@@ -17,7 +17,7 @@ namespace Dskripchenko\PhpPdf\Barcode;
  *    - Kanji / ECI / structured-append — deferred.
  *  - Error correction levels L / M / Q / H:
  *    - V1..V4: все 4 levels.
- *    - V5..V10: только ECC L (V5+ ECC M/Q/H deferred — mixed-block layout).
+ *    - V5..V10: все 4 ECC levels (L/M/Q/H) с mixed-block layout (Phase 146).
  *  - Versions 1..10.
  *  - Mask pattern 0 (i+j mod 2 = 0) — single pattern, без best-mask
  *    selection.
@@ -35,17 +35,27 @@ final class QrEncoder
         2 => ['L' => 32, 'M' => 26, 'Q' => 20, 'H' => 14],
         3 => ['L' => 53, 'M' => 42, 'Q' => 32, 'H' => 24],
         4 => ['L' => 78, 'M' => 62, 'Q' => 46, 'H' => 34],
-        5 => ['L' => 106],
-        6 => ['L' => 134],
-        7 => ['L' => 154],
-        8 => ['L' => 192],
-        9 => ['L' => 230],
-        10 => ['L' => 271],
+        5 => ['L' => 106, 'M' => 84, 'Q' => 60, 'H' => 44],
+        6 => ['L' => 134, 'M' => 106, 'Q' => 74, 'H' => 58],
+        7 => ['L' => 154, 'M' => 122, 'Q' => 86, 'H' => 64],
+        8 => ['L' => 192, 'M' => 152, 'Q' => 108, 'H' => 84],
+        9 => ['L' => 230, 'M' => 180, 'Q' => 130, 'H' => 98],
+        10 => ['L' => 271, 'M' => 213, 'Q' => 151, 'H' => 119],
     ];
 
     /**
-     * ECC parameters: [data_codewords, total_codewords, ecc_per_block, num_blocks].
-     * Indexed by [version][ecc-level-string].
+     * ECC parameters: [data_codewords, total_codewords, ecc_per_block, num_blocks_first_group].
+     *
+     * Phase 146: для mixed-block versions (e.g., V5-Q = 2×15 + 2×16), entry has
+     * the SAME 4-element signature but if mixed, a 5th element appears:
+     *   [..., num_blocks_first_group, num_blocks_second_group, data_per_block_second]
+     * Backward compat: legacy format remains 4-element.
+     *
+     * Block layout convention:
+     *  - 4-element [data, total, ecc, num]: всех `num` blocks have data/num size each.
+     *  - 6-element [data, total, ecc, g1Count, g2Count, g2BlockSize]: group1 blocks
+     *    have (data - g2Count*g2BlockSize) / g1Count size each; group2 blocks have
+     *    g2BlockSize each. All blocks share same `ecc` per-block count.
      */
     private const ECC_PARAMS = [
         1 => [
@@ -72,13 +82,42 @@ final class QrEncoder
             'Q' => [48, 100, 26, 2],
             'H' => [36, 100, 16, 4],
         ],
-        // V5+ only ECC L (mixed-block layout для M/Q/H deferred).
-        5 => ['L' => [108, 134, 26, 1]],
-        6 => ['L' => [136, 172, 18, 2]],
-        7 => ['L' => [156, 196, 20, 2]],
-        8 => ['L' => [194, 242, 24, 2]],
-        9 => ['L' => [232, 292, 30, 2]],
-        10 => ['L' => [274, 346, 18, 2]],
+        5 => [
+            'L' => [108, 134, 26, 1],
+            'M' => [86, 134, 24, 2],
+            'Q' => [62, 134, 18, 2, 2, 16],   // 2×15 + 2×16
+            'H' => [46, 134, 22, 2, 2, 12],   // 2×11 + 2×12
+        ],
+        6 => [
+            'L' => [136, 172, 18, 2],
+            'M' => [108, 172, 16, 4],
+            'Q' => [76, 172, 24, 4],
+            'H' => [60, 172, 28, 4],
+        ],
+        7 => [
+            'L' => [156, 196, 20, 2],
+            'M' => [124, 196, 18, 4],
+            'Q' => [88, 196, 18, 2, 4, 15],   // 2×14 + 4×15
+            'H' => [66, 196, 26, 4, 1, 14],   // 4×13 + 1×14
+        ],
+        8 => [
+            'L' => [194, 242, 24, 2],
+            'M' => [154, 242, 22, 2, 2, 39],  // 2×38 + 2×39
+            'Q' => [110, 242, 22, 4, 2, 19],  // 4×18 + 2×19
+            'H' => [86, 242, 26, 4, 2, 15],   // 4×14 + 2×15
+        ],
+        9 => [
+            'L' => [232, 292, 30, 2],
+            'M' => [182, 292, 22, 3, 2, 37],  // 3×36 + 2×37
+            'Q' => [132, 292, 20, 4, 4, 17],  // 4×16 + 4×17
+            'H' => [100, 292, 24, 4, 4, 13],  // 4×12 + 4×13
+        ],
+        10 => [
+            'L' => [274, 346, 18, 2, 2, 69],  // 2×68 + 2×69
+            'M' => [216, 346, 26, 4, 1, 44],  // 4×43 + 1×44
+            'Q' => [154, 346, 24, 6, 2, 20],  // 6×19 + 2×20
+            'H' => [122, 346, 28, 6, 2, 16],  // 6×15 + 2×16
+        ],
     ];
 
     /**
@@ -455,29 +494,67 @@ final class QrEncoder
     }
 
     /**
-     * Applies Reed-Solomon ECC к codewords. Returns list of ECC blocks
-     * (одна на каждый data block для версий с multi-block layout).
+     * Phase 146: split data codewords into blocks per ECC layout.
+     * Returns list<list<int>> (data blocks, possibly с different sizes
+     * для mixed-block versions).
      *
-     * @param  list<int>  $codewords  Data codewords.
-     * @return list<list<int>>  ECC blocks.
+     * @param  list<int>  $codewords
+     * @return list<list<int>>
      */
-    private function applyReedSolomon(array $codewords, int $version): array
+    private function splitDataBlocks(array $codewords, int $version): array
     {
-        [$totalData, , $eccPerBlock, $numBlocks] = self::ECC_PARAMS[$version][$this->eccLevel->value];
-        $blockSize = intdiv($totalData, $numBlocks);
+        $params = self::ECC_PARAMS[$version][$this->eccLevel->value];
+        [$totalData, , , $g1Count] = $params;
+        if (! isset($params[4])) {
+            // Single-group: $g1Count blocks of (totalData / g1Count) each.
+            $blockSize = intdiv($totalData, $g1Count);
+            $blocks = [];
+            for ($b = 0; $b < $g1Count; $b++) {
+                $blocks[] = array_slice($codewords, $b * $blockSize, $blockSize);
+            }
 
+            return $blocks;
+        }
+        // Mixed-group: g1Count × g1BlockSize + g2Count × g2BlockSize.
+        [, , , , $g2Count, $g2BlockSize] = $params;
+        $g1BlockSize = intdiv($totalData - $g2Count * $g2BlockSize, $g1Count);
         $blocks = [];
-        for ($b = 0; $b < $numBlocks; $b++) {
-            $start = $b * $blockSize;
-            $dataBlock = array_slice($codewords, $start, $blockSize);
-            $blocks[] = self::rsCompute($dataBlock, $eccPerBlock);
+        $offset = 0;
+        for ($b = 0; $b < $g1Count; $b++) {
+            $blocks[] = array_slice($codewords, $offset, $g1BlockSize);
+            $offset += $g1BlockSize;
+        }
+        for ($b = 0; $b < $g2Count; $b++) {
+            $blocks[] = array_slice($codewords, $offset, $g2BlockSize);
+            $offset += $g2BlockSize;
         }
 
         return $blocks;
     }
 
     /**
+     * Applies Reed-Solomon ECC per data block.
+     *
+     * @param  list<int>  $codewords  Data codewords.
+     * @return list<list<int>>  ECC blocks (per data block).
+     */
+    private function applyReedSolomon(array $codewords, int $version): array
+    {
+        $eccPerBlock = self::ECC_PARAMS[$version][$this->eccLevel->value][2];
+        $dataBlocks = $this->splitDataBlocks($codewords, $version);
+        $eccBlocks = [];
+        foreach ($dataBlocks as $dataBlock) {
+            $eccBlocks[] = self::rsCompute($dataBlock, $eccPerBlock);
+        }
+
+        return $eccBlocks;
+    }
+
+    /**
      * Interleaves data + ECC blocks по spec.
+     *
+     * Mixed-block: shorter blocks contribute fewer columns when interleaving
+     * data. ECC blocks all have same length so straightforward.
      *
      * @param  list<int>  $dataCodewords
      * @param  list<list<int>>  $eccBlocks
@@ -485,18 +562,19 @@ final class QrEncoder
      */
     private function interleaveBlocks(array $dataCodewords, array $eccBlocks, int $version): array
     {
-        [$totalData, , , $numBlocks] = self::ECC_PARAMS[$version][$this->eccLevel->value];
-        $blockSize = intdiv($totalData, $numBlocks);
-        $dataBlocks = [];
-        for ($b = 0; $b < $numBlocks; $b++) {
-            $dataBlocks[] = array_slice($dataCodewords, $b * $blockSize, $blockSize);
+        $dataBlocks = $this->splitDataBlocks($dataCodewords, $version);
+        $maxBlockSize = 0;
+        foreach ($dataBlocks as $blk) {
+            $maxBlockSize = max($maxBlockSize, count($blk));
         }
 
-        // Interleave columnwise.
+        // Interleave data columnwise — shorter blocks skip after their length.
         $result = [];
-        for ($i = 0; $i < $blockSize; $i++) {
+        for ($i = 0; $i < $maxBlockSize; $i++) {
             foreach ($dataBlocks as $blk) {
-                $result[] = $blk[$i];
+                if (isset($blk[$i])) {
+                    $result[] = $blk[$i];
+                }
             }
         }
         $eccLen = count($eccBlocks[0]);

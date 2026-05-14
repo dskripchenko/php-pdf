@@ -57,20 +57,32 @@ final class QrEccLevelTest extends TestCase
     }
 
     #[Test]
-    public function v5_only_ecc_l_supported(): void
+    public function v5_plus_ecc_m_q_h_now_supported(): void
     {
-        // V5 ECC L max=106 bytes; M/Q/H для V5+ — deferred → expect exception.
-        $this->expectException(\InvalidArgumentException::class);
-        new QrEncoder(str_repeat('A', 100), QrEccLevel::M);
+        // Phase 146: V5+ M/Q/H теперь работают (mixed-block support).
+        // Use lowercase (byte mode) к escape alphanumeric optimization.
+        $payload = str_repeat('a', 80); // 80 bytes — needs ≥V5 M.
+        $enc = new QrEncoder($payload, QrEccLevel::M);
+        self::assertSame(QrEccLevel::M, $enc->eccLevel);
+        self::assertGreaterThanOrEqual(5, $enc->version);
+
+        // Verify Q и H also work на mixed-block versions.
+        $payloadQ = str_repeat('a', 50);
+        $encQ = new QrEncoder($payloadQ, QrEccLevel::Q);
+        self::assertSame(QrEccLevel::Q, $encQ->eccLevel);
+
+        $payloadH = str_repeat('a', 40);
+        $encH = new QrEncoder($payloadH, QrEccLevel::H);
+        self::assertSame(QrEccLevel::H, $encH->eccLevel);
     }
 
     #[Test]
     public function max_capacity_per_level_helper(): void
     {
         self::assertSame(271, QrEncoder::maxCapacityForLevel('L')); // V10
-        self::assertSame(62, QrEncoder::maxCapacityForLevel('M')); // V4 max
-        self::assertSame(46, QrEncoder::maxCapacityForLevel('Q'));
-        self::assertSame(34, QrEncoder::maxCapacityForLevel('H'));
+        self::assertSame(213, QrEncoder::maxCapacityForLevel('M')); // V10 теперь
+        self::assertSame(151, QrEncoder::maxCapacityForLevel('Q')); // V10
+        self::assertSame(119, QrEncoder::maxCapacityForLevel('H')); // V10
     }
 
     #[Test]
