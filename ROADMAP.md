@@ -336,13 +336,10 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
   Pattern table извлечена как ISO standard facts через TCPDF reference;
   RS GF(929), byte/multi-byte compaction, ECC 0..8.
   External verification рекомендуется через реальный PDF417 reader.
-- Aztec Compact 1-4 layers — **Phase 125 partial** (5bedadd).
-  ZXing verification 2026-05-14: "No Barcode Found" — finder pattern не
-  recognized. Bullseye структурно верен (Chebyshev distance pattern),
-  но mode message placement (§6.3.2) и data spiral traversal order
-  (§6.5) не совпадают с decoder expectations.
-  **Reopen plan**: port ZXing's `AztecEncoder.java` (Apache 2.0,
-  MIT-compatible) algorithm для precise bit-positions.
+- ~~Aztec Compact 1-4 layers~~ ✅ **Phase 125 closed** (5bedadd, c8be44d).
+  Ported ZXing's `Encoder.java` algorithm (Apache 2.0) для precise
+  matrix layout. ZXing CLI decoder verified L1/L2/L3 inputs включая
+  mixed case + digit mode transitions.
 - Aztec Full (5-32 layers) — отложен, ~400-600 LoC поверх compact.
 - DataMatrix rectangular + larger sizes (32×32+) — отложен.
 - QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
