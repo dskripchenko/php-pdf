@@ -68,6 +68,23 @@ final readonly class Document
          * Не compatible с PKCS#7 signing / encryption.
          */
         public bool $useObjectStreams = false,
+        /**
+         * Phase 217: declarative encryption setup. Null = no encryption.
+         * Otherwise applies password, permissions, algorithm via
+         * Pdf\Document::encrypt() during emission.
+         */
+        public ?EncryptionParams $encryption = null,
+        /**
+         * Phase 217: declarative PKCS#7 detached signing. Requires AcroForm
+         * с signature placeholder field. Null = no signing.
+         */
+        public ?\Dskripchenko\PhpPdf\Pdf\SignatureConfig $signature = null,
+        /**
+         * Phase 217: declarative PDF/A conformance. Null = no PDF/A
+         * enforcement. Otherwise applies enablePdfA() during emission
+         * (auto-enables Tagged PDF при conformance='A').
+         */
+        public ?\Dskripchenko\PhpPdf\Pdf\PdfAConfig $pdfA = null,
     ) {}
 
     /**
@@ -129,6 +146,22 @@ final readonly class Document
                 creator: $this->metadata['Creator'] ?? null,
                 producer: $this->metadata['Producer'] ?? null,
             );
+        }
+        // Phase 217: PDF/A must apply ДО encryption (PDF/A disallows encryption,
+        // throws при wrong order).
+        if ($this->pdfA !== null) {
+            $pdf->enablePdfA($this->pdfA);
+        }
+        if ($this->encryption !== null) {
+            $pdf->encrypt(
+                userPassword: $this->encryption->userPassword,
+                ownerPassword: $this->encryption->ownerPassword,
+                permissions: $this->encryption->permissions,
+                algorithm: $this->encryption->algorithm,
+            );
+        }
+        if ($this->signature !== null) {
+            $pdf->sign($this->signature);
         }
         if ($this->useXrefStream) {
             $pdf->useXrefStream();

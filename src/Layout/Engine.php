@@ -239,7 +239,11 @@ final class Engine
             $this->compressStreams,
         );
         // Phase 48: forward tagged flag из AST.
-        if ($document->tagged) {
+        // Phase 217: PDF/A-1a implies tagged — auto-enable for consistent
+        // struct element collection during rendering.
+        $taggedRequired = $document->tagged
+            || ($document->pdfA?->conformance === \Dskripchenko\PhpPdf\Pdf\PdfAConfig::CONFORMANCE_A);
+        if ($taggedRequired) {
             $pdf->enableTagged();
         }
         // Phase 89: forward language hint.
