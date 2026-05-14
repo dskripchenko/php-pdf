@@ -566,11 +566,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 - **CFF2 variable fonts** — currently only TrueType glyf-based supported.
   Requires full CFF Type 2 interpreter (CharString operators, blend operator,
   Item Variation Store integration, CIDKeyed CFFs). Scope similar к Phase 131-134.
-- **Bidi X1-X8 explicit embedding/override stack** — LRE/RLE/LRO/RLO/PDF
-  + LRI/RLI/FSI/PDI processing с до 125-deep level stack. UAX 9 §3.3.
-- **Composite glyph per-component dx/dy gvar deltas** — currently transforms
-  inherit транзитивно от simple components, но per-component anchor offsets
-  не interpolate. Rare в variable fonts.
+- ~~Bidi X1-X10 explicit embedding/override stack~~ ✅ **Phase 187 closed**.
+  Full UAX 9 §3.3: LRE/RLE/LRO/RLO/PDF embeddings + LRI/RLI/FSI/PDI isolates,
+  125-level stack, FSI direction scan, override types.
+- ~~Composite glyph per-component dx/dy gvar deltas~~ ✅ **Phase 186 closed**.
+  New CompositeGlyph parser/serializer + VariableInstance::transformComposite
+  applies gvar deltas к component anchor offsets с int8/int16 promotion.
 - ~~Sinhala two-part matras с virama component~~ ✅ **Phase 169 closed** (clarif:
   single-codepoint path covers most Sinhala fonts).
 
