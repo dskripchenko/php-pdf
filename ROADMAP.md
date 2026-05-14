@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 92 фазы закрыто (907 + 194 printable = 1101 тест).
+**Текущий статус:** v1.1-dev — 101 фаза закрыта (950 + 194 printable = 1144 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-94 closed (70 фаз):
+**v1.1 progress:** 25-103 closed (79 фаз):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -56,7 +56,16 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 91 SVG radialGradient,
  - 92 PDF/UA /StructParents tree (reading order),
  - 93 PDF/UA /RoleMap custom role aliases,
- - 94 Page rotation /Rotate.
+ - 94 Page rotation /Rotate,
+ - 95 SVG gradientTransform attribute,
+ - 96 Math multi-line equations,
+ - 97 AcroForm /CO calculation order,
+ - 98 Smoothed line chart (Catmull-Rom splines),
+ - 99 AcroForm /DA default appearance,
+ - 100 bookmark colors + bold/italic,
+ - 101 QR Kanji encoding mode,
+ - 102 drawImage с rotation,
+ - 103 PDF/A-2u / PDF/A-3 support.
 
 ---
 
@@ -243,6 +252,8 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - AcroForm signature actual signing (PKCS#7 two-pass byte range).
 - ~~JavaScript validation / calculation / format / keystroke actions~~ ✅ **Phase 67 closed** (5c8e1b4).
 - ~~AcroForm submit / reset / push buttons~~ ✅ **Phase 83 closed** (ba8e13d).
+- ~~AcroForm /CO calculation order~~ ✅ **Phase 97 closed** (ef445eb).
+- ~~AcroForm /DA default appearance + /DR resources~~ ✅ **Phase 99 closed** (bd704dc).
 - Digital signatures (PKCS#7 signing of arbitrary fields).
 - ~~PDF/UA heading hierarchy (/H1-/H6)~~ ✅ **Phase 61 closed** (38b3c3b).
 - ~~PDF/UA alt-text для figures~~ ✅ **Phase 62 closed** (38ccc36).
@@ -267,12 +278,13 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~SVG linearGradient через PDF Pattern/Shading~~ ✅ **Phase 82 closed** (096ef07).
 - ~~SVG multi-stop gradients (Type 3 stitching)~~ ✅ **Phase 90 closed** (a96d200).
 - ~~SVG radialGradient~~ ✅ **Phase 91 closed** (71b851d).
-- SVG complete: full path grammar + transforms + opacity + linear/radial gradients +
-  multi-stop + CSS styles + defs/use + text. (limitation: gradient transform attr).
+- ~~SVG gradientTransform attribute~~ ✅ **Phase 95 closed** (7f2aec7).
+- SVG complete: full path grammar + transforms + opacity + linear/radial gradients
+  multi-stop + CSS styles + defs/use + text + gradientTransform.
 - ~~Math equations (LaTeX-like sup/sub/frac/sqrt + Greek)~~ ✅ **Phase 69 closed** (f210de4).
 - ~~Math matrices (matrix/pmatrix/bmatrix/vmatrix)~~ ✅ **Phase 75 closed** (57676fd).
 - ~~Math big operators с limits (\\sum_{i=1}^n)~~ ✅ **Phase 80 closed** (b625b92).
-- Math equations extensions: multi-line equations, nested fracs polishing.
+- ~~Math multi-line equations~~ ✅ **Phase 96 closed** (09cf311).
 - ~~Bar chart primitive~~ ✅ **Phase 44 closed** (01f22f0).
 - ~~Line + Pie charts~~ ✅ **Phase 45 closed** (9251cd0).
 - ~~Multi-series charts (grouped bar + multi-line)~~ ✅ **Phase 51 closed** (468ebeb).
@@ -283,12 +295,14 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Custom y-axis range (yMin/yMax)~~ ✅ **Phase 68 closed** (68f632b).
 - ~~Chart axis titles (BarChart/LineChart/AreaChart)~~ ✅ **Phase 70 closed** (08cc18c).
 - ~~Chart grid lines на 5 more charts~~ ✅ **Phase 71 closed** (0236048).
-- Chart extensions: smoothed splines, x-axis label rotation, axis titles на остальных charts.
+- ~~Chart smoothed splines (Catmull-Rom)~~ ✅ **Phase 98 closed** (808858f).
+- Chart extensions: x-axis label rotation, axis titles на остальных charts.
 - ~~Barcode primitives — Code 128~~ ✅ **Phase 32 closed** (8aa8f6c).
 - ~~EAN-13 / UPC-A~~ ✅ **Phase 35 closed** (f26dcd3).
 - ~~QR Code (Reed-Solomon ECC L V1-10 byte mode)~~ ✅ **Phase 36 closed** (b6521aa).
 - ~~QR ECC M/Q/H levels (V1-V4 full, V5+ deferred)~~ ✅ **Phase 37 closed** (12802e9).
 - ~~QR Numeric/Alphanumeric encoding modes~~ ✅ **Phase 38 closed** (8e5c680).
+- ~~QR Kanji encoding mode (Shift_JIS)~~ ✅ **Phase 101 closed** (3a26626).
 - ~~Code 128 Set C (numeric compression)~~ ✅ **Phase 57 closed** (b93c6c8).
 - ~~Code 128 Set A (control chars)~~ ✅ **Phase 78 closed** (5c42a76).
 - Barcode formats: DataMatrix, PDF417, Aztec.
