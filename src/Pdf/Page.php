@@ -618,6 +618,134 @@ final class Page
         return $this;
     }
 
+    /** @var list<array<string, mixed>> Phase 109: markup annotations (Text/Highlight/Underline/StrikeOut/FreeText). */
+    private array $markupAnnotations = [];
+
+    /**
+     * Phase 109: Sticky note text annotation. Click показывает popup с $contents.
+     *
+     * @param  string  $icon  one of Comment|Note|Help|NewParagraph|Paragraph|Insert (default Note)
+     * @param  array{0:float,1:float,2:float}|null  $color  RGB 0..1
+     */
+    public function addTextAnnotation(
+        float $x,
+        float $y,
+        string $contents,
+        ?string $title = null,
+        string $icon = 'Note',
+        ?array $color = null,
+    ): self {
+        $valid = ['Comment', 'Note', 'Help', 'NewParagraph', 'Paragraph', 'Insert', 'Key'];
+        if (! in_array($icon, $valid, true)) {
+            throw new \InvalidArgumentException('Invalid text annotation icon: ' . $icon);
+        }
+        $this->markupAnnotations[] = [
+            'kind' => 'text',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + 18, 'y2' => $y + 18,
+            'contents' => $contents,
+            'title' => $title,
+            'icon' => $icon,
+            'color' => $color,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Phase 109: Highlight markup annotation over rect.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $color  default yellow (1,1,0)
+     */
+    public function addHighlightAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $contents = '',
+        ?array $color = null,
+    ): self {
+        return $this->addQuadMarkup('highlight', $x, $y, $width, $height, $contents, $color ?? [1.0, 1.0, 0.0]);
+    }
+
+    /**
+     * Phase 109: Underline markup annotation.
+     */
+    public function addUnderlineAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $contents = '',
+        ?array $color = null,
+    ): self {
+        return $this->addQuadMarkup('underline', $x, $y, $width, $height, $contents, $color ?? [0.0, 0.5, 1.0]);
+    }
+
+    /**
+     * Phase 109: Strike-out markup annotation.
+     */
+    public function addStrikeOutAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $contents = '',
+        ?array $color = null,
+    ): self {
+        return $this->addQuadMarkup('strikeout', $x, $y, $width, $height, $contents, $color ?? [1.0, 0.0, 0.0]);
+    }
+
+    /**
+     * Phase 109: FreeText annotation — text rendered directly на page surface.
+     */
+    public function addFreeTextAnnotation(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $text,
+        ?array $color = null,
+        float $fontSize = 11.0,
+    ): self {
+        $this->markupAnnotations[] = [
+            'kind' => 'freetext',
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $width, 'y2' => $y + $height,
+            'contents' => $text,
+            'color' => $color,
+            'fontSize' => $fontSize,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * @param  array{0:float,1:float,2:float}  $color
+     */
+    private function addQuadMarkup(string $kind, float $x, float $y, float $w, float $h, string $contents, array $color): self
+    {
+        $this->markupAnnotations[] = [
+            'kind' => $kind,
+            'x1' => $x, 'y1' => $y,
+            'x2' => $x + $w, 'y2' => $y + $h,
+            'contents' => $contents,
+            'color' => $color,
+        ];
+
+        return $this;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     *
+     * @internal
+     */
+    public function markupAnnotations(): array
+    {
+        return $this->markupAnnotations;
+    }
+
     /**
      * Internal link — клик в Rect переходит к named destination $destName.
      */

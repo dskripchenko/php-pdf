@@ -739,6 +739,10 @@ final class Document
                     ];
                 }
             }
+            // Phase 109: markup annotations (Text/Highlight/Underline/StrikeOut/FreeText).
+            foreach ($page->markupAnnotations() as $ann) {
+                $annotIds[] = $writer->addObject($this->buildMarkupAnnotation($ann));
+            }
             // Phase 43+46+67: AcroForm widgets — emit widget annotations +
             // optional /AA JavaScript actions + collect field object IDs.
             foreach ($page->formFields() as $field) {
@@ -1638,6 +1642,86 @@ final class Document
     private function pdfString(string $s): string
     {
         return '('.strtr($s, ['\\' => '\\\\', '(' => '\\(', ')' => '\\)']).')';
+    }
+
+    /**
+     * Phase 109: build markup annotation body (Text/Highlight/Underline/
+     * StrikeOut/FreeText).
+     *
+     * @param  array<string, mixed>  $ann
+     */
+    private function buildMarkupAnnotation(array $ann): string
+    {
+        $rect = sprintf(
+            '[%s %s %s %s]',
+            $this->fmt((float) $ann['x1']), $this->fmt((float) $ann['y1']),
+            $this->fmt((float) $ann['x2']), $this->fmt((float) $ann['y2']),
+        );
+        $contentsPart = '';
+        if (! empty($ann['contents'])) {
+            $contentsPart = ' /Contents ' . $this->pdfString((string) $ann['contents']);
+        }
+        $colorPart = '';
+        if (! empty($ann['color'])) {
+            $color = $ann['color'];
+            $colorPart = sprintf(' /C [%s %s %s]', $this->fmt((float) $color[0]), $this->fmt((float) $color[1]), $this->fmt((float) $color[2]));
+        }
+        $titlePart = '';
+        if (! empty($ann['title'])) {
+            $titlePart = ' /T ' . $this->pdfString((string) $ann['title']);
+        }
+
+        switch ($ann['kind']) {
+            case 'text':
+                return sprintf(
+                    '<< /Type /Annot /Subtype /Text /Rect %s%s%s%s /Name /%s >>',
+                    $rect, $contentsPart, $titlePart, $colorPart, $ann['icon'],
+                );
+            case 'highlight':
+            case 'underline':
+            case 'strikeout':
+                $subtype = match ($ann['kind']) {
+                    'highlight' => 'Highlight',
+                    'underline' => 'Underline',
+                    'strikeout' => 'StrikeOut',
+                };
+                // QuadPoints — 8 numbers per quad: (x1 y1) bot-left, (x2 y2) bot-right,
+                // (x3 y3) top-left, (x4 y4) top-right (PDF spec §12.5.6.10 ordering varies
+                // by vendor; this matches Acrobat default).
+                $qp = sprintf(
+                    '[%s %s %s %s %s %s %s %s]',
+                    $this->fmt((float) $ann['x1']), $this->fmt((float) $ann['y2']),
+                    $this->fmt((float) $ann['x2']), $this->fmt((float) $ann['y2']),
+                    $this->fmt((float) $ann['x1']), $this->fmt((float) $ann['y1']),
+                    $this->fmt((float) $ann['x2']), $this->fmt((float) $ann['y1']),
+                );
+
+                return sprintf(
+                    '<< /Type /Annot /Subtype /%s /Rect %s /QuadPoints %s%s%s >>',
+                    $subtype, $rect, $qp, $contentsPart, $colorPart,
+                );
+            case 'freetext':
+                $fontSize = (float) ($ann['fontSize'] ?? 11.0);
+                // /DA — default appearance string. Color: use /C если задан, else black.
+                $daColor = '0 g';
+                if (! empty($ann['color'])) {
+                    $color = $ann['color'];
+                    $daColor = sprintf(
+                        '%s %s %s rg',
+                        $this->fmt((float) $color[0]),
+                        $this->fmt((float) $color[1]),
+                        $this->fmt((float) $color[2]),
+                    );
+                }
+                $da = sprintf('(/Helv %s Tf %s)', $this->fmt($fontSize), $daColor);
+
+                return sprintf(
+                    '<< /Type /Annot /Subtype /FreeText /Rect %s%s /DA %s >>',
+                    $rect, $contentsPart, $da,
+                );
+            default:
+                throw new \LogicException('Unknown markup annotation kind: ' . $ann['kind']);
+        }
     }
 
     /**
