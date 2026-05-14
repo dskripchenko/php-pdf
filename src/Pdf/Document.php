@@ -1935,6 +1935,22 @@ final class Document
                     '<< /Type /Annot /Subtype /Stamp /Rect %s /Name /%s%s >>',
                     $rect, $ann['stampName'], $contentsPart,
                 );
+            case 'ink':
+                $strokeArrays = [];
+                foreach ($ann['inkStrokes'] as $stroke) {
+                    $pts = [];
+                    foreach ($stroke as [$x, $y]) {
+                        $pts[] = $this->fmt((float) $x) . ' ' . $this->fmt((float) $y);
+                    }
+                    $strokeArrays[] = '[' . implode(' ', $pts) . ']';
+                }
+                $inkList = ' /InkList [' . implode(' ', $strokeArrays) . ']';
+                $bs = sprintf(' /BS << /Type /Border /W %s /S /S >>', $this->fmt((float) $ann['borderWidth']));
+
+                return sprintf(
+                    '<< /Type /Annot /Subtype /Ink /Rect %s%s%s%s%s >>',
+                    $rect, $inkList, $colorPart, $bs, $contentsPart,
+                );
             case 'polygon':
             case 'polyline':
                 $subtype = $ann['kind'] === 'polygon' ? 'Polygon' : 'PolyLine';

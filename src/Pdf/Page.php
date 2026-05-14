@@ -1090,6 +1090,46 @@ final class Page
     }
 
     /**
+     * Phase 122: Ink annotation — freehand drawing с multiple pen strokes.
+     *
+     * @param  list<list<array{0:float,1:float}>>  $strokes  outer list = strokes (pen-down spans);
+     *                                                       inner list = (x, y) points per stroke
+     */
+    public function addInkAnnotation(
+        array $strokes,
+        ?array $strokeColor = null,
+        float $borderWidth = 1.0,
+        string $contents = '',
+    ): self {
+        if ($strokes === []) {
+            throw new \InvalidArgumentException('Ink annotation needs ≥1 stroke');
+        }
+        // Compute global bbox over all strokes.
+        $xs = [];
+        $ys = [];
+        foreach ($strokes as $stroke) {
+            if ($stroke === []) {
+                throw new \InvalidArgumentException('Ink stroke must have ≥1 point');
+            }
+            foreach ($stroke as [$x, $y]) {
+                $xs[] = $x;
+                $ys[] = $y;
+            }
+        }
+        $this->markupAnnotations[] = [
+            'kind' => 'ink',
+            'x1' => min($xs), 'y1' => min($ys),
+            'x2' => max($xs), 'y2' => max($ys),
+            'contents' => $contents,
+            'color' => $strokeColor,
+            'inkStrokes' => $strokes,
+            'borderWidth' => $borderWidth,
+        ];
+
+        return $this;
+    }
+
+    /**
      * Phase 121: Polygon annotation — closed shape with vertex list.
      *
      * @param  list<array{0:float,1:float}>  $vertices
