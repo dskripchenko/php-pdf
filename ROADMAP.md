@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 125 фаз закрыты (1141 + 194 printable = 1335 тестов).
+**Текущий статус:** v1.1-dev — 126 фаз закрыты (1149 + 194 printable = 1343 теста).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-127 closed (103 фазы):
+**v1.1 progress:** 25-128 closed (104 фазы):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -93,7 +93,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 126 Aztec Full mode (5-32 layers, up to 151×151, alignment grid,
    7-ring bullseye, GF(1024)/(4096), ZXing-verified L9/L13/L26),
  - 127 DataMatrix full ECC 200 sizes (29 sizes incl. multi-region 32×32+,
-   rectangular 8×18..16×48, interleaved RS blocks, ZXing-verified).
+   rectangular 8×18..16×48, interleaved RS blocks, ZXing-verified),
+ - 128 vertical text (CJK character stacking, showTextVertical +
+   showEmbeddedTextVertical APIs).
 
 ---
 
@@ -256,7 +258,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~Subscript/superscript visual sizing~~ ✅ **Phase 26 closed** (b3426a5).
 - ~~Font fallback chain~~ ✅ **Phase 76 closed** (0834e38).
 - Variable fonts (OpenType variations).
-- Vertical text (Asian scripts).
+- ~~Vertical text (Asian scripts)~~ ✅ **Phase 128 closed** (6a5e605).
+  Char stacking API (font-agnostic). Spec-compliant Type 0 CIDFont +
+  UniJIS-UTF16-V CMap + /WMode 1 + vmtx — deferred.
 
 ### PDF features
 
