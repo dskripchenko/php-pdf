@@ -114,6 +114,7 @@ final class WriterTest extends TestCase
 
         $pdf = $w->toBytes();
         // Trailer Size = N+1 (одну строку под 0-head + N объектов).
-        self::assertMatchesRegularExpression('/trailer\n<< \/Size 3 \/Root 1 0 R >>/', $pdf);
+        // Phase 212: /ID always emitted, so accept трейлер с /ID после /Root.
+        self::assertMatchesRegularExpression('@trailer\n<< /Size 3 /Root 1 0 R /ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\] >>@', $pdf);
     }
 }

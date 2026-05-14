@@ -63,6 +63,9 @@ final class Writer
 
     private ?int $signatureDictId = null;
 
+    /** Phase 212: cached document file identifier (16-byte hex string). */
+    private ?string $cachedFileIdHex = null;
+
     /**
      * @param  string  $version  PDF version header (e.g. '1.4', '1.7', '2.0').
      * @param  bool  $useXrefStream  Phase 208: emit cross-reference table as
@@ -76,6 +79,32 @@ final class Writer
         private readonly string $version = '1.7',
         private readonly bool $useXrefStream = false,
     ) {}
+
+    /**
+     * Phase 212: compute deterministic document /ID hex string.
+     *
+     * Uses encryption fileId если encryption configured. Else MD5-derives
+     * 16 bytes от concatenated object bodies — это даёт stable per-document
+     * fingerprint (same content → same /ID across toBytes/toStream calls
+     * на same Writer state).
+     */
+    private function fileIdHex(): string
+    {
+        if ($this->cachedFileIdHex !== null) {
+            return $this->cachedFileIdHex;
+        }
+        if ($this->encryption !== null) {
+            return $this->cachedFileIdHex = bin2hex($this->encryption->fileId);
+        }
+        // Deterministic hash from content для stable /ID.
+        $material = '';
+        foreach ($this->objects as $id => $body) {
+            $material .= $id.':'.($body ?? '').'|';
+        }
+        $material .= 'root:'.($this->rootId ?? 0).':info:'.($this->infoId ?? 0);
+
+        return $this->cachedFileIdHex = md5($material);
+    }
 
     /**
      * Phase 41: Enable encryption — encrypt streams через RC4-128 V2 R3.
@@ -246,12 +275,12 @@ final class Writer
         $written += self::writeAll($stream, 'trailer' . self::LINE_ENDING);
         $infoPart = $this->infoId !== null ? ' /Info ' . $this->infoId . ' 0 R' : '';
         $encryptPart = '';
-        $idPart = '';
         if ($this->encryption !== null && $this->encryptId !== null) {
             $encryptPart = ' /Encrypt ' . $this->encryptId . ' 0 R';
-            $idHex = bin2hex($this->encryption->fileId);
-            $idPart = ' /ID [<' . $idHex . '> <' . $idHex . '>]';
         }
+        // Phase 212: always emit /ID (encryption uses its own fileId,
+        // others get auto-generated random fingerprint).
+        $idPart = ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
         $written += self::writeAll($stream, '<< /Size ' . $count . ' /Root ' . $this->rootId . ' 0 R' . $infoPart . $encryptPart . $idPart . ' >>' . self::LINE_ENDING);
         $written += self::writeAll($stream, 'startxref' . self::LINE_ENDING);
         $written += self::writeAll($stream, $xrefOffset . self::LINE_ENDING);
@@ -304,9 +333,9 @@ final class Writer
         }
         if ($this->encryption !== null && $this->encryptId !== null) {
             $dict .= ' /Encrypt '.$this->encryptId.' 0 R';
-            $idHex = bin2hex($this->encryption->fileId);
-            $dict .= ' /ID [<'.$idHex.'> <'.$idHex.'>]';
         }
+        // Phase 212: always emit /ID (PDF 1.5 XRef stream).
+        $dict .= ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
         $dict .= ' /W [1 4 2]';
         $dict .= ' /Filter /FlateDecode';
         $dict .= ' /Length '.$streamLen;
@@ -409,9 +438,13 @@ final class Writer
         if ($this->encryption !== null && $this->encryptId !== null) {
             $trailer .= ' /Encrypt ' . $this->encryptId . ' 0 R';
         }
+        // Phase 212: always emit /ID. Prefer pre-set fileId (signing path),
+        // else encryption fileId, else auto-generated.
         if ($this->fileId !== null) {
             $fid = strtoupper(bin2hex($this->fileId));
             $trailer .= ' /ID [<' . $fid . '> <' . $fid . '>]';
+        } else {
+            $trailer .= ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
         }
         $trailer .= ' >>';
         $written += self::writeAll($stream, 'trailer' . self::LINE_ENDING);

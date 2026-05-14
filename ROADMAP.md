@@ -764,6 +764,12 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
   Expose PDF version targeting на top-level API (default null = Engine's
   1.7; subsystems auto-bump for AES/XRef stream/PDF 2.0). Useful для
   '1.4' legacy compat или '2.0' modern features.
+- ~~/ID trailer entry always emitted~~ ✅ **Phase 212 closed**. PDF spec
+  compliance — /ID array (original + update identifier) теперь всегда
+  присутствует в trailer и XRef stream. Encrypted/signed paths use
+  existing fileId; non-encrypted paths derive deterministic MD5 hash
+  от concatenated object bodies (stable per-content, different docs
+  → different /ID).
 
 ### Pragmatic publication strategy
 
