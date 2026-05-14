@@ -31,15 +31,40 @@ namespace Dskripchenko\PhpPdf\Pdf;
  */
 final readonly class PdfAConfig
 {
+    public const PART_1 = 1;
+
+    public const PART_2 = 2;
+
+    public const PART_3 = 3;
+
+    public const CONFORMANCE_A = 'A';   // accessible (tagged)
+
+    public const CONFORMANCE_B = 'B';   // basic
+
+    public const CONFORMANCE_U = 'U';   // unicode (PDF/A-2 и 3)
+
     public function __construct(
         public string $iccProfilePath,
         public string $iccProfileName = 'sRGB IEC61966-2.1',
         public string $lang = 'en',
         public string $title = '',
         public string $author = '',
+        // Phase 103: PDF/A part и conformance level.
+        public int $part = self::PART_1,
+        public string $conformance = self::CONFORMANCE_B,
     ) {
         if (! is_readable($iccProfilePath)) {
             throw new \InvalidArgumentException("ICC profile not readable: $iccProfilePath");
+        }
+        if (! in_array($part, [self::PART_1, self::PART_2, self::PART_3], true)) {
+            throw new \InvalidArgumentException('PDF/A part must be 1, 2, или 3');
+        }
+        $validConformance = match ($part) {
+            self::PART_1 => [self::CONFORMANCE_A, self::CONFORMANCE_B],
+            self::PART_2, self::PART_3 => [self::CONFORMANCE_A, self::CONFORMANCE_B, self::CONFORMANCE_U],
+        };
+        if (! in_array($conformance, $validConformance, true)) {
+            throw new \InvalidArgumentException("PDF/A-$part doesn't support conformance $conformance");
         }
     }
 
@@ -74,8 +99,8 @@ final readonly class PdfAConfig
       <pdf:Producer>$producer</pdf:Producer>
       <xmp:CreateDate>$created</xmp:CreateDate>
       <xmp:ModifyDate>$created</xmp:ModifyDate>
-      <pdfaid:part>1</pdfaid:part>
-      <pdfaid:conformance>B</pdfaid:conformance>
+      <pdfaid:part>{$this->part}</pdfaid:part>
+      <pdfaid:conformance>{$this->conformance}</pdfaid:conformance>
     </rdf:Description>
   </rdf:RDF>
 </x:xmpmeta>
