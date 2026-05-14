@@ -37,6 +37,21 @@ final class Pdf417Encoder
     /** Pad codeword (Text mode latch — used here for padding). */
     private const PADDING_CODEWORD = 900;
 
+    // Phase 181-182: compaction mode constants.
+    public const MODE_AUTO = 'auto';
+
+    public const MODE_BYTE = 'byte';
+
+    public const MODE_TEXT = 'text';
+
+    public const MODE_NUMERIC = 'numeric';
+
+    /** Text compaction mode latch (codeword 900, = padding codeword). */
+    private const MODE_LATCH_TEXT = 900;
+
+    /** Numeric compaction mode latch. */
+    private const MODE_LATCH_NUMERIC = 902;
+
     public readonly int $rows;
 
     public readonly int $cols;
@@ -58,13 +73,20 @@ final class Pdf417Encoder
         public readonly string $data,
         ?int $eccLevel = null,
         float $aspectRatio = 2.0,
+        string $mode = self::MODE_BYTE,
     ) {
         if ($data === '') {
             throw new \InvalidArgumentException('PDF417 input must be non-empty');
         }
 
-        // 1. Byte-mode compaction.
-        $codewords = self::byteCompaction($data);
+        // 1. Mode-based compaction.
+        $codewords = match ($mode) {
+            self::MODE_BYTE => self::byteCompaction($data),
+            self::MODE_TEXT => self::textCompaction($data),
+            self::MODE_NUMERIC => self::numericCompaction($data),
+            self::MODE_AUTO => self::autoCompaction($data),
+            default => throw new \InvalidArgumentException("Unknown PDF417 mode: $mode"),
+        };
         $numDataCw = count($codewords);
 
         // 2. Select ECC level (auto): scale с data size per ISO §5.3.6.
@@ -221,6 +243,199 @@ final class Pdf417Encoder
         }
 
         return array_reverse($ecc);
+    }
+
+    /**
+     * Phase 181: Text compaction per ISO/IEC 15438 §5.4.2.
+     *
+     * 2 chars / 1 codeword (each char 5 bits, packed 30*ch1 + ch2).
+     * Sub-modes: Alpha (uppercase), Lower (lowercase), Mixed (digits +
+     * common punct), Punctuation (rare punct).
+     *
+     * Compaction control codes within text stream (values 0-29 each sub-mode):
+     *   Alpha:  A-Z + SP, LL=27, ML=28, PS=29
+     *   Lower:  a-z + SP, AS=27, ML=28, PS=29
+     *   Mixed:  0-9 + &/.-:#  etc, LL=27, AL=28, PL=25
+     *   Punct:  punct chars,        AL=29
+     *
+     * Mode latch CW 900 inserted before chars.
+     *
+     * @return list<int>
+     */
+    public static function textCompaction(string $data): array
+    {
+        $cw = [self::MODE_LATCH_TEXT];
+        $values = []; // 5-bit values
+        $currentSub = 'alpha'; // start в alpha sub-mode
+
+        $emitShift = function (string $shiftTo) use (&$values, $currentSub): string {
+            if ($shiftTo === 'lower') {
+                $values[] = ($currentSub === 'alpha') ? 27 : 27; // LL or AS=27 в Mixed → keep LL latch
+            } elseif ($shiftTo === 'mixed') {
+                $values[] = ($currentSub === 'alpha' || $currentSub === 'lower') ? 28 : 28;
+            } elseif ($shiftTo === 'alpha') {
+                $values[] = ($currentSub === 'punct') ? 29 : 28;
+            }
+
+            return $shiftTo;
+        };
+
+        $n = strlen($data);
+        for ($i = 0; $i < $n; $i++) {
+            $b = ord($data[$i]);
+            // Determine target sub-mode for this char.
+            if ($b >= 65 && $b <= 90) { // A-Z
+                $target = 'alpha';
+                $v = $b - 65;
+            } elseif ($b >= 97 && $b <= 122) { // a-z
+                $target = 'lower';
+                $v = $b - 97;
+            } elseif ($b >= 48 && $b <= 57) { // 0-9
+                $target = 'mixed';
+                $v = $b - 48;
+            } elseif ($b === 32) { // space — universal в all sub-modes
+                $target = $currentSub;
+                $v = 26; // SP value
+            } else {
+                // Punctuation — extremely simplified: encode as Mixed sub-mode value
+                // for & (10), \r (11), \t (12), , (13), : (14), # (15), -(16), . (17),
+                // $ (18), / (19), + (20), % (21), * (22), = (23), ^ (24).
+                // Bytes outside common punct — skip (fallback к byte mode не impl).
+                $mixedPunct = [38 => 10, 13 => 11, 9 => 12, 44 => 13, 58 => 14, 35 => 15,
+                    45 => 16, 46 => 17, 36 => 18, 47 => 19, 43 => 20, 37 => 21, 42 => 22,
+                    61 => 23, 94 => 24];
+                if (isset($mixedPunct[$b])) {
+                    $target = 'mixed';
+                    $v = $mixedPunct[$b];
+                } else {
+                    throw new \InvalidArgumentException(sprintf(
+                        'PDF417 Text mode не поддерживает byte 0x%02X', $b
+                    ));
+                }
+            }
+            // Emit shift if sub-mode changes.
+            if ($target !== $currentSub) {
+                if ($currentSub === 'alpha' && $target === 'lower') {
+                    $values[] = 27; // LL
+                } elseif ($currentSub === 'alpha' && $target === 'mixed') {
+                    $values[] = 28; // ML
+                } elseif ($currentSub === 'lower' && $target === 'alpha') {
+                    $values[] = 28; // ML, then AL
+                    $values[] = 28; // AL (28 в Mixed = к Alpha)
+                } elseif ($currentSub === 'lower' && $target === 'mixed') {
+                    $values[] = 28; // ML
+                } elseif ($currentSub === 'mixed' && $target === 'alpha') {
+                    $values[] = 28; // AL
+                } elseif ($currentSub === 'mixed' && $target === 'lower') {
+                    $values[] = 27; // LL
+                }
+                $currentSub = $target;
+            }
+            $values[] = $v;
+        }
+        // Pad к even count с 29 (Pad in Alpha) или равноценно.
+        if (count($values) % 2 !== 0) {
+            $values[] = 29;
+        }
+        // Pack pairs: cw = 30*v1 + v2.
+        for ($i = 0; $i < count($values); $i += 2) {
+            $cw[] = 30 * $values[$i] + $values[$i + 1];
+        }
+
+        return $cw;
+    }
+
+    /**
+     * Phase 182: Numeric compaction per ISO/IEC 15438 §5.4.3.
+     *
+     * Groups of ≤44 digits: prepend "1" → base 900 conversion → output codewords.
+     * 44 digits → 15 codewords (avg ~2.93 digits/CW vs byte 1.2 digits/CW).
+     *
+     * Mode latch CW 902 inserted before digits.
+     *
+     * @return list<int>
+     */
+    public static function numericCompaction(string $data): array
+    {
+        if (! ctype_digit($data)) {
+            throw new \InvalidArgumentException('PDF417 Numeric mode requires digit-only input');
+        }
+        $cw = [self::MODE_LATCH_NUMERIC];
+        $n = strlen($data);
+        for ($offset = 0; $offset < $n; $offset += 44) {
+            $chunk = substr($data, $offset, 44);
+            // Prepend "1" к chunk, convert big number к base 900.
+            $bigNum = '1'.$chunk;
+            $base900 = self::convertBaseBigInt($bigNum, 10, 900);
+            foreach ($base900 as $v) {
+                $cw[] = $v;
+            }
+        }
+
+        return $cw;
+    }
+
+    /**
+     * Convert big-int string from base $fromBase к base $toBase.
+     * Returns list<int> в MSB-first order.
+     *
+     * @return list<int>
+     */
+    private static function convertBaseBigInt(string $num, int $fromBase, int $toBase): array
+    {
+        // Convert string of digits (base $fromBase) к array of ints в base $toBase.
+        // Simple long division algorithm.
+        $digits = array_map('intval', str_split($num));
+        $result = [];
+        while (count($digits) > 0) {
+            $remainder = 0;
+            $newDigits = [];
+            foreach ($digits as $d) {
+                $val = $remainder * $fromBase + $d;
+                $newDigits[] = intdiv($val, $toBase);
+                $remainder = $val % $toBase;
+            }
+            // Strip leading zeros в newDigits.
+            while (count($newDigits) > 0 && $newDigits[0] === 0) {
+                array_shift($newDigits);
+            }
+            $result[] = $remainder;
+            $digits = $newDigits;
+        }
+
+        return array_reverse($result);
+    }
+
+    /**
+     * Phase: auto-pick best compaction mode per input content.
+     *
+     * @return list<int>
+     */
+    public static function autoCompaction(string $data): array
+    {
+        // Pure digits → Numeric (most compact).
+        if (ctype_digit($data) && strlen($data) >= 13) {
+            return self::numericCompaction($data);
+        }
+        // Pure ASCII letters/digits/common punct → Text.
+        $textEligible = true;
+        for ($i = 0; $i < strlen($data); $i++) {
+            $b = ord($data[$i]);
+            // Quick check: A-Z, a-z, 0-9, SP, common punct.
+            if (! (($b >= 32 && $b <= 122 && ! ($b >= 91 && $b <= 96)))) {
+                $textEligible = false;
+                break;
+            }
+        }
+        if ($textEligible && strlen($data) >= 6) {
+            try {
+                return self::textCompaction($data);
+            } catch (\InvalidArgumentException) {
+                // Fall through к byte.
+            }
+        }
+
+        return self::byteCompaction($data);
     }
 
     /**
