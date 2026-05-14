@@ -655,15 +655,27 @@ Type0 CID font encoding с multi-byte hex glyph IDs имеет inherent compactn
 ### Barcodes — encoding modes & large versions (1 day to 1 week each)
 
 - **QR V11-V40 large versions** — ~120 ECC_PARAMS entries + extended
-  ALIGN_POSITIONS + BCH(18,6) version-info encoding.
-- **QR ECI / Structured Append** — multi-symbol concatenation.
+  ALIGN_POSITIONS.
+- ~~QR version-info BCH(18,6) pattern (V7+)~~ ✅ **Phase 195 closed**.
+  18-bit BCH-encoded version info placed в top-right + bottom-left
+  (mirror) regions; generator polynomial 0x1F25.
+- ~~QR Structured Append / ECI~~ ✅ **Phase 183-184 closed**.
 - **DataMatrix 144×144** — special interleaved layout.
-- **DataMatrix encoding modes** — C40 / Text / X12 / EDIFACT / Base 256
-  (5 separate modes, each с encoding table).
-- **PDF417 Text/Numeric compaction** (codewords 900/902).
-- **PDF417 Macro PDF417** — multi-symbol concatenation.
-- **Aztec Rune mode** — single-character symbol variant.
-- **Aztec Structured Append / ECI / FLG(n)**.
+- ~~DataMatrix encoding modes~~ ✅ **Phase 176-180 closed** (Base 256, C40,
+  Text, X12, EDIFACT + auto-mode heuristic).
+- ~~DataMatrix Macro 05/06~~ ✅ **Phase 196 closed** (CW 236/237 prepend).
+- ~~DataMatrix GS1 / ECI~~ ✅ **Phase 197 closed** (FNC1 CW 232 + ECI CW 241
+  с 1/2/3-byte designator encoding).
+- ~~PDF417 Text/Numeric compaction~~ ✅ **Phase 181-182 closed**.
+- ~~PDF417 Macro PDF417~~ ✅ **Phase 185 closed**.
+- ~~PDF417 GS1 / ECI~~ ✅ **Phase 198 closed** (FNC1 CW 920 + ECI CW 927).
+- ~~EAN-13 / UPC-A add-on supplements (EAN-2, EAN-5)~~ ✅ **Phase 199 closed**.
+  `addOn: ?string` параметр в Ean13Encoder; 20-module 2-digit (parity LL/LG/
+  GL/GG по value%4) и 47-module 5-digit (parity по check digit = (3·sum_odd
+  + 9·sum_even)%10) supplements с 9-module gap после END_GUARD.
+- **Aztec Rune mode** — single-character symbol variant. 11×11 fixed format.
+- **Aztec Structured Append / ECI / FLG(n)** — needs Aztec encoder
+  internals refactor.
 
 ### Layout / typography (1-3 days each)
 

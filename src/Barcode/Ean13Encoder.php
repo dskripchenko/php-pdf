@@ -59,6 +59,26 @@ final class Ean13Encoder
 
     private const END_GUARD = '101';
 
+    /** Add-on start guard (4 modules). */
+    private const ADDON_START_GUARD = '1011';
+
+    /** Add-on inter-character separator (2 modules). */
+    private const ADDON_SEPARATOR = '01';
+
+    /** Inter-barcode separator gap between main barcode and add-on (modules). */
+    private const ADDON_GAP_MODULES = 9;
+
+    /** 2-digit add-on parity table — indexed by (value mod 4). */
+    private const ADDON2_PARITY = [
+        'LL', 'LG', 'GL', 'GG',
+    ];
+
+    /** 5-digit add-on parity table — indexed by check digit. */
+    private const ADDON5_PARITY = [
+        'GGLLL', 'GLGLL', 'GLLGL', 'GLLLG', 'LGGLL',
+        'LLGGL', 'LLLGG', 'LGLGL', 'LGLLG', 'LLGLG',
+    ];
+
     /** @var list<bool> */
     private array $modules = [];
 
@@ -68,11 +88,19 @@ final class Ean13Encoder
     public readonly string $canonical;
 
     /**
+     * Add-on supplement digits (2 or 5 digits), null if no add-on.
+     */
+    public readonly ?string $addOn;
+
+    /**
      * @param  string  $digits  12 or 13 digits для EAN-13, или 11/12 для UPC-A.
      * @param  bool  $upcA  если true, input = 11/12 digits UPC-A → конвертируется
      *                       в EAN-13 prepending '0'.
+     * @param  string|null  $addOn  EAN-2 (2 digits) or EAN-5 (5 digits) supplement
+     *                       (Phase 199). Common usage: ISBN price (EAN-5) or
+     *                       periodical issue (EAN-2).
      */
-    public function __construct(string $digits, bool $upcA = false)
+    public function __construct(string $digits, bool $upcA = false, ?string $addOn = null)
     {
         if (! preg_match('@^\d+$@', $digits)) {
             throw new \InvalidArgumentException('EAN-13/UPC-A input must be digits only');
@@ -99,8 +127,20 @@ final class Ean13Encoder
             ));
         }
 
+        if ($addOn !== null) {
+            if (! preg_match('@^\d+$@', $addOn)) {
+                throw new \InvalidArgumentException('EAN add-on must be digits only');
+            }
+            if (strlen($addOn) !== 2 && strlen($addOn) !== 5) {
+                throw new \InvalidArgumentException(
+                    'EAN add-on must be exactly 2 (EAN-2) or 5 (EAN-5) digits, got '.strlen($addOn),
+                );
+            }
+        }
+
         $this->canonical = $digits;
-        $this->encode($digits);
+        $this->addOn = $addOn;
+        $this->encode($digits, $addOn);
     }
 
     /**
@@ -144,7 +184,7 @@ final class Ean13Encoder
         return (10 - $sum % 10) % 10;
     }
 
-    private function encode(string $digits): void
+    private function encode(string $digits, ?string $addOn): void
     {
         $first = (int) $digits[0];
         $leftPattern = self::FIRST_DIGIT_PATTERN[$first];
@@ -161,7 +201,80 @@ final class Ean13Encoder
         }
         $bits .= self::END_GUARD;
 
+        if ($addOn !== null) {
+            $bits .= str_repeat('0', self::ADDON_GAP_MODULES);
+            $bits .= strlen($addOn) === 2
+                ? self::encodeAddOn2($addOn)
+                : self::encodeAddOn5($addOn);
+        }
+
         // Convert bit string to bool array.
         $this->modules = array_map(fn (string $c): bool => $c === '1', str_split($bits));
+    }
+
+    /**
+     * Encode 2-digit add-on supplement.
+     *
+     * Structure: start-guard (1011) + digit1 + separator (01) + digit2.
+     * Parity selection: (value % 4) → LL/LG/GL/GG.
+     * Total width: 4 + 7 + 2 + 7 = 20 modules.
+     */
+    private static function encodeAddOn2(string $addOn): string
+    {
+        $value = (int) $addOn;
+        $parity = self::ADDON2_PARITY[$value % 4];
+
+        $bits = self::ADDON_START_GUARD;
+        for ($i = 0; $i < 2; $i++) {
+            $d = (int) $addOn[$i];
+            $bits .= $parity[$i] === 'L' ? self::L[$d] : self::G[$d];
+            if ($i < 1) {
+                $bits .= self::ADDON_SEPARATOR;
+            }
+        }
+
+        return $bits;
+    }
+
+    /**
+     * Encode 5-digit add-on supplement.
+     *
+     * Check digit: (sum(digits at indexes 0,2,4) * 3 + sum(digits at 1,3) * 9) % 10.
+     * Parity table indexed by check digit determines L/G per character.
+     * Structure: start-guard (1011) + digit1 + sep + digit2 + sep + digit3 + sep + digit4 + sep + digit5.
+     * Total width: 4 + 5*7 + 4*2 = 47 modules.
+     */
+    private static function encodeAddOn5(string $addOn): string
+    {
+        $check = self::computeAddOn5CheckDigit($addOn);
+        $parity = self::ADDON5_PARITY[$check];
+
+        $bits = self::ADDON_START_GUARD;
+        for ($i = 0; $i < 5; $i++) {
+            $d = (int) $addOn[$i];
+            $bits .= $parity[$i] === 'L' ? self::L[$d] : self::G[$d];
+            if ($i < 4) {
+                $bits .= self::ADDON_SEPARATOR;
+            }
+        }
+
+        return $bits;
+    }
+
+    /**
+     * Compute 5-digit add-on parity check digit.
+     *
+     * Formula: (3 × sum_odd_positions + 9 × sum_even_positions) % 10,
+     * где odd = positions 0,2,4 и even = positions 1,3.
+     */
+    public static function computeAddOn5CheckDigit(string $addOn): int
+    {
+        if (strlen($addOn) !== 5 || ! preg_match('@^\d+$@', $addOn)) {
+            throw new \InvalidArgumentException('computeAddOn5CheckDigit expects 5 digits');
+        }
+        $sumOdd = (int) $addOn[0] + (int) $addOn[2] + (int) $addOn[4];
+        $sumEven = (int) $addOn[1] + (int) $addOn[3];
+
+        return ($sumOdd * 3 + $sumEven * 9) % 10;
     }
 }
