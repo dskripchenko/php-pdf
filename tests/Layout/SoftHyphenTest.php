@@ -56,9 +56,11 @@ final class SoftHyphenTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Хотя бы один SHY split должен сработать — присутствует prefix с
-        // trailing "-" в одной из ожидаемых форм.
-        $hasHyphen = preg_match('@\([A-Za-z]+-\) Tj@', $bytes);
+        // Хотя бы один SHY split должен сработать — присутствует word с
+        // trailing "-" в одной из ожидаемых форм. Phase 158: batched text
+        // может включать leading words на same line, поэтому regex допускает
+        // любые prefix chars перед терминальным `word-`.
+        $hasHyphen = preg_match('@[A-Za-z]+-\) Tj@', $bytes);
         self::assertSame(1, $hasHyphen, 'Soft-hyphen split must emit prefix with trailing "-"');
     }
 

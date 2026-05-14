@@ -106,17 +106,27 @@ final class TextDecorationsTest extends TestCase
     }
 
     #[Test]
-    public function underline_drawn_per_word_continues_through_multiple_words(): void
+    public function underline_drawn_under_text_when_underlined(): void
     {
-        // Multi-word underlined run — each word gets its own underline rect.
+        // Phase 158: multi-word underlined run теперь batched в single
+        // showText + single continuous underline stroke под всем batch.
+        // Раньше: 4 words = 4 strokes (per-word). Теперь: 4 words = 1 stroke
+        // (per-batch). Тестируем что underline присутствует (≥1 stroke).
         $doc = new Document(new Section([
             new Paragraph([new Run('one two three four',
                 (new RunStyle)->withUnderline()
             )]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
-        // 4 words → 4 underline strokes.
         $sCount = substr_count($bytes, "S\n");
-        self::assertGreaterThanOrEqual(4, $sCount);
+        self::assertGreaterThanOrEqual(1, $sCount, 'underline должен быть нарисован');
+
+        // Compare с baseline: без underline — strokes count меньше.
+        $docPlain = new Document(new Section([
+            new Paragraph([new Run('one two three four')]),
+        ]));
+        $bytesPlain = $docPlain->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+        self::assertGreaterThan(substr_count($bytesPlain, "S\n"), $sCount,
+            'underlined paragraph должен иметь больше strokes чем plain');
     }
 }

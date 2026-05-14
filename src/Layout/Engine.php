@@ -3125,9 +3125,15 @@ final class Engine
 
         $baselineY = $ctx->cursorY - $maxSizePt * 0.8;
 
-        // Render items + track link segments.
-        // Link segment: consecutive items with same 'link' meta — emit single
-        // /Link annotation covering bbox от startX до endX.
+        // Phase 158: TJ-array grouping — accumulate consecutive items с same
+        // effective style/baseline/size into single showText call. Каждый
+        // showText emits BT/Tf/Tm/Tj/ET — батчинг убирает 4×N overhead bytes.
+        // Не батчим при: justified (extraPerGap > 0), images, super/sub,
+        // style change, link boundary change. Decorations (underline/strike)
+        // emit'ятся inline per-batch.
+        //
+        // Link tracking + decorations работают per-batch: при flush batch,
+        // если все items underlined — draw line под batch width.
         $x = $startX;
         $linkStartX = null;
         $linkLastX = null;
@@ -3151,12 +3157,61 @@ final class Engine
             $linkRef = null;
         };
 
+        // Text batch accumulator.
+        $batchText = '';
+        $batchStartX = 0.0;
+        $batchBaselineY = 0.0;
+        $batchSizePt = 0.0;
+        $batchStyle = null;
+        $batchEndX = 0.0;  // running end-X для decorations + link tracking
+        $flushBatch = function () use (&$batchText, &$batchStartX, &$batchBaselineY, &$batchSizePt, &$batchStyle, &$batchEndX, $ctx): void {
+            if ($batchText === '' || $batchStyle === null) {
+                $batchText = '';
+                $batchStyle = null;
+
+                return;
+            }
+            $this->showText($ctx->currentPage, $batchText, $batchStartX, $batchBaselineY, $batchSizePt, $batchStyle);
+            if ($batchStyle->underline || $batchStyle->strikethrough) {
+                $this->drawTextDecorations(
+                    $ctx->currentPage, $batchStartX, $batchBaselineY,
+                    $batchEndX - $batchStartX, $batchSizePt, $batchStyle,
+                );
+            }
+            $batchText = '';
+            $batchStyle = null;
+        };
+
+        // Compatibility: текущий item совместим с currently building batch?
+        $compatible = function (RunStyle $itemStyle, float $itemSizePt, float $itemBaselineY) use (&$batchStyle, &$batchSizePt, &$batchBaselineY): bool {
+            if ($batchStyle === null) {
+                return false;
+            }
+            if (abs($itemSizePt - $batchSizePt) > 0.001) {
+                return false;
+            }
+            if (abs($itemBaselineY - $batchBaselineY) > 0.001) {
+                return false;
+            }
+            // Same color, super/sub, underline, strikethrough, letterSpacing, fontFamily, bold/italic.
+            return $itemStyle->color === $batchStyle->color
+                && $itemStyle->superscript === $batchStyle->superscript
+                && $itemStyle->subscript === $batchStyle->subscript
+                && $itemStyle->underline === $batchStyle->underline
+                && $itemStyle->strikethrough === $batchStyle->strikethrough
+                && ($itemStyle->letterSpacingPt ?? 0) === ($batchStyle->letterSpacingPt ?? 0)
+                && $itemStyle->fontFamily === $batchStyle->fontFamily
+                && $itemStyle->bold === $batchStyle->bold
+                && $itemStyle->italic === $batchStyle->italic;
+        };
+
         for ($i = 0; $i < $countWords; $i++) {
             $item = $wordItems[$i];
             $style = $item['style'] ?? $defaultStyle;
 
-            // Image atom: draw at baseline (image bottom = baseline).
+            // Image atom: flush text batch first, then draw image.
             if (($item['type'] ?? null) === 'image') {
+                $flushBatch();
                 $imgW = $item['width'];
                 $imgH = $item['height'];
                 $wordLink = $item['link'] ?? null;
@@ -3185,7 +3240,6 @@ final class Engine
 
             $word = $item['text'] ?? '';
             $baseSizePt = $style->sizePt ?? $this->defaultFontSizePt;
-            // Phase 26: sup/sub render at 70% size with vertical baseline shift.
             $sizePt = $baseSizePt;
             $wordBaselineY = $baselineY;
             if ($style->superscript) {
@@ -3199,6 +3253,7 @@ final class Engine
 
             $wordLink = $item['link'] ?? null;
             if ($wordLink !== $linkRef) {
+                $flushBatch(); // link boundary — flush text segment
                 $linkFlush();
                 if ($wordLink !== null) {
                     $linkRef = $wordLink;
@@ -3206,10 +3261,19 @@ final class Engine
                 }
             }
 
-            $this->showText($ctx->currentPage, $word, $x, $wordBaselineY, $sizePt, $style);
-            // Underline / strikethrough — draw line below/through glyphs.
-            if ($style->underline || $style->strikethrough) {
-                $this->drawTextDecorations($ctx->currentPage, $x, $wordBaselineY, $wordWidth, $sizePt, $style);
+            // Phase 158: try to batch this word с previous batch.
+            $canBatch = $extraPerGap === 0.0 && $compatible($style, $sizePt, $wordBaselineY);
+            if ($canBatch) {
+                $batchText .= $word;
+                $batchEndX = $x + $wordWidth;
+            } else {
+                $flushBatch();
+                $batchText = $word;
+                $batchStartX = $x;
+                $batchBaselineY = $wordBaselineY;
+                $batchSizePt = $sizePt;
+                $batchStyle = $style;
+                $batchEndX = $x + $wordWidth;
             }
             $x += $wordWidth;
             if ($linkRef !== null) {
@@ -3218,13 +3282,47 @@ final class Engine
 
             if ($i + 1 < $countWords) {
                 $spaceWidth = $this->measureWidth(' ', $style) + $extraPerGap;
+                $nextItem = $wordItems[$i + 1];
+                $nextIsImage = ($nextItem['type'] ?? null) === 'image';
+                $nextStyle = $nextItem['style'] ?? $defaultStyle;
+                $nextSize = $nextStyle->sizePt ?? $this->defaultFontSizePt;
+                $nextBaselineY = $baselineY;
+                if ($nextStyle->superscript) {
+                    $nextSize *= 0.7;
+                    $nextBaselineY += $baseSizePt * 0.33;
+                } elseif ($nextStyle->subscript) {
+                    $nextSize *= 0.7;
+                    $nextBaselineY -= $baseSizePt * 0.15;
+                }
+                // Phase 158: добавляем space к current batch если next item тоже
+                // text и compatible — тогда space станет частью одной showText.
+                $nextLink = $nextItem['link'] ?? null;
+                $spaceCanBatch = ! $nextIsImage
+                    && $extraPerGap === 0.0
+                    && $nextLink === $linkRef
+                    && $compatible($nextStyle, $nextSize, $nextBaselineY);
+                if ($spaceCanBatch && $batchText !== '') {
+                    // Append space к batch — next iteration appends word.
+                    $batchText .= ' ';
+                    $batchEndX = $x + $spaceWidth;
+                } else {
+                    // Space не batchable — flush + emit отдельно.
+                    $flushBatch();
+                    $x += $spaceWidth;
+                    $this->showText($ctx->currentPage, ' ', $x - $spaceWidth, $baselineY, $sizePt, $style);
+                    if ($linkRef !== null && $nextLink === $linkRef) {
+                        $linkLastX = $x;
+                    }
+
+                    continue;
+                }
                 $x += $spaceWidth;
-                $this->showText($ctx->currentPage, ' ', $x - $spaceWidth, $baselineY, $sizePt, $style);
-                if ($linkRef !== null && (($wordItems[$i + 1]['link'] ?? null) === $linkRef)) {
+                if ($linkRef !== null && $nextLink === $linkRef) {
                     $linkLastX = $x;
                 }
             }
         }
+        $flushBatch();
         $linkFlush();
 
         $ctx->cursorY -= $lineHeight;

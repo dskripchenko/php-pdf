@@ -27,7 +27,8 @@ final class LineHeightAbsoluteTest extends TestCase
         $doc = new Document(new Section([$p]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertNotEmpty($bytes);
-        self::assertStringContainsString('(Line) Tj', $bytes);
+        // Phase 158: Run "Line 1" batched into single showText.
+        self::assertStringContainsString('(Line 1) Tj', $bytes);
     }
 
     #[Test]
