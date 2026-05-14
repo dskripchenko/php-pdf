@@ -4,7 +4,7 @@ Pure-PHP, MIT-licensed PDF renderer. Цель — drop-in замена `mpdf/mpd
 (GPL-2.0) в production-стеке printable-приложения с feature parity на
 типичных бизнес-документах (договоры, акты, счета, отчёты).
 
-**Текущий статус:** v1.1-dev — 101 фаза закрыта (950 + 194 printable = 1144 теста).
+**Текущий статус:** v1.1-dev — 103 фазы закрыты (965 + 194 printable = 1159 тестов).
 v1.0 production-ready closed (Phase 1-21 + 24 by-design + 22/23 deferred).
 v1.1 в активной разработке.
 
@@ -12,7 +12,7 @@ v1.1 в активной разработке.
 блокеры (13-17) закрыты, Important (18-21) закрыты.
 mpdf остаётся production-default; php-pdf opt-in через `?engine=php-pdf`.
 
-**v1.1 progress:** 25-103 closed (79 фаз):
+**v1.1 progress:** 25-105 closed (81 фаза):
  - 25 paragraph padding+bg, 26 sup/sub sizing, 27 inline letter-spacing,
  - 28 border priority, 29 image content dedup, 30 image watermark,
  - 31 watermark opacity (ExtGState), 32 Code 128 barcode,
@@ -65,7 +65,9 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
  - 100 bookmark colors + bold/italic,
  - 101 QR Kanji encoding mode,
  - 102 drawImage с rotation,
- - 103 PDF/A-2u / PDF/A-3 support.
+ - 103 PDF/A-2u / PDF/A-3 support,
+ - 104 DataMatrix barcode (ECC 200, sizes 10×10..26×26),
+ - 105 QR auto best-mask selection (8 patterns + penalty scoring).
 
 ---
 
@@ -303,9 +305,11 @@ mpdf остаётся production-default; php-pdf opt-in через `?engine=php
 - ~~QR ECC M/Q/H levels (V1-V4 full, V5+ deferred)~~ ✅ **Phase 37 closed** (12802e9).
 - ~~QR Numeric/Alphanumeric encoding modes~~ ✅ **Phase 38 closed** (8e5c680).
 - ~~QR Kanji encoding mode (Shift_JIS)~~ ✅ **Phase 101 closed** (3a26626).
+- ~~QR auto best-mask selection (8 patterns + penalty)~~ ✅ **Phase 105 closed** (c01d77f).
 - ~~Code 128 Set C (numeric compression)~~ ✅ **Phase 57 closed** (b93c6c8).
 - ~~Code 128 Set A (control chars)~~ ✅ **Phase 78 closed** (5c42a76).
-- Barcode formats: DataMatrix, PDF417, Aztec.
+- ~~DataMatrix (ECC 200 square 10×10..26×26)~~ ✅ **Phase 104 closed** (f4d8752).
+- Barcode formats: PDF417, Aztec, DataMatrix rectangular + larger sizes (32×32+).
 - QR extensions: V5+ ECC M/Q/H (mixed-block layout), Kanji mode, V11-40,
   auto best-mask selection.
 - ~~Watermark images~~ ✅ **Phase 30 closed** (197cc0b).
