@@ -73,8 +73,44 @@ final class MathRenderer
      *
      * @return list<list<array<string, mixed>>>
      */
+    /**
+     * Phase 174: convert LaTeX \begin{env}...\end{env} к internal syntax.
+     *
+     * Supported environments:
+     *  - align, align*, aligned, gather, gather*, eqnarray — multi-line:
+     *    content kept as-is (\\ separator уже handled parseLines split)
+     *  - cases — converted к \matrix{ ... } для grid layout
+     *  - matrix, pmatrix, bmatrix, vmatrix — converted к equivalent \matrix command
+     */
+    private static function preprocessEnvironments(string $tex): string
+    {
+        // Match \begin{name}...\end{name} pairs.
+        return preg_replace_callback(
+            '/\\\\begin\{([a-zA-Z*]+)\}(.*?)\\\\end\{\1\}/s',
+            static function (array $m): string {
+                $env = $m[1];
+                $content = trim($m[2]);
+
+                return match ($env) {
+                    'align', 'align*', 'aligned', 'gather', 'gather*', 'eqnarray' => $content,
+                    'cases' => '\\matrix{'.$content.'}',
+                    'matrix', 'pmatrix', 'bmatrix', 'vmatrix' => '\\'.$env.'{'.$content.'}',
+                    default => $content, // unknown environment — pass content through
+                };
+            },
+            $tex,
+        ) ?? $tex;
+    }
+
     public static function parseLines(string $tex): array
     {
+        // Phase 174: pre-process LaTeX environments \begin{name}...\end{name}.
+        // Supported environments:
+        //   align, align*, aligned, gather, gather* — multi-line (\\ separates)
+        //   cases — caseswise function (rendered как rows; brace prepended)
+        //   matrix, pmatrix, bmatrix, vmatrix — passed к matrix command
+        $tex = self::preprocessEnvironments($tex);
+
         // Brace-aware split на `\\\\` (2 backslashes) at depth 0 only —
         // preserves \\\\ inside \matrix{...}.
         $rowStrs = [];

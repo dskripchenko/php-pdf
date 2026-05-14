@@ -341,7 +341,14 @@ final class Engine
 
         // Phase 96: parse как multi-line — split on \\\\.
         $rows = \Dskripchenko\PhpPdf\Math\MathRenderer::parseLines($math->tex);
+        // Phase 173: custom font family if specified.
         $font = $this->defaultFont ?? $this->fallbackStandard;
+        if ($math->fontFamily !== null && $this->resolver !== null) {
+            $resolved = $this->resolver->resolve($math->fontFamily);
+            if ($resolved !== null) {
+                $font = $resolved;
+            }
+        }
         $rowHeight = $math->fontSizePt * 1.6;
         $totalHeight = $rowHeight * count($rows);
         $this->ensureRoomFor($ctx, $totalHeight);

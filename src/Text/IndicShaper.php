@@ -42,8 +42,14 @@ namespace Dskripchenko\PhpPdf\Text;
  *  - GPOS mark-to-base positioning for reph
  *  - Conjunct ligatures (need GSUB ccmp / akhn / blwf features)
  *  - Above/below-base matra positioning (mostly handled by font itself)
- *  - Sinhala two-part matras containing virama (U+0DDA, U+0DDD) — virama
- *    in middle of decomposed sequence interferes с syllable-end detection
+ *
+ * Phase 169 — Sinhala U+0DDA, U+0DDD clarification:
+ *  Их NFD decomposition включает virama (U+0DCA), который в middle of
+ *  matra sequence сломал бы syllable-end detection в reph reorder. Поэтому
+ *  они НЕ добавлены в TWO_PART_MATRAS — рендерятся как single-codepoint
+ *  pre-base matras (already в PRE_BASE_MATRAS). Большинство Sinhala fonts
+ *  поддерживают U+0DDA/U+0DDD напрямую как один glyph; для fonts без support
+ *  caller должен сам decompose до передачи (rare case).
  */
 final class IndicShaper
 {

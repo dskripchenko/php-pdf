@@ -20,7 +20,6 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  *    `\neq`, `\approx`, `\infty`, `\sum`, `\int`.
  *
  * Не реализовано:
- *  - Nested fractions внутри superscripts — v1.3 backlog.
  *  - Custom font / styling — v1.3 backlog.
  *  - LaTeX environments (begin{} / end{}) — v1.3 backlog.
  *
@@ -28,6 +27,8 @@ use Dskripchenko\PhpPdf\Style\Alignment;
  *  - Multi-line equations → Phase 96
  *  - Matrices / arrays (matrix, pmatrix, bmatrix, vmatrix) → Phase 75
  *  - Big operators с limits → Phase 80
+ *  - Nested fractions внутри superscripts → Phase 172 (was already
+ *    working through recursive render of frac node within sup arg)
  *
  * Rendered как block с centered alignment по умолчанию. Font derived
  * from default Engine font; sup/sub use 70% size + baseline shift
@@ -41,6 +42,9 @@ final readonly class MathExpression implements BlockElement
         public Alignment $alignment = Alignment::Center,
         public float $spaceBeforePt = 4.0,
         public float $spaceAfterPt = 4.0,
+        // Phase 173: custom font family. null = use Engine default font.
+        // String = font family name resolved через FontProvider.
+        public ?string $fontFamily = null,
     ) {
         if ($tex === '') {
             throw new \InvalidArgumentException('MathExpression requires non-empty TeX input');
