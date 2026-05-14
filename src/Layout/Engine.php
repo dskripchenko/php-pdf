@@ -316,23 +316,25 @@ final class Engine
     {
         $ctx->cursorY -= $math->spaceBeforePt;
 
-        $tokens = \Dskripchenko\PhpPdf\Math\MathRenderer::parse($math->tex);
+        // Phase 96: parse как multi-line — split on \\\\.
+        $rows = \Dskripchenko\PhpPdf\Math\MathRenderer::parseLines($math->tex);
         $font = $this->defaultFont ?? $this->fallbackStandard;
-        $totalW = \Dskripchenko\PhpPdf\Math\MathRenderer::measureWidth($tokens, $math->fontSizePt, $font);
-        // Reserve vertical space — frac уровень ≈ 1.5× fontSize.
-        $heightPt = $math->fontSizePt * 1.6;
-        $this->ensureRoomFor($ctx, $heightPt);
+        $rowHeight = $math->fontSizePt * 1.6;
+        $totalHeight = $rowHeight * count($rows);
+        $this->ensureRoomFor($ctx, $totalHeight);
 
-        $x = match ($math->alignment) {
-            Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalW) / 2,
-            Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalW,
-            default => $ctx->leftX,
-        };
-        // Baseline ~bottom of intended row.
-        $baseline = $ctx->cursorY - $math->fontSizePt;
-        \Dskripchenko\PhpPdf\Math\MathRenderer::render($tokens, $ctx->currentPage, $x, $baseline, $math->fontSizePt, $font);
+        foreach ($rows as $rowTokens) {
+            $rowW = \Dskripchenko\PhpPdf\Math\MathRenderer::measureWidth($rowTokens, $math->fontSizePt, $font);
+            $x = match ($math->alignment) {
+                Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $rowW) / 2,
+                Alignment::End => $ctx->leftX + $ctx->contentWidth - $rowW,
+                default => $ctx->leftX,
+            };
+            $baseline = $ctx->cursorY - $math->fontSizePt;
+            \Dskripchenko\PhpPdf\Math\MathRenderer::render($rowTokens, $ctx->currentPage, $x, $baseline, $math->fontSizePt, $font);
+            $ctx->cursorY -= $rowHeight;
+        }
 
-        $ctx->cursorY -= $heightPt;
         $ctx->cursorY -= $math->spaceAfterPt;
     }
 

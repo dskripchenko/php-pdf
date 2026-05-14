@@ -68,6 +68,51 @@ final class MathRenderer
     }
 
     /**
+     * Phase 96: Parse multi-line tex (rows separated by `\\\\`) → list of
+     * token rows. Each row independently parsed.
+     *
+     * @return list<list<array<string, mixed>>>
+     */
+    public static function parseLines(string $tex): array
+    {
+        // Brace-aware split на `\\\\` (2 backslashes) at depth 0 only —
+        // preserves \\\\ inside \matrix{...}.
+        $rowStrs = [];
+        $current = '';
+        $depth = 0;
+        $len = strlen($tex);
+        for ($i = 0; $i < $len; $i++) {
+            $c = $tex[$i];
+            if ($c === '{') {
+                $depth++;
+            } elseif ($c === '}') {
+                $depth--;
+            } elseif ($depth === 0 && $c === '\\' && $i + 1 < $len && $tex[$i + 1] === '\\') {
+                $rowStrs[] = $current;
+                $current = '';
+                $i++; // skip second backslash
+
+                continue;
+            }
+            $current .= $c;
+        }
+        if ($current !== '') {
+            $rowStrs[] = $current;
+        }
+
+        $rows = [];
+        foreach ($rowStrs as $rowStr) {
+            $rowStr = trim($rowStr);
+            if ($rowStr === '') {
+                continue;
+            }
+            $rows[] = self::parse($rowStr);
+        }
+
+        return $rows === [] ? [self::parse($tex)] : $rows;
+    }
+
+    /**
      * Phase 80: walk tokens, merge sequences (text=∑/∏/∫, sub, sup?) или
      * (text, sup, sub?) → bigop token.
      *
