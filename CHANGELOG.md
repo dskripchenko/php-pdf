@@ -2,16 +2,28 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-224
+## v1.6.0-dev (unreleased) — Phases 214-231
 
 Major dev cycle: HTML input + PDF output optimization + layout enhancements
-+ barcode coverage + API ergonomics.
++ barcode coverage + API ergonomics + print conformance.
 
-### HTML/CSS input (closes biggest user-facing gap)
+### HTML/CSS input (major user-facing improvements)
 - Phase 219: `HtmlParser` + `Document::fromHtml()` factory. HTML5 subset:
   12 block tags + 10 inline tags + 8 inline CSS properties.
 - Phase 224: Block-level CSS support — text-align, margin/padding shorthand
   (1/2/3/4 values), line-height (mult/percent), background-color.
+- Phase 228: Extended semantic inline tags — `<code>`, `<kbd>`, `<samp>`,
+  `<tt>`, `<var>`, `<mark>`, `<small>`, `<big>`, `<ins>`, `<cite>`,
+  `<dfn>`, `<q>`, `<abbr>`.
+- Phase 229: HTML5 semantic blocks — `<header>`, `<footer>`, `<nav>`,
+  `<aside>`, `<main>`, `<article>`, `<section>`, `<figure>`,
+  `<figcaption>` (transparent flatten when contain block children) +
+  `<dl>`/`<dt>`/`<dd>` definition lists.
+- Phase 230: Legacy tags — `<center>` (centered Paragraph), `<font>`
+  (color/face/size 1-7 mapping).
+- Phase 231: Heading auto-anchor — `<h1 id="...">` becomes named
+  destination для internal hyperlinks, plus Heading::autoAnchor() slug
+  derivation.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
@@ -27,6 +39,8 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
   New `EncryptionParams` VO + Engine auto-tagged for PDF/A-1a.
 - Phase 223: `Document::concat()` static factory для merging multiple
   Documents (batch generation use case).
+- Phase 226: `Page::setTabOrder()` — /Tabs entry ('R'/'C'/'S') для form
+  field tab navigation order.
 
 ### Layout
 - Phase 222: Footnote per-page bottom positioning (opt-in via
@@ -40,8 +54,15 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
 ### Barcodes
 - Phase 221: Aztec Structured Append (ISO 24778 §8.4) — multi-symbol
   concatenated sets (up to 26 symbols), optional alphanumeric fileID.
+- Phase 227: QR convenience factories — `vCard()`, `wifi()`, `url()`,
+  `sms()`, `email()`, `geo()` для common use cases.
 
-**Tests:** 1683 → 1828 (+145 new tests across 11-phase batch).
+### PDF conformance
+- Phase 225: PDF/X-1a/X-3/X-4 print conformance opt-in. New `PdfXConfig`
+  VO + `Pdf\Document::enablePdfX()` + Document constructor `pdfX` param.
+  Emits /S /GTS_PDFX OutputIntent + /Trapped key + pdfx: XMP markers.
+
+**Tests:** 1683 → 1909 (+226 new tests across 18-phase batch).
 
 ## v1.5.0 — 2026-05-14
 
