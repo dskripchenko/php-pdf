@@ -38,7 +38,9 @@ final class DataMatrixEncoder
      * Source: ZXing SymbolInfo.PROD_SYMBOLS.
      */
     private const SYMBOLS = [
-        // [rect, dataCap, eccCap, mW, mH, regions, rsBlockData, rsBlockEcc]
+        // [rect, dataCap, eccCap, mW, mH, regions, rsBlockData, rsBlockEcc, blockCountOverride?]
+        // blockCountOverride defaults к intdiv(dataCap, rsBlockData); explicit
+        // value required when dataCap не divides cleanly (144×144 case).
         [false, 3,    5,   8,  8,   1,  3,    5],   // 10×10
         [false, 5,    7,   10, 10,  1,  5,    7],   // 12×12
         [true,  5,    7,   16, 6,   1,  5,    7],   // 8×18 rect
@@ -68,6 +70,10 @@ final class DataMatrixEncoder
         [false, 816,  336, 24, 24,  16, 136,  56],  // 104×104
         [false, 1050, 408, 18, 18,  36, 175,  68],  // 120×120
         [false, 1304, 496, 20, 20,  36, 163,  62],  // 132×132
+        // Phase 237: 144×144 special — 10 blocks (8×156 + 2×155 distribution
+        // через round-robin interleaving), 620 ECC (10×62), 36 regions of
+        // 22×22 modules. ZXing-verified.
+        [false, 1558, 620, 22, 22, 36, 156, 62, 10],  // 144×144
     ];
 
     /**
@@ -225,7 +231,16 @@ final class DataMatrixEncoder
             ));
         }
 
-        [$rect, $dataCap, $eccCap, $mW, $mH, $regions, $rsData, $rsEcc] = $symbol;
+        $rect = $symbol[0];
+        $dataCap = $symbol[1];
+        $eccCap = $symbol[2];
+        $mW = $symbol[3];
+        $mH = $symbol[4];
+        $regions = $symbol[5];
+        $rsData = $symbol[6];
+        $rsEcc = $symbol[7];
+        // Phase 237: optional explicit block count (default = intdiv).
+        $blockCountOverride = $symbol[8] ?? null;
         $hRegions = self::horizontalRegions($regions);
         $vRegions = self::verticalRegions($regions);
         $this->symbolWidth = $hRegions * $mW + 2 * $hRegions;
@@ -239,7 +254,7 @@ final class DataMatrixEncoder
         $codewords = self::padCodewords($codewords, $dataCap);
 
         // 4. Compute ECC (interleaved для blockCount > 1).
-        $blockCount = intdiv($dataCap, $rsData);
+        $blockCount = $blockCountOverride ?? intdiv($dataCap, $rsData);
         $allCw = $blockCount === 1
             ? array_merge($codewords, self::createEccBlock($codewords, $eccCap))
             : self::interleavedEcc($codewords, $dataCap, $eccCap, $blockCount, $rsEcc);
