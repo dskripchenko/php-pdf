@@ -166,6 +166,146 @@ final class QrEncoder
      *   $sym2 = QrEncoder::structuredAppend('part2', 1, 3, $parity);
      *   $sym3 = QrEncoder::structuredAppend('part3', 2, 3, $parity);
      */
+    /**
+     * Phase 227: vCard 3.0 contact info → QR convenience factory.
+     *
+     * Common QR use case — business card / contact sharing. Most modern
+     * smartphones recognize vCard data в QR и offer "Save Contact" action.
+     *
+     * Supported fields (all optional):
+     *   name (FN), org (ORG), title (TITLE), tel (TEL), email (EMAIL),
+     *   url (URL), address (ADR — semicolon-separated:
+     *     PoBox;ExtAddr;Street;City;Region;Postal;Country)
+     *
+     * @param  array<string, string>  $fields
+     */
+    public static function vCard(array $fields, ?QrEccLevel $eccLevel = null): self
+    {
+        $lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+        $map = [
+            'name' => 'FN',
+            'org' => 'ORG',
+            'title' => 'TITLE',
+            'tel' => 'TEL',
+            'email' => 'EMAIL',
+            'url' => 'URL',
+            'address' => 'ADR',
+        ];
+        foreach ($map as $key => $vcardKey) {
+            if (isset($fields[$key]) && $fields[$key] !== '') {
+                // Escape vCard special chars: \ , ;
+                $value = strtr($fields[$key], ['\\' => '\\\\', ',' => '\\,', ';' => '\\;']);
+                $lines[] = $vcardKey.':'.$value;
+            }
+        }
+        $lines[] = 'END:VCARD';
+
+        return new self(implode("\r\n", $lines), $eccLevel);
+    }
+
+    /**
+     * Phase 227: WiFi credentials → QR convenience factory (Joinware format).
+     *
+     * Common QR use case — guest network sharing. Most modern smartphones
+     * recognize this format и offer "Connect to WiFi" action on scan.
+     *
+     * Format: WIFI:T:<auth>;S:<ssid>;P:<password>;H:<hidden>;;
+     *
+     * @param  string  $ssid  Network SSID.
+     * @param  string  $password  Network password (empty для open networks).
+     * @param  string  $auth  'WPA' (covers WPA/WPA2/WPA3) или 'WEP' или 'nopass'.
+     * @param  bool  $hidden  Hidden SSID flag.
+     */
+    public static function wifi(
+        string $ssid,
+        string $password = '',
+        string $auth = 'WPA',
+        bool $hidden = false,
+        ?QrEccLevel $eccLevel = null,
+    ): self {
+        // Escape special chars: \ , ; : "
+        $escape = fn (string $s): string => strtr($s, [
+            '\\' => '\\\\', ',' => '\\,', ';' => '\\;', ':' => '\\:', '"' => '\\"',
+        ]);
+        if (! in_array($auth, ['WPA', 'WEP', 'nopass'], true)) {
+            throw new \InvalidArgumentException("WiFi auth must be 'WPA', 'WEP' или 'nopass', got '$auth'");
+        }
+        $payload = sprintf(
+            'WIFI:T:%s;S:%s;P:%s;H:%s;;',
+            $auth,
+            $escape($ssid),
+            $escape($password),
+            $hidden ? 'true' : 'false',
+        );
+
+        return new self($payload, $eccLevel);
+    }
+
+    /**
+     * Phase 227: URL convenience factory. Same as direct constructor —
+     * provided для API symmetry с vCard/wifi/sms/email factories.
+     */
+    public static function url(string $url, ?QrEccLevel $eccLevel = null): self
+    {
+        return new self($url, $eccLevel);
+    }
+
+    /**
+     * Phase 227: SMS draft → QR convenience factory.
+     *
+     * Format: SMSTO:<phone>:<message>
+     */
+    public static function sms(string $phone, string $message = '', ?QrEccLevel $eccLevel = null): self
+    {
+        $payload = 'SMSTO:'.$phone;
+        if ($message !== '') {
+            $payload .= ':'.$message;
+        }
+
+        return new self($payload, $eccLevel);
+    }
+
+    /**
+     * Phase 227: Email draft → QR convenience factory.
+     *
+     * Format: mailto:<address>?subject=<subj>&body=<body> (RFC 6068).
+     */
+    public static function email(
+        string $address,
+        string $subject = '',
+        string $body = '',
+        ?QrEccLevel $eccLevel = null,
+    ): self {
+        $payload = 'mailto:'.$address;
+        $params = [];
+        if ($subject !== '') {
+            $params['subject'] = $subject;
+        }
+        if ($body !== '') {
+            $params['body'] = $body;
+        }
+        if ($params !== []) {
+            $payload .= '?'.http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        }
+
+        return new self($payload, $eccLevel);
+    }
+
+    /**
+     * Phase 227: Geographic coordinates → QR convenience factory.
+     *
+     * Format: geo:<lat>,<lon>?z=<zoom> (RFC 5870).
+     */
+    public static function geo(float $latitude, float $longitude, ?int $zoom = null, ?QrEccLevel $eccLevel = null): self
+    {
+        $payload = sprintf('geo:%s,%s', $latitude, $longitude);
+        if ($zoom !== null) {
+            $payload .= '?z='.$zoom;
+        }
+
+        return new self($payload, $eccLevel);
+    }
+
     public static function structuredAppend(
         string $data,
         int $position,
