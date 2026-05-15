@@ -9,7 +9,7 @@
 [![PHP](https://img.shields.io/badge/php-%5E8.2-blue.svg)](composer.json)
 [![Tests](https://img.shields.io/badge/tests-1977%20passing-success.svg)](#testing)
 
-**Languages:** [English](docs/en/README.md) · [Русский](docs/ru/README.md) · [中文](docs/zh/README.md) · [Deutsch](docs/de/README.md)
+**Languages:** [English](README.md) · [Русский](../ru/README.md) · [中文](../zh/README.md) · [Deutsch](../de/README.md)
 
 ---
 
@@ -191,25 +191,25 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - PDF/X-1a, PDF/X-3, PDF/X-4 with /OutputIntent /S /GTS_PDFX.
 - Tagged PDF / PDF/UA-ready structure tree.
 
-A complete usage walkthrough is in [docs/en/USAGE.md](docs/en/USAGE.md).
+A complete usage walkthrough is in [USAGE.md](USAGE.md).
 
 ---
 
 ## Documentation
 
-- 📖 [Usage guide](docs/en/USAGE.md) — paragraphs, tables, charts,
-  barcodes, forms, encryption, signing, PDF/A.
-- ⚖️ [Comparison vs mpdf / tcpdf / dompdf / FPDF](docs/en/COMPARISON.md) —
+- 📖 [Usage guide](USAGE.md) — paragraphs, tables, charts, barcodes,
+  forms, encryption, signing, PDF/A.
+- ⚖️ [Comparison vs mpdf / tcpdf / dompdf / FPDF](COMPARISON.md) —
   feature matrix, when to choose each.
-- 📊 [Benchmarks](docs/en/BENCHMARKS.md) — reproducible wall-time, memory,
-  and output-size measurements.
+- 📊 [Benchmarks](BENCHMARKS.md) — reproducible wall-time, memory, and
+  output-size measurements.
 
 ---
 
 ## Performance
 
 Median of 5 isolated subprocess runs on macOS 25 / PHP 8.4. Full
-methodology and reproducer in [docs/en/BENCHMARKS.md](docs/en/BENCHMARKS.md).
+methodology and reproducer in [BENCHMARKS.md](BENCHMARKS.md).
 
 | Scenario                  | dskripchenko/php-pdf | mpdf      | tcpdf     | dompdf     | FPDF      |
 |---------------------------|---------------------:|----------:|----------:|-----------:|----------:|

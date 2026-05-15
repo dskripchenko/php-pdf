@@ -3,3 +3,6 @@
 /.phpunit.cache
 /.phpunit.result.cache
 /.cache
+/scripts/bench/vendor
+/scripts/bench/composer.lock
+/scripts/bench/out

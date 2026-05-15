@@ -1,9 +1,10 @@
 {
     "name": "dskripchenko/php-pdf",
-    "description": "Pure-PHP PDF generator (HTML → PDF). Work in progress, research stage.",
+    "description": "Pure-PHP, MIT-licensed PDF generator: low-level emission, fluent builders, HTML/CSS input, 16 barcode formats, 8 chart types, TTF embedding with kerning and ligatures, AcroForm, PKCS#7 signing, PDF/A and PDF/X conformance.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["pdf", "html-to-pdf", "pdf-writer"],
+    "keywords": ["pdf", "html-to-pdf", "pdf-writer", "barcode", "qr-code", "acroform", "pdf-a", "pdf-x", "tagged-pdf", "pkcs7", "ttf-embed"],
+    "homepage": "https://github.com/dskripchenko/php-pdf",
     "authors": [
         {
             "name": "Denis Skripchenko",

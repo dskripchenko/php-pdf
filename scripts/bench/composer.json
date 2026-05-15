@@ -1,0 +1,27 @@
+{
+    "name": "dskripchenko/php-pdf-bench",
+    "description": "Local-only benchmark harness comparing dskripchenko/php-pdf against mpdf, tcpdf, dompdf, FPDF.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "mpdf/mpdf": "^8.2",
+        "tecnickcom/tcpdf": "^6.7",
+        "dompdf/dompdf": "^3.0",
+        "setasign/fpdf": "^1.8"
+    },
+    "autoload": {
+        "psr-4": {
+            "Dskripchenko\\PhpPdf\\": "../../src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "dompdf/php-font-lib": true,
+            "dompdf/php-svg-lib": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
