@@ -7,15 +7,11 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\ListFormat;
 
 /**
- * ListNode — block-level список (bullet или ordered).
+ * Block-level list (bullet or ordered).
  *
- * $items: list<ListItem>
- * $format: тип маркеров (Bullet/Decimal/LowerLetter/...). Если null —
- *   defaults на Bullet (для convenience).
- * $startAt: с какого числа начинается нумерация (default 1).
- *
- * Nested списки реализуются через ListItem.nestedList — render engine
- * рекурсивно отрисовывает с увеличенным indent'ом.
+ * Nested lists are represented via `ListItem.nestedList`; the layout
+ * engine recurses with increased indentation. Default format is Bullet
+ * when `format` is null.
  */
 final readonly class ListNode implements BlockElement
 {

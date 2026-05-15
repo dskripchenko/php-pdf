@@ -5,15 +5,12 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Named destination — target для внутренних Hyperlink'ов.
+ * Named destination — target for internal hyperlinks.
  *
- * Layout engine: после render'а wrapped content создаёт named destination
- * в Catalog.Dests с position = current cursor (X, Y, page).
- *
- * Имена destinations должны быть unique в пределах document'а.
- *
- * Может содержать nested children (wrapped Hyperlink target text) или
- * быть «empty» (просто mark в потоке без visible content).
+ * The layout engine registers a destination in Catalog.Dests at the
+ * current cursor position when this element is rendered. Names must be
+ * unique within a document. May wrap inline children (the link target
+ * text) or be empty (just a position marker in the stream).
  */
 final readonly class Bookmark implements InlineElement
 {

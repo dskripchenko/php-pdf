@@ -5,23 +5,19 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Стандартные форматы страницы. Размеры в pt (1 inch = 72 pt).
+ * Standard paper sizes in points (1 inch = 72 pt).
  *
- * Соответствует ISO 216 (A-series) и US standard letter/legal.
- *
- * `widthPt()`/`heightPt()` возвращают portrait dimensions; для landscape
- * вызвать `widthPt()`/`heightPt()` с swapped order вручную (см.
- * `Orientation::applyTo` для готового resolver'а).
+ * Covers ISO 216 A-series and US standard sizes (Letter, Legal,
+ * Tabloid, Executive). `widthPt()` and `heightPt()` return portrait
+ * dimensions; use `Orientation::applyTo()` for orientation-aware sizing.
  */
 enum PaperSize
 {
-    // A-series ISO 216 — calculated from sqrt(2)-aspect from A0 (841×1189mm).
     case A3;
     case A4;
     case A5;
     case A6;
 
-    // US standard.
     case Letter;
     case Legal;
     case Tabloid;

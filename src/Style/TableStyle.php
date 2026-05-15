@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Стиль таблицы — общая ширина, alignment, default cell padding/borders.
+ * Table-level style — width, alignment, default cell padding/borders,
+ * spacing.
  *
- * Mirror'ит php-docx TableStyle. Differences:
- *  - все размеры в pt
- *  - defaultBorder применяется ко всем cell'ам если у них нет своего
- *  - alignment — table-level (Start/Center/End сдвигает всю таблицу
- *    внутри content area)
+ * `widthPercent` (0..100) is relative to the surrounding content area;
+ * if both `widthPt` and `widthPercent` are null the table spans the full
+ * content width. `defaultCellBorder` and `defaultCellStyle` provide fall-
+ * back styling for cells without their own overrides.
  *
- * widthPercent (0..100) — alternative для widthPt: relative к content
- * area. Если оба null — таблица full-width content area.
+ * `borderCollapse: true` makes adjacent cells share borders (first-drawn
+ * wins for color/style). Otherwise `borderSpacingPt` controls the gap
+ * between cells in CSS `separate` border-spacing mode.
  */
 final readonly class TableStyle
 {
@@ -27,17 +28,7 @@ final readonly class TableStyle
         public CellStyle $defaultCellStyle = new CellStyle,
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 6,
-        /**
-         * Если true — adjacent cells шарят borders. Phase 12 v1
-         * implementation: каждый cell рисует только top+left, последняя
-         * row дополнительно рисует bottom, последняя column — right.
-         * "Thicker wins" CSS rules не реализованы (first-drawn wins).
-         */
         public bool $borderCollapse = false,
-        /**
-         * Border-spacing для separate mode (CSS border-spacing). Default 0.
-         * В collapse mode игнорируется.
-         */
         public float $borderSpacingPt = 0,
     ) {}
 

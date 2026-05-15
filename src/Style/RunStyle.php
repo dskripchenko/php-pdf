@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Стиль run'а — атрибуты непрерывного куска текста.
+ * Inline text style — attributes applied to a contiguous Run.
  *
- * Mirror'инг php-docx `RunStyle` для AST-совместимости. Differences:
- *  - sizeHalfPoints (OOXML native) заменён на sizePt (PDF native, 1pt)
- *  - color/backgroundColor — RGB hex string без `#`, lowercase
- *  - fontFamily — string (resolved через FontProvider в Layout engine)
+ * All non-boolean fields are nullable; a null value means "inherit from
+ * the enclosing scope" (paragraph default, then document default).
+ * Boolean flags default to false.
  *
- * Все поля nullable — означает «inherit from parent style» (paragraph
- * default или document default). Boolean-флаги defaultят к false.
+ * Colors are stored as RGB hex strings without `#` prefix, lowercase
+ * (e.g. `'ff0000'`). Sizes are in PDF points (1pt = 1/72 inch).
+ * `fontFamily` is resolved by the layout engine through a FontProvider.
  */
 final readonly class RunStyle
 {
@@ -28,9 +28,9 @@ final readonly class RunStyle
         public bool $strikethrough = false,
         public bool $superscript = false,
         public bool $subscript = false,
-        /** Named highlight color: yellow, green, cyan, etc. (OOXML-style). */
+        /** Named highlight color (yellow, green, cyan, ...) — OOXML convention. */
         public ?string $highlight = null,
-        /** Phase 21: letter-spacing (Tc operator) в pt. null = inherit/0. */
+        /** Letter spacing in points, applied via PDF Tc operator. */
         public ?float $letterSpacingPt = null,
     ) {}
 
@@ -84,10 +84,14 @@ final readonly class RunStyle
         return $this->copy(highlight: $highlight);
     }
 
+    public function withLetterSpacingPt(float $pt): self
+    {
+        return $this->copy(letterSpacingPt: $pt);
+    }
+
     /**
-     * Inherits non-null values from $parent для null-полей this'а.
-     * Используется в Layout engine для cascade-resolution (paragraph
-     * defaults → run style).
+     * Cascade resolution — fill null fields from `$parent`. Boolean flags
+     * OR with parent (so a child's `bold: true` always wins).
      */
     public function inheritFrom(self $parent): self
     {
@@ -105,11 +109,6 @@ final readonly class RunStyle
             highlight: $this->highlight ?? $parent->highlight,
             letterSpacingPt: $this->letterSpacingPt ?? $parent->letterSpacingPt,
         );
-    }
-
-    public function withLetterSpacingPt(float $pt): self
-    {
-        return $this->copy(letterSpacingPt: $pt);
     }
 
     private function copy(

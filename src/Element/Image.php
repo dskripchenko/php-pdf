@@ -8,27 +8,19 @@ use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Image — block-level raster image (PNG/JPEG).
+ * Raster image (PNG / JPEG). Lives both as a top-level block and as an
+ * inline atom inside paragraphs:
+ *  - At Section.body level → block mode (full-line with alignment).
+ *  - Inside Paragraph.children → inline mode (atom in text flow with
+ *    baseline-aligned bottom; line-height grows to fit image height).
  *
- * Source хранится как готовый PdfImage (eager-parsed) для простоты —
- * PDFs обычно имеют немного изображений, и парсинг происходит один
- * раз при construction'е.
+ * Sizing rules:
+ *  - Both widthPt and heightPt set: used as-is.
+ *  - Only one set: the other derived from native aspect ratio.
+ *  - Both null: native dimensions at 72 DPI (1 px = 1 pt).
  *
- * Sizing:
- *  - Если оба widthPt/heightPt заданы — используются как есть.
- *  - Если только один — другой вычисляется из aspect ratio.
- *  - Если оба null — native dimensions @ 72 DPI (1px = 1pt).
- *
- * Alignment действует на block-level — X-position на content area:
- *  - Start — flush left
- *  - Center — horizontally centered
- *  - End — flush right
- *  - Both/Distribute — деградируют к Start (для image'й не имеют смысла)
- *
- * Phase 16: Image теперь implements обоих интерфейсов. Engine routing:
- *  - На top-level (Section.body) → block mode (full-line с alignment)
- *  - Внутри Paragraph.children → inline mode (image как atom в текстовом
- *    потоке; line-height accommodates image height)
+ * `$altText` populates the /Alt entry on the surrounding struct element
+ * in Tagged PDF / PDF/UA mode.
  */
 final readonly class Image implements BlockElement, InlineElement
 {
@@ -39,8 +31,6 @@ final readonly class Image implements BlockElement, InlineElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 0,
-        // Phase 62: PDF/UA alt-text для screen readers (emitted в /Alt
-        // entry struct element). null = no alt text.
         public ?string $altText = null,
     ) {}
 
@@ -85,8 +75,8 @@ final readonly class Image implements BlockElement, InlineElement
     }
 
     /**
-     * Effective rendered dimensions в pt. Применяет defaulting + aspect
-     * ratio preservation.
+     * Effective rendered dimensions in points, applying defaulting and
+     * aspect ratio preservation.
      *
      * @return array{0: float, 1: float} [widthPt, heightPt]
      */
@@ -109,7 +99,6 @@ final readonly class Image implements BlockElement, InlineElement
             return [$this->heightPt * $ratio, $this->heightPt];
         }
 
-        // Native: 1px = 1pt (72 DPI).
         return [$nativeW, $nativeH];
     }
 }

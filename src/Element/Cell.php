@@ -7,13 +7,11 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\CellStyle;
 
 /**
- * Cell таблицы — содержит произвольные BlockElement'ы (Paragraph,
- * Image, даже nested Table'ы).
+ * Table cell holding arbitrary block content (paragraphs, images, nested
+ * tables). Cell itself is not a BlockElement — it only lives inside Row.
  *
- * columnSpan/rowSpan ≥ 1 (default 1). Span'ы > 1 означают cell
- * растягивается на N столбцов / M строк. Layout-engine обрабатывает.
- *
- * Cell сам не реализует BlockElement — он живёт только внутри Row.
+ * `columnSpan` and `rowSpan` (both ≥ 1) let a cell stretch across
+ * multiple columns or rows; the layout engine resolves the geometry.
  */
 final readonly class Cell
 {

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Forced line break внутри параграфа (HTML `<br>`).
+ * Hard line break inside a paragraph (HTML `<br>`).
  *
- * Не путать с soft-wrap (line-breaking algorithm). LineBreak — explicit
- * line ending, paragraph остаётся одним.
+ * Distinct from soft-wrap line breaking — this is an explicit line ending
+ * within the same paragraph.
  */
 final readonly class LineBreak implements InlineElement
 {

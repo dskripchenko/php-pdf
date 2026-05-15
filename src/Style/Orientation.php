@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Ориентация страницы. PDF MediaBox задаётся всегда как
- * `[0 0 width height]`; landscape означает что width > height
- * (swap происходит при applyTo).
+ * Page orientation.
+ *
+ * PDF MediaBox is always `[0 0 width height]`; landscape simply means
+ * width > height. `applyTo()` swaps dimensions for a given paper size.
  */
 enum Orientation
 {
@@ -15,7 +16,8 @@ enum Orientation
     case Landscape;
 
     /**
-     * Возвращает (width, height) для PaperSize в этой orientation.
+     * Resolve `(width, height)` in points for the given paper size and
+     * this orientation.
      *
      * @return array{0: float, 1: float}
      */

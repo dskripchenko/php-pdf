@@ -7,13 +7,11 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\TableStyle;
 
 /**
- * Table — block-level элемент с rows of cells.
+ * Block-level table — list of rows containing cells.
  *
- * $columnWidthsPt — explicit list of column widths в pt. Если null,
- * layout-engine распределяет ширину равномерно между столбцами.
- *
- * Number of columns = max gridSpan-сумма по rows; layout engine
- * валидирует consistency.
+ * `columnWidthsPt` is an explicit list of column widths in points; null
+ * distributes width evenly. Total column count is derived from the max
+ * sum of `columnSpan` values across rows.
  */
 final readonly class Table implements BlockElement
 {
@@ -28,9 +26,6 @@ final readonly class Table implements BlockElement
         public ?string $caption = null,
     ) {}
 
-    /**
-     * Число столбцов = max(sum gridSpan по row).
-     */
     public function columnCount(): int
     {
         $max = 0;

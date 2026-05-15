@@ -5,22 +5,16 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 108: PKCS#7 detached signature configuration.
+ * PKCS#7 detached signature configuration (ISO 32000-1 §12.8.1).
  *
- * ISO 32000-1 §12.8.1 — signature dictionary with /SubFilter
- * /adbe.pkcs7.detached. The signed bytes cover the whole PDF except
- * the /Contents hex string (replaced post-emission).
+ * Used with `Pdf\Document::sign()`. The signed bytes cover the whole PDF
+ * except the /Contents hex string, which is patched with the signature
+ * after the document body is fully emitted.
  *
- * Cert/key могут быть:
- *  - PEM strings (преимущественный вариант, no file I/O).
- *  - "file://<path>" PEM file references.
- *
- * Optional dict fields (PDF spec §12.8.1):
- *  - /M    (signing time, D:YYYYMMDDHHMMSS+HH'MM').
- *  - /Reason
- *  - /Location
- *  - /ContactInfo
- *  - /Name (signer name displayed в виде overlay).
+ * Certificate and private key are accepted as PEM strings. Optional
+ * fields (`signerName`, `reason`, `location`, `contactInfo`, `signedAt`)
+ * populate the corresponding entries of the signature dictionary per
+ * PDF spec §12.8.1.
  */
 final readonly class SignatureConfig
 {
@@ -35,7 +29,7 @@ final readonly class SignatureConfig
         public ?\DateTimeImmutable $signedAt = null,
     ) {
         if (! function_exists('openssl_pkcs7_sign')) {
-            throw new \RuntimeException('PKCS#7 signing requires openssl extension');
+            throw new \RuntimeException('PKCS#7 signing requires the openssl extension');
         }
     }
 
@@ -45,13 +39,13 @@ final readonly class SignatureConfig
     }
 
     /**
-     * Format signing time per PDF spec: D:YYYYMMDDHHMMSS+HH'MM'.
+     * Signing time formatted per PDF spec: `D:YYYYMMDDHHMMSS+HH'MM'`.
      */
     public function pdfSignedAt(): string
     {
         $dt = $this->effectiveSignedAt();
-        $tz = $dt->format('P');           // +03:00
-        $tzPdf = str_replace(':', "'", $tz) . "'"; // +03'00'
+        $tz = $dt->format('P');            // e.g. +03:00
+        $tzPdf = str_replace(':', "'", $tz) . "'"; // → +03'00'
 
         return 'D:' . $dt->format('YmdHis') . $tzPdf;
     }

@@ -8,15 +8,15 @@ use Dskripchenko\PhpPdf\Pdf\Encryption;
 use Dskripchenko\PhpPdf\Pdf\EncryptionAlgorithm;
 
 /**
- * Phase 217: Document-level encryption parameters VO.
+ * Document-level encryption parameters value object.
  *
- * Pass к `Document::__construct(encryption: new EncryptionParams(...))` для
- * declarative encryption setup без drop'ing к low-level Pdf\Document API.
+ * Pass to `Document::__construct(encryption: new EncryptionParams(...))`
+ * for declarative encryption setup without dropping to the low-level
+ * Pdf\Document API. Constructor mirrors `Pdf\Document::encrypt()`.
  *
- * Mirrors `Pdf\Document::encrypt()` signature — параметры forwarded as-is.
- *
- * Default algorithm: RC4-128 V2 R3 (PDF 1.4-compat). Recommend AES-128
- * (V4 R4, PDF 1.6) или AES-256 R6 (V5 R6, PDF 2.0) для new documents.
+ * Default algorithm is RC4-128 (V2 R3) for broad reader compatibility.
+ * Use AES-128 (V4 R4, PDF 1.6) or AES-256 R6 (V5 R6, PDF 2.0) for new
+ * documents needing modern crypto.
  */
 final readonly class EncryptionParams
 {

@@ -9,13 +9,12 @@ use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Style\PageSetup;
 
 /**
- * Section — body content + page setup + опциональные header/footer.
+ * Section — body content plus per-section page setup, header, footer,
+ * and optional watermark.
  *
- * Header/footer — list<BlockElement>, рендерится на каждой странице в
- * top/bottom margin areas. Может содержать Field PAGE/NUMPAGES.
- *
- * Multi-section документы (разные orient/margin на разных страницах)
- * не поддерживаются в v0.1.
+ * A Document holds one primary Section plus any number of additional
+ * sections. Each additional section starts on a new page and may use a
+ * different paper size, orientation, margins, or chrome.
  */
 final readonly class Section
 {
@@ -23,13 +22,11 @@ final readonly class Section
      * @param  list<BlockElement>  $body
      * @param  list<BlockElement>  $headerBlocks
      * @param  list<BlockElement>  $footerBlocks
-     */
-    /**
-     * @param  list<BlockElement>  $body
-     * @param  list<BlockElement>  $headerBlocks
-     * @param  list<BlockElement>  $footerBlocks
-     * @param  list<BlockElement>|null  $firstPageHeaderBlocks  null = use $headerBlocks
-     * @param  list<BlockElement>|null  $firstPageFooterBlocks  null = use $footerBlocks
+     * @param  list<BlockElement>|null  $firstPageHeaderBlocks  Null = use
+     *         `$headerBlocks` for page 1. Empty list = blank header on page 1
+     *         (cover page convention).
+     * @param  list<BlockElement>|null  $firstPageFooterBlocks  Null = use
+     *         `$footerBlocks` for page 1. Empty list = blank footer on page 1.
      */
     public function __construct(
         public array $body = [],
@@ -37,28 +34,28 @@ final readonly class Section
         public array $headerBlocks = [],
         public array $footerBlocks = [],
         public ?string $watermarkText = null,
-        /**
-         * Different first-page header (cover page). null = same as headerBlocks.
-         * Empty list [] = blank header on first page.
-         */
         public ?array $firstPageHeaderBlocks = null,
         public ?array $firstPageFooterBlocks = null,
-        // Phase 30: image watermark (mutually-compatible with text — оба
-        // можно рисовать одновременно; image первым, text сверху).
+        /**
+         * Image watermark (drawn first, behind text watermark if both set).
+         */
         public ?PdfImage $watermarkImage = null,
         public ?float $watermarkImageWidthPt = null,
-        // Phase 31: opacity для image/text watermark через PDF ExtGState /ca.
-        // null = full opacity. Range (0, 1) применяет alpha; ≥1 → no-op.
+        /**
+         * Opacity for image watermark via PDF ExtGState /ca. Range (0, 1)
+         * applies alpha; null or ≥1 means full opacity.
+         */
         public ?float $watermarkImageOpacity = null,
         public ?float $watermarkTextOpacity = null,
         /**
-         * Phase 222: footnotes mode.
-         *  - null (default): endnotes-style — все footnotes at section's end body
-         *  - float > 0: reserve N points at each page bottom для footnotes,
-         *               render them per-page below body content.
+         * Footnote placement mode:
+         *  - null: endnote-style — all footnotes rendered at the end of the
+         *    section body (default).
+         *  - float > 0: reserve this many points at each page bottom for a
+         *    footnote zone; footnotes are flushed per-page below body content.
          *
-         * Use ≈12-15pt per expected footnote line (font size 9-10pt + 2pt
-         * leading). E.g., 5 short footnotes на page → footnoteBottomReservedPt: 80.
+         * Allow roughly 12-15 pt per expected footnote line. E.g. five short
+         * footnotes per page → ~75 pt.
          */
         public ?float $footnoteBottomReservedPt = null,
     ) {}

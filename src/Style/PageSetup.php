@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Полный page setup — paper size + orientation + margins.
+ * Full page setup — paper size, orientation, margins, and optional
+ * custom dimensions for non-standard formats (business cards, banners).
  *
- * Используется в Section'е для определения layout границ страницы.
+ * Used per Section to define page geometry. `firstPageNumber` shifts the
+ * value emitted by `Field::page()` — useful when a document is chapter
+ * N of a larger manual and should start numbering at the offset.
  */
 final readonly class PageSetup
 {
@@ -16,17 +19,12 @@ final readonly class PageSetup
         public Orientation $orientation = Orientation::Portrait,
         public PageMargins $margins = new PageMargins,
         /**
-         * Custom dimensions [widthPt, heightPt]. Если задано — overrides
-         * paperSize. Используется для non-standard форматов (визитки, баннеры).
+         * Override paper size with explicit [widthPt, heightPt]. Useful
+         * for non-standard formats (business cards, banners).
          *
          * @var array{0: float, 1: float}|null
          */
         public ?array $customDimensionsPt = null,
-        /**
-         * Стартовый page number для PAGE field. Default = 1.
-         * Если документ — глава 2 большого manual'а, можно установить 47
-         * чтобы первая страница render'ила "47".
-         */
         public int $firstPageNumber = 1,
     ) {}
 
@@ -45,9 +43,8 @@ final readonly class PageSetup
     }
 
     /**
-     * Default content width — для convenience и legacy code. Mirror'инг
-     * margin'ы и gutter применяются на per-page level через
-     * contentWidthPtForPage().
+     * Default content width. Mirrored margins and gutter are applied
+     * per page via `contentWidthPtForPage()`.
      */
     public function contentWidthPt(): float
     {
@@ -60,7 +57,8 @@ final readonly class PageSetup
     }
 
     /**
-     * Effective left X для given 1-based page (учитывает mirrored/gutter).
+     * Effective left X for a given 1-based page number (honors mirrored
+     * margins and gutter).
      */
     public function leftXForPage(int $pageNumber): float
     {
@@ -70,7 +68,7 @@ final readonly class PageSetup
     }
 
     /**
-     * Effective content width для given 1-based page.
+     * Effective content width for a given 1-based page number.
      */
     public function contentWidthPtForPage(int $pageNumber): float
     {

@@ -5,18 +5,11 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Marker interface для block-level элементов в Document AST.
+ * Marker interface for block-level AST elements (Paragraph, Heading,
+ * Table, ListNode, Image, HorizontalRule, PageBreak, etc.).
  *
- * Block elements:
- *  - Paragraph (включая heading)
- *  - PageBreak (also implements InlineElement)
- *  - HorizontalRule
- *  - Table (Phase 5)
- *  - ListNode (Phase 6)
- *  - Image (block-positioned; also implements InlineElement)
- *
- * Block elements живут в Section.body / TableCell.children / список
- * block-level контента документа. Они flow один за другим vertically.
+ * Block elements live in `Section.body`, `Cell.children`, and other
+ * block sequences. They flow vertically, one after another.
  */
 interface BlockElement
 {

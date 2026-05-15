@@ -5,29 +5,28 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 225: PDF/X-3 / X-4 print conformance configuration.
+ * PDF/X print conformance configuration (ISO 15930).
  *
- * PDF/X is print-industry standard subset of PDF (ISO 15930). Variants:
- *  - **PDF/X-1a:2003** — CMYK-only (we don't enforce; provide for marker
- *    only). Caller responsible для CMYK colorspace в content
- *  - **PDF/X-3:2003** — allows RGB + CMYK + Lab + spot colors. ICC profile
- *    embedded. Most flexible variant.
- *  - **PDF/X-4** — adds transparency + layers (PDF 1.6+ features), still
- *    enforces ICC.
+ * Variants:
+ *  - PDF/X-1a:2003 — CMYK + spot colors only (not enforced; markers only)
+ *  - PDF/X-3:2003 — allows RGB + CMYK + Lab + spot; ICC profile mandatory.
+ *    Most flexible variant compatible with our RGB rendering.
+ *  - PDF/X-4 — adds transparency and layers (PDF 1.6+), ICC mandatory.
  *
- * Mandatory PDF/X requirements applied by emit:
- *  - /Type /OutputIntent /S /GTS_PDFX entry с embedded ICC profile
- *  - /Trapped key в /Info dict
- *  - /Metadata stream с pdfx: XMP namespace markers
+ * Emission applies:
+ *  - /Type /OutputIntent /S /GTS_PDFX with embedded ICC profile
+ *  - /Trapped key in /Info dictionary
+ *  - /Metadata stream with pdfx: XMP namespace markers
  *
- * NOT enforced (caller must comply manually):
+ * Not enforced (caller must comply manually):
  *  - All fonts embedded (default behavior — already true)
- *  - No transparency for X-1a/X-3 variants
+ *  - No transparency for X-1a / X-3
  *  - No JavaScript / external launches
- *  - No encryption (incompatible)
+ *  - No encryption (mutually exclusive)
  *
- * Validation requires PDF/X validator (Acrobat Preflight, callas pdfToolbox)
- * — emission alone не guarantees conformance.
+ * Conformance markers alone do not guarantee ISO 15930 compliance; use
+ * a PDF/X validator (Acrobat Preflight, callas pdfToolbox) for production
+ * verification.
  */
 final readonly class PdfXConfig
 {
@@ -72,7 +71,7 @@ final readonly class PdfXConfig
     }
 
     /**
-     * XMP metadata с pdfx: namespace markers (ISO 15930 spec).
+     * Render XMP metadata stream with pdfx: namespace markers.
      */
     public function xmpMetadata(string $producer = 'dskripchenko/php-pdf'): string
     {

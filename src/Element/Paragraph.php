@@ -8,15 +8,10 @@ use Dskripchenko\PhpPdf\Style\ParagraphStyle;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Paragraph — block-level контейнер inline-content.
+ * Block-level container for inline content (Run, Image, Hyperlink, etc.).
  *
- * `$headingLevel = 1..6` означает что параграф — heading того уровня
- * (Layout engine применит heading style — bigger size + bold).
- * `null` — обычный параграф.
- *
- * `$defaultRunStyle` — inherited-style для всех children Run'ов которые
- * не имеют explicit fontFamily/size. Это эквивалент CSS-inheritance.
- * Children Run.style.inheritFrom($defaultRunStyle) даёт effective style.
+ * `$defaultRunStyle` is inherited by children whose Run.style omits
+ * fontFamily/sizePt — CSS-style inheritance.
  */
 final readonly class Paragraph implements BlockElement
 {

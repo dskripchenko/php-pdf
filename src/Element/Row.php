@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Row таблицы — упорядоченная series cell'ов.
+ * Table row — ordered list of cells.
  *
- * $isHeader = true означает что row повторяется в начале каждой
- * следующей страницы при page-overflow (как `<thead>`).
- *
- * $heightPt — explicit row height. Если null, layout определяет
- * по высоте content'а самого высокого cell'а.
+ * Header rows (`isHeader: true`) repeat at the top of each page when the
+ * table breaks across pages — analogous to HTML `<thead>`. Explicit row
+ * height in `heightPt` overrides the auto-fit height of the tallest cell.
  */
 final readonly class Row
 {

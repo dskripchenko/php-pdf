@@ -5,16 +5,12 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Hyperlink — external URL или internal anchor.
+ * Hyperlink wrapping inline content — either an external URL or an
+ * internal named destination.
  *
- * Если `$anchor !== null` — internal (jump to bookmark).
- * Если `$href !== null` — external URL.
- * Оба null — invalid; constructor можно опционально проверить.
- *
- * `$children` — inline content (обычно Run с подчёркнутым/синим стилем).
- *
- * Layout engine: после render'а children'а добавляет /Link annotation
- * на page с Rect = bounding box rendered text'а.
+ * Use `external()` for URLs, `internal()` for in-document anchors.
+ * The layout engine attaches a /Link annotation covering the rendered
+ * bounding box of the children.
  */
 final readonly class Hyperlink implements InlineElement
 {

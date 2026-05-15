@@ -7,28 +7,24 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\ParagraphStyle;
 
 /**
- * Phase 61: Heading element с semantic level (1-6).
+ * Semantic heading element with level 1-6.
  *
- * Rendered как paragraph с bold + larger font (auto-styled by level).
- * В tagged PDF mode emits как /H1.../H6 struct element instead of /P
- * — accessibility readers can navigate heading hierarchy.
- *
- * Auto-styled font sizes (default ParagraphStyle):
+ * Rendered as a paragraph with auto-styled bold + larger font:
  *   H1=24pt, H2=20pt, H3=16pt, H4=14pt, H5=12pt, H6=11pt
  *
- * Caller может override через `style` parameter если нужны кастомные
- * margins или indent.
+ * In Tagged PDF mode emits as /H1.../H6 struct elements so accessibility
+ * readers can navigate the heading hierarchy. With an explicit `$anchor`
+ * a named destination is registered at the heading position, addressable
+ * via internal hyperlinks (`<a href="#anchor">`).
  */
 final readonly class Heading implements BlockElement
 {
     /**
      * @param  list<InlineElement>  $children
-     * @param  string|null  $anchor  Phase 231: optional named destination
-     *                                anchor (без `#` prefix). Если задан,
-     *                                Engine emits named destination → page
-     *                                position при rendering. Internal
-     *                                Hyperlink с href="#$anchor" сможет
-     *                                jump сюда.
+     * @param  string|null  $anchor  Optional named destination (without `#`
+     *                                prefix). When set, the engine registers
+     *                                the heading position as a named target
+     *                                for internal hyperlinks.
      */
     public function __construct(
         public int $level,
@@ -42,8 +38,8 @@ final readonly class Heading implements BlockElement
     }
 
     /**
-     * Phase 231: derive URL-safe slug от heading text content. Used когда
-     * caller (e.g., HtmlParser) wants auto-anchor based на heading title.
+     * Derive a URL-safe slug from the heading text content. Lowercase,
+     * non-alphanumeric characters collapsed to dashes, trimmed.
      */
     public function autoAnchor(): string
     {
@@ -53,8 +49,6 @@ final readonly class Heading implements BlockElement
                 $text .= $child->text.' ';
             }
         }
-        // ASCII-style slug: lowercase, replace non-alphanumeric с dashes,
-        // collapse multiple dashes, trim.
         $slug = trim($text);
         $slug = preg_replace('/[^\p{L}\p{N}]+/u', '-', $slug) ?? '';
         $slug = trim($slug, '-');
@@ -62,9 +56,6 @@ final readonly class Heading implements BlockElement
         return mb_strtolower($slug, 'UTF-8');
     }
 
-    /**
-     * Default font size by level.
-     */
     public function defaultFontSizePt(): float
     {
         return match ($this->level) {

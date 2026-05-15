@@ -5,15 +5,11 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Стиль параграфа — layout-уровень (расположение/spacing, не глифы).
+ * Block-level paragraph style — alignment, spacing, indentation,
+ * borders, padding, background.
  *
- * Mirror php-docx `ParagraphStyle` для AST-совместимости. Differences:
- *  - все размеры в pt (1pt = 1/72 inch); в php-docx — twips (1twip=1/20pt).
- *    PDF-native — pt, поэтому используем его напрямую.
- *  - borders — BorderSet с 4 optional sides.
- *
- * Все поля имеют разумные defaults (left-align, no indent, no spacing,
- * no borders). Все опционально.
+ * All sizes are in PDF points (1pt = 1/72 inch). All fields have
+ * sensible defaults (left-aligned, no indent, no spacing, no borders).
  */
 final readonly class ParagraphStyle
 {
@@ -24,13 +20,12 @@ final readonly class ParagraphStyle
         public float $indentLeftPt = 0,
         public float $indentRightPt = 0,
         public float $indentFirstLinePt = 0,
-        public ?float $lineHeightMult = null,  // null = font-default (1.2)
-        // Phase 79: absolute line-height в pt — точнее чем mult approximation.
-        // Если задан — overrides lineHeightMult.
+        /** Line height as a multiplier of font size. Null = font default (~1.2). */
+        public ?float $lineHeightMult = null,
+        /** Absolute line height in pt. Overrides `lineHeightMult` when set. */
         public ?float $lineHeightPt = null,
         public bool $pageBreakBefore = false,
         public ?BorderSet $borders = null,
-        // Phase 25: paragraph padding + background-color.
         public float $paddingTopPt = 0,
         public float $paddingRightPt = 0,
         public float $paddingBottomPt = 0,
@@ -52,7 +47,7 @@ final readonly class ParagraphStyle
     }
 
     /**
-     * Immutable update — возвращает копию с заданными overridden полями.
+     * Return a copy with overridden fields.
      */
     public function copy(
         ?Alignment $alignment = null,

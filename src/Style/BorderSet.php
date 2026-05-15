@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Borders для всех сторон paragraph'а / cell'а.
+ * Four-sided border set for paragraphs, table cells, or tables.
  *
- * Каждая сторона опциональна — null означает «нет border'а». Все четыре
- * стороны могут быть разные.
+ * Each side is optional; null means no border on that side. All four
+ * sides can be styled independently.
  */
 final readonly class BorderSet
 {
@@ -20,7 +20,7 @@ final readonly class BorderSet
     ) {}
 
     /**
-     * Все 4 стороны одинаковые — convenience constructor.
+     * Convenience: apply the same border to all four sides.
      */
     public static function all(Border $border): self
     {

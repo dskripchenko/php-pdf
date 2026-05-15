@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Тип маркера списка.
- *
- * Mirror'ит php-docx ListFormat.
+ * List marker format.
  */
 enum ListFormat: string
 {

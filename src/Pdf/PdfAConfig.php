@@ -5,29 +5,34 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 47: PDF/A-1b compliance configuration.
+ * PDF/A archival conformance configuration (ISO 19005).
  *
- * ISO 19005-1:2005 Level B (basic) — preserves visual appearance for
- * long-term archival.
+ * Variants:
+ *  - PDF/A-1 (parts A and B) — long-term archival baseline
+ *  - PDF/A-2, PDF/A-3 — adds Unicode (U) plus newer PDF features
  *
- * Requirements applied при emission:
- *  - PDF version downgraded к 1.4.
- *  - /Metadata stream (XMP RDF) added к Catalog.
- *  - /OutputIntents array с embedded ICC profile.
- *  - /Lang entry в Catalog.
- *  - Encryption disabled (throws if encrypt() called).
- *  - File ID array (already emit'ится unconditionally).
+ * Conformance levels:
+ *  - B (basic) — preserves visual appearance
+ *  - A (accessible) — requires Tagged PDF (auto-enabled)
+ *  - U (Unicode, parts 2-3 only) — full Unicode mapping
  *
- * Caller must provide path к valid sRGB ICC profile. Common locations:
+ * Emission applies:
+ *  - PDF version 1.4
+ *  - /Metadata stream (XMP RDF) in Catalog
+ *  - /OutputIntents array with embedded ICC profile
+ *  - /Lang entry in Catalog
+ *  - Disables encryption (throws on `encrypt()` after `enablePdfA()`)
+ *
+ * Caller must supply a path to a valid sRGB ICC profile. Common sources:
  *  - macOS: /System/Library/ColorSync/Profiles/sRGB Profile.icc
  *  - Linux: /usr/share/color/icc/sRGB.icc
- *  - or download sRGB v2 IEC61966-2.1 profile (~3KB) from W3C / ICC.org.
+ *  - W3C / ICC.org distribute the ~3KB sRGB v2 IEC61966-2.1 profile
  *
- * Not enforced (compliance violation if violated):
- *  - Embedded fonts mandatory (standard 14 fonts могут fall validation).
- *  - No transparency (no ExtGState /ca < 1.0).
- *  - No JavaScript / external links к non-standard URIs.
- *  - No /EmbeddedFiles.
+ * Not enforced (violations break PDF/A but emission still succeeds):
+ *  - Embedded fonts mandatory (the standard 14 fonts fail validation)
+ *  - No transparency (no ExtGState /ca < 1.0)
+ *  - No JavaScript or external links to non-standard URIs
+ *  - No /EmbeddedFiles
  */
 final readonly class PdfAConfig
 {
@@ -41,7 +46,7 @@ final readonly class PdfAConfig
 
     public const CONFORMANCE_B = 'B';   // basic
 
-    public const CONFORMANCE_U = 'U';   // unicode (PDF/A-2 и 3)
+    public const CONFORMANCE_U = 'U';   // unicode (parts 2-3)
 
     public function __construct(
         public string $iccProfilePath,
@@ -49,7 +54,6 @@ final readonly class PdfAConfig
         public string $lang = 'en',
         public string $title = '',
         public string $author = '',
-        // Phase 103: PDF/A part и conformance level.
         public int $part = self::PART_1,
         public string $conformance = self::CONFORMANCE_B,
     ) {
@@ -57,7 +61,7 @@ final readonly class PdfAConfig
             throw new \InvalidArgumentException("ICC profile not readable: $iccProfilePath");
         }
         if (! in_array($part, [self::PART_1, self::PART_2, self::PART_3], true)) {
-            throw new \InvalidArgumentException('PDF/A part must be 1, 2, или 3');
+            throw new \InvalidArgumentException('PDF/A part must be 1, 2, or 3');
         }
         $validConformance = match ($part) {
             self::PART_1 => [self::CONFORMANCE_A, self::CONFORMANCE_B],
@@ -74,9 +78,7 @@ final readonly class PdfAConfig
     }
 
     /**
-     * Renders XMP metadata stream (XML с PDF/A + Dublin Core namespaces).
-     *
-     * Часть body required для PDF/A-1b — pdfaid:part=1, conformance=B.
+     * Render XMP metadata stream (XML with PDF/A + Dublin Core namespaces).
      */
     public function xmpMetadata(string $producer = 'dskripchenko/php-pdf'): string
     {

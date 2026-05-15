@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Стиль cell'а — padding, borders, background, vAlign + cell-level
- * width override.
+ * Table cell style — padding, borders, background, vertical alignment,
+ * and an optional cell-level width override.
  *
- * Mirror'ит php-docx CellStyle. Differences:
- *  - все размеры в pt (php-docx — twips)
- *  - widthPercent остаётся опциональным (0..100)
- *  - paddingTop/Right/Bottom/Left имеют default 2pt (visual breathing room)
+ * Sizes are in PDF points. Padding defaults give a small visual breathing
+ * room (2pt top/bottom, 4pt left/right). `widthPercent` (0..100) is an
+ * alternative to `widthPt` for percentage-based column widths.
  *
- * Все поля nullable / имеют defaults — позволяет inheritance через
- * TableStyle::defaultCellStyle.
+ * `cornerRadiusPt` applies only when all four borders are uniform; mixed
+ * borders fall back to square corners.
  */
 final readonly class CellStyle
 {
@@ -28,11 +27,6 @@ final readonly class CellStyle
         public VerticalAlignment $verticalAlign = VerticalAlignment::Top,
         public ?string $backgroundColor = null,
         public ?BorderSet $borders = null,
-        /**
-         * Border-radius (rounded corners) в pt. 0 = square corners.
-         * Применяется только когда borders uniform (все 4 стороны
-         * одинаковые); иначе fallback к square corners.
-         */
         public float $cornerRadiusPt = 0,
     ) {}
 

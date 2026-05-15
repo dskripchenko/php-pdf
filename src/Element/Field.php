@@ -7,23 +7,21 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Field — dynamic content placeholder, рассчитываемый Layout engine'ом.
+ * Dynamic content placeholder resolved by the layout engine.
  *
- * Common kinds:
- *  - PAGE      — current page number
- *  - NUMPAGES  — total pages count
- *  - DATE      — current date (формат через `:format`)
- *  - TIME      — current time
- *  - MERGEFIELD — placeholder для mail-merge replacement
+ * Supported kinds:
+ *  - PAGE       — current page number
+ *  - NUMPAGES   — total page count
+ *  - DATE       — current date (format string after the colon)
+ *  - TIME       — current time
+ *  - MERGEFIELD — mail-merge placeholder
  *
- * Format: `KIND` или `KIND:format-spec`. E.g.:
- *   - 'PAGE'
- *   - 'NUMPAGES'
- *   - 'DATE:dd.MM.yyyy'
- *   - 'MERGEFIELD:CustomerName'
+ * Instruction format is `KIND` or `KIND:format-spec`:
+ *   `PAGE`, `NUMPAGES`, `DATE:dd.MM.yyyy`, `MERGEFIELD:CustomerName`.
  *
- * Layout engine resolves PAGE/NUMPAGES в numbers, DATE/TIME в текущий
- * date/time в указанном формате, MERGEFIELD оставляет placeholder text.
+ * PAGE/NUMPAGES resolve to numbers, DATE/TIME format the current
+ * timestamp, MERGEFIELD is left as a placeholder for downstream
+ * substitution.
  */
 final readonly class Field implements InlineElement
 {
@@ -68,7 +66,7 @@ final readonly class Field implements InlineElement
     }
 
     /**
-     * Field type без формата (PAGE, DATE и т.д.).
+     * Field kind without the format spec (PAGE, DATE, etc.).
      */
     public function kind(): string
     {
@@ -78,7 +76,7 @@ final readonly class Field implements InlineElement
     }
 
     /**
-     * Format-параметр (после двоеточия), или пустая строка.
+     * Format spec (substring after the colon), or empty string.
      */
     public function format(): string
     {

@@ -5,15 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * ListItem — один элемент списка.
- *
- * $children: list<BlockElement> — content (обычно Paragraph'ы, могут
- * быть Image/нестед Table).
- *
- * $nestedList: опциональный sub-ListNode для вложенных списков.
- * Renders сразу после children с увеличенным indent'ом.
- *
- * ListItem сам не BlockElement — живёт только внутри ListNode.
+ * Single list entry. `$children` holds the item body (usually paragraphs,
+ * sometimes images or nested tables). `$nestedList`, when present, renders
+ * after `$children` at the next indent level. ListItem is not a
+ * BlockElement — it only lives inside ListNode.
  */
 final readonly class ListItem
 {

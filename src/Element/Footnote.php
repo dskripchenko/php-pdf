@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Phase 40: Footnote / endnote inline element.
+ * Footnote / endnote inline element.
  *
- * Inline marker (auto-numbered superscript) in text flow; footnote
- * content collected per-section и rendered как endnotes block после
- * body. True page-bottom footnotes (с per-page reserved zone) — deferred.
+ * Inserts an auto-numbered superscript marker into the text flow at the
+ * footnote position. Content is collected per section and rendered either
+ * as an endnotes block at the end of the section body, or at each page
+ * bottom when `Section::$footnoteBottomReservedPt` is set.
  *
- * Auto-numbering: footnotes в section numbered 1..N в порядке встречи.
+ * Footnotes are numbered sequentially (1..N) within a section in the
+ * order encountered during layout.
  */
 final readonly class Footnote implements InlineElement
 {

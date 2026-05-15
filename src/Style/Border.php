@@ -5,24 +5,21 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Style;
 
 /**
- * Один edge'овый border (paragraph/cell/table).
+ * Single-edge border (paragraph, cell, or table).
  *
- * Размер — в восьмых пункта (1/8 pt) per OOXML convention. CSS px-style
- * coverter в Layout engine'е.
- *
- * Цвет — RGB hex без `#`, lowercase (`14b8a6`).
+ * Size is stored in eighths of a point (OOXML convention); default 4 = 0.5pt.
+ * Color is RGB hex without `#`, lowercase (e.g. `'14b8a6'`).
  */
 final readonly class Border
 {
     public function __construct(
         public BorderStyle $style = BorderStyle::Single,
-        public int $sizeEighthsOfPoint = 4,  // = 0.5 pt
+        public int $sizeEighthsOfPoint = 4,
         public string $color = '000000',
     ) {}
 
     /**
-     * Convenience: convert size в pt (для использования в PDF stroke
-     * width).
+     * Border width in points (PDF stroke width unit).
      */
     public function widthPt(): float
     {

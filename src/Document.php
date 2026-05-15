@@ -7,87 +7,80 @@ namespace Dskripchenko\PhpPdf;
 use Dskripchenko\PhpPdf\Layout\Engine;
 
 /**
- * Document — AST root для high-level API.
+ * High-level PDF document — immutable AST root.
  *
- * Immutable VO. Содержит одну Section с body content и page setup.
- * Multi-section с разными paper sizes не поддерживается в v0.1.
+ * Holds one primary Section plus optional additional sections. Rendering
+ * goes through Layout\Engine which produces Pdf\Document bytes.
  *
- * Сериализация в PDF bytes происходит через Layout\Engine, который
- * выполняет walk over AST + использует Phase 2 font infrastructure
- * для рендеринга text/images/lines на абсолютные координаты в Pdf\Document.
+ * Use `toBytes()` for in-memory output, `toStream()` for streaming output
+ * to a resource (memory-efficient for large documents), or `toFile()` for
+ * direct file output.
  *
- * Convenience: `toBytes()` использует default Engine (Helvetica fallback).
- * Для рендера с embedded TTF font'ом и custom settings'ами — передавать
- * Engine явно.
+ * `fromHtml()` is a convenience factory that parses HTML5 markup with
+ * inline CSS into a Document. See `Html\HtmlParser` for supported tags.
  */
 final readonly class Document
 {
     /**
-     * @param  array<string, string>  $metadata  PDF /Info dict fields
-     *                                            (Title, Author, Subject,
-     *                                            Keywords, Creator, Producer).
-     * @param  list<Section>  $additionalSections  Phase 34: extra sections,
-     *                                              rendered after primary
-     *                                              section. Каждая создаёт
-     *                                              forced page break + переход
-     *                                              на её PageSetup / header /
-     *                                              footer / watermark.
+     * @param  array<string, string>  $metadata  PDF /Info dict fields:
+     *                                            Title, Author, Subject,
+     *                                            Keywords, Creator, Producer.
+     * @param  list<Section>  $additionalSections  Extra sections rendered
+     *                                              after the primary one.
+     *                                              Each starts on a new page
+     *                                              with its own PageSetup,
+     *                                              header, footer, watermark.
      */
     public function __construct(
         public Section $section,
         public array $metadata = [],
         public array $additionalSections = [],
-        /** Phase 48: enable Tagged PDF (accessibility) при emission. */
+        /** Enable Tagged PDF (accessibility) during emission. */
         public bool $tagged = false,
         /**
-         * Phase 89: Document language hint (BCP 47 language tag — e.g. 'en',
-         * 'ru', 'en-US'). Emitted as /Lang в Catalog. PDF/UA requires
-         * this entry для tagged documents — screen readers used для
-         * default speech locale.
+         * Document language hint (BCP 47 tag — e.g. 'en', 'ru', 'en-US').
+         * Emitted as /Lang in Catalog. Required by PDF/UA for tagged
+         * documents — used by screen readers as default speech locale.
          */
         public ?string $lang = null,
         /**
-         * Phase 208: emit xref как PDF 1.5 XRef stream object instead of
-         * classic `xref...trailer` table. Saves ~50% metadata bytes для
-         * large object counts. Не compatible с PKCS#7 signing — fallback
-         * к classic xref when signature configured.
+         * Emit cross-reference table as a PDF 1.5 XRef stream object instead
+         * of the classic `xref...trailer` keywords. Reduces metadata size by
+         * ~50%. Falls back to classic xref when PKCS#7 signing is configured.
          */
         public bool $useXrefStream = false,
         /**
-         * Phase 210: target PDF version (header `%PDF-X.Y`). Defaults к null
-         * — Engine uses its default (`'1.7'`), и subsystems auto-bump if
-         * required (AES-128 → 1.6, AES-256 → 1.7, PDF 2.0 features → 2.0,
-         * XRef stream → 1.5). Set explicitly если требуется compatibility
-         * older readers (e.g., '1.4' для legacy printer firmware).
+         * Target PDF version (header `%PDF-X.Y`). Null lets the engine pick a
+         * default (1.7) with auto-bumps when subsystems require it
+         * (AES-128 → 1.6, AES-256 → 1.7, PDF 2.0 features → 2.0, XRef stream
+         * → 1.5). Set explicitly for legacy reader compatibility (e.g. '1.4').
          */
         public ?string $pdfVersion = null,
         /**
-         * Phase 214: emit Object Streams (PDF 1.5+) — pack uncompressed dict
-         * objects в single FlateDecode-compressed stream. Saves additional
-         * ~15-30% output size beyond XRef streams. Auto-enables `useXrefStream`.
-         * Не compatible с PKCS#7 signing / encryption.
+         * Emit Object Streams (PDF 1.5+) — pack uncompressed dict objects
+         * into a single FlateDecode-compressed stream. Saves ~15-30% output
+         * size beyond XRef streams. Auto-enables `useXrefStream`. Disabled
+         * automatically when signing or encrypting.
          */
         public bool $useObjectStreams = false,
         /**
-         * Phase 217: declarative encryption setup. Null = no encryption.
-         * Otherwise applies password, permissions, algorithm via
-         * Pdf\Document::encrypt() during emission.
+         * Declarative encryption. Null = no encryption. Otherwise applies
+         * password, permissions, and algorithm during emission.
          */
         public ?EncryptionParams $encryption = null,
         /**
-         * Phase 217: declarative PKCS#7 detached signing. Requires AcroForm
-         * с signature placeholder field. Null = no signing.
+         * Declarative PKCS#7 detached signing. Requires an AcroForm with a
+         * signature placeholder field. Null = no signing.
          */
         public ?\Dskripchenko\PhpPdf\Pdf\SignatureConfig $signature = null,
         /**
-         * Phase 217: declarative PDF/A conformance. Null = no PDF/A
-         * enforcement. Otherwise applies enablePdfA() during emission
-         * (auto-enables Tagged PDF при conformance='A').
+         * Declarative PDF/A conformance. Null = no PDF/A. Applying
+         * conformance='A' auto-enables Tagged PDF.
          */
         public ?\Dskripchenko\PhpPdf\Pdf\PdfAConfig $pdfA = null,
         /**
-         * Phase 225: declarative PDF/X-1a/X-3/X-4 print conformance.
-         * Mutually exclusive с pdfA + encryption.
+         * Declarative PDF/X-1a/X-3/X-4 print conformance. Mutually exclusive
+         * with `pdfA` and `encryption`.
          */
         public ?\Dskripchenko\PhpPdf\Pdf\PdfXConfig $pdfX = null,
     ) {}
@@ -101,19 +94,90 @@ final readonly class Document
     }
 
     /**
-     * Phase 223: Merge multiple Documents в single output (batch use case).
+     * Parse HTML markup and wrap it in a Document.
      *
-     * Sections concatenated в order (с natural section breaks → new page
-     * per section's PageSetup). Metadata inherited от first non-empty
-     * source; Document-level flags (tagged, useXrefStream, encryption etc.)
-     * также от first document.
+     * Supported HTML5 subset:
+     *  - Block tags: p, div, section, article, h1-h6, hr, ul/ol/li,
+     *    table/tr/td/th (with thead/tbody/tfoot wrappers), blockquote, pre,
+     *    header, footer, nav, aside, main, figure, figcaption, address,
+     *    details/summary, dl/dt/dd, center
+     *  - Inline tags: span, b/strong, i/em, u, s/strike/del, sup/sub, br,
+     *    wbr, img, picture, a, font, svg, code, kbd, samp, tt, var, mark,
+     *    small, big, ins, cite, dfn, q, abbr
+     *  - Inline CSS via the `style` attribute: color, background-color,
+     *    font-size, font-family, font-weight, font-style, text-decoration,
+     *    text-transform, letter-spacing
+     *  - Block CSS: text-align, margin, padding, line-height, text-indent,
+     *    border (shorthand and per-side)
      *
-     * Use case: generate per-invoice/per-record Documents в loop, then
-     * concat для single combined PDF.
+     * Not supported: external CSS, `<style>` blocks, complex selectors,
+     * `@media` queries, JavaScript, forms, absolute/floats. Preprocess via
+     * an external CSS inliner (e.g. tijsverkoyen/css-to-inline-styles) to
+     * convert `<style>` blocks to inline before parsing.
      *
-     * Example:
-     *   $combined = Document::concat([\$doc1, \$doc2, \$doc3]);
-     *   \$combined->toFile('combined.pdf');
+     * @param  string  $html  HTML markup. No outer `<html>/<body>` wrapper required.
+     * @param  array<string, string>  $metadata  Optional /Info fields.
+     */
+    public static function fromHtml(
+        string $html,
+        array $metadata = [],
+        ?Section $sectionTemplate = null,
+        bool $tagged = false,
+        ?string $lang = null,
+        bool $useXrefStream = false,
+        ?string $pdfVersion = null,
+        bool $useObjectStreams = false,
+        ?EncryptionParams $encryption = null,
+        ?\Dskripchenko\PhpPdf\Pdf\SignatureConfig $signature = null,
+        ?\Dskripchenko\PhpPdf\Pdf\PdfAConfig $pdfA = null,
+    ): self {
+        $parser = new \Dskripchenko\PhpPdf\Html\HtmlParser;
+        $blocks = $parser->parse($html);
+
+        if ($sectionTemplate !== null) {
+            // Preserve template's page setup, headers, footers, watermark;
+            // replace body with parsed blocks.
+            $section = new Section(
+                body: $blocks,
+                pageSetup: $sectionTemplate->pageSetup,
+                headerBlocks: $sectionTemplate->headerBlocks,
+                footerBlocks: $sectionTemplate->footerBlocks,
+                watermarkText: $sectionTemplate->watermarkText,
+                firstPageHeaderBlocks: $sectionTemplate->firstPageHeaderBlocks,
+                firstPageFooterBlocks: $sectionTemplate->firstPageFooterBlocks,
+                watermarkImage: $sectionTemplate->watermarkImage,
+                watermarkImageWidthPt: $sectionTemplate->watermarkImageWidthPt,
+                watermarkImageOpacity: $sectionTemplate->watermarkImageOpacity,
+                watermarkTextOpacity: $sectionTemplate->watermarkTextOpacity,
+            );
+        } else {
+            $section = new Section($blocks);
+        }
+
+        return new self(
+            section: $section,
+            metadata: $metadata,
+            tagged: $tagged,
+            lang: $lang,
+            useXrefStream: $useXrefStream,
+            pdfVersion: $pdfVersion,
+            useObjectStreams: $useObjectStreams,
+            encryption: $encryption,
+            signature: $signature,
+            pdfA: $pdfA,
+        );
+    }
+
+    /**
+     * Merge multiple Documents into a single output (batch generation case).
+     *
+     * Sections are concatenated in order. Each section keeps its own
+     * PageSetup, producing natural section breaks between sources.
+     * Document-level configuration (metadata, tagged, useXrefStream, etc.)
+     * is inherited from the first input; subsequent documents' top-level
+     * settings are ignored.
+     *
+     * @param  list<self>  $documents
      */
     public static function concat(array $documents): self
     {
@@ -149,84 +213,18 @@ final readonly class Document
     }
 
     /**
-     * Phase 219: Convenience factory — parse HTML и wrap в Document.
-     *
-     * Supports HTML5 subset:
-     *  - Block tags: p, div, section, article, h1-h6, hr, ul/ol/li,
-     *    table/tr/td/th (с thead/tbody/tfoot wrappers), blockquote, pre
-     *  - Inline: span, b/strong, i/em, u, s/strike/del, sup/sub, br, img, a
-     *  - Inline CSS via style="" attribute (color, font-family, font-size,
-     *    font-weight, font-style, text-decoration, letter-spacing,
-     *    background-color)
-     *
-     * NOT supported: external CSS, <style>, complex selectors, JS, forms.
-     * Preprocess HTML через external CSS inliner (tijsverkoyen/css-to-
-     * inline-styles) если нужна <style>-blocks или class-based styling.
-     *
-     * @param  string  $html  HTML markup (no <html>/<body> wrapper required)
-     * @param  array<string, string>  $metadata  Optional /Info fields
+     * Render the document and return its raw PDF bytes.
      */
-    public static function fromHtml(
-        string $html,
-        array $metadata = [],
-        ?Section $sectionTemplate = null,
-        bool $tagged = false,
-        ?string $lang = null,
-        bool $useXrefStream = false,
-        ?string $pdfVersion = null,
-        bool $useObjectStreams = false,
-        ?EncryptionParams $encryption = null,
-        ?\Dskripchenko\PhpPdf\Pdf\SignatureConfig $signature = null,
-        ?\Dskripchenko\PhpPdf\Pdf\PdfAConfig $pdfA = null,
-    ): self {
-        $parser = new \Dskripchenko\PhpPdf\Html\HtmlParser;
-        $blocks = $parser->parse($html);
-
-        if ($sectionTemplate !== null) {
-            // Preserve template's page setup / headers / footers / watermark,
-            // override body с parsed blocks.
-            $section = new Section(
-                body: $blocks,
-                pageSetup: $sectionTemplate->pageSetup,
-                headerBlocks: $sectionTemplate->headerBlocks,
-                footerBlocks: $sectionTemplate->footerBlocks,
-                watermarkText: $sectionTemplate->watermarkText,
-                firstPageHeaderBlocks: $sectionTemplate->firstPageHeaderBlocks,
-                firstPageFooterBlocks: $sectionTemplate->firstPageFooterBlocks,
-                watermarkImage: $sectionTemplate->watermarkImage,
-                watermarkImageWidthPt: $sectionTemplate->watermarkImageWidthPt,
-                watermarkImageOpacity: $sectionTemplate->watermarkImageOpacity,
-                watermarkTextOpacity: $sectionTemplate->watermarkTextOpacity,
-            );
-        } else {
-            $section = new Section($blocks);
-        }
-
-        return new self(
-            section: $section,
-            metadata: $metadata,
-            tagged: $tagged,
-            lang: $lang,
-            useXrefStream: $useXrefStream,
-            pdfVersion: $pdfVersion,
-            useObjectStreams: $useObjectStreams,
-            encryption: $encryption,
-            signature: $signature,
-            pdfA: $pdfA,
-        );
-    }
-
     public function toBytes(?Engine $engine = null): string
     {
         return $this->prepare($engine)->toBytes();
     }
 
     /**
-     * Phase 216: streaming output — emits PDF к writable stream resource без
-     * accumulating full document в memory string. Use case: large documents,
-     * HTTP response (php://output), file uploads.
+     * Render the document directly to a writable stream resource. Avoids
+     * accumulating the entire output in memory.
      *
-     * @param  resource  $stream  Writable stream resource (fopen, php://memory etc).
+     * @param  resource  $stream
      * @return int  Bytes written.
      */
     public function toStream($stream, ?Engine $engine = null): int
@@ -234,11 +232,15 @@ final readonly class Document
         return $this->prepare($engine)->toStream($stream);
     }
 
+    /**
+     * Render the document directly to a file. Uses streaming output
+     * internally for memory efficiency.
+     */
     public function toFile(string $path, ?Engine $engine = null): int
     {
         $fp = @fopen($path, 'wb');
         if ($fp === false) {
-            throw new \RuntimeException('Failed to open PDF file для writing: '.$path);
+            throw new \RuntimeException('Failed to open PDF file for writing: '.$path);
         }
         try {
             return $this->toStream($fp, $engine);
@@ -248,8 +250,11 @@ final readonly class Document
     }
 
     /**
-     * Phase 216: shared preparation — runs Engine + applies metadata/xref/objstm
-     * flags. Returns ready-to-emit Pdf\Document.
+     * Run the layout engine and apply post-render flags (metadata, xref
+     * stream, object streams, encryption, signing, PDF/A, PDF/X).
+     *
+     * PDF/A and PDF/X must be applied before encryption — they enforce
+     * mutual exclusion via LogicException.
      */
     private function prepare(?Engine $engine): \Dskripchenko\PhpPdf\Pdf\Document
     {
@@ -268,12 +273,9 @@ final readonly class Document
                 producer: $this->metadata['Producer'] ?? null,
             );
         }
-        // Phase 217: PDF/A must apply ДО encryption (PDF/A disallows encryption,
-        // throws при wrong order).
         if ($this->pdfA !== null) {
             $pdf->enablePdfA($this->pdfA);
         }
-        // Phase 225: PDF/X — same rule, must apply до encryption.
         if ($this->pdfX !== null) {
             $pdf->enablePdfX($this->pdfX);
         }

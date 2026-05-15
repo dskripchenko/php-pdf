@@ -7,8 +7,8 @@ namespace Dskripchenko\PhpPdf\Element;
 /**
  * Horizontal rule — full-width line separator (HTML `<hr>`).
  *
- * Layout engine рендерит как 0.5pt серую линию на всю content-width,
- * с small spacing выше/ниже.
+ * The layout engine renders this as a 0.5pt gray line spanning the
+ * content width, with a small vertical margin above and below.
  */
 final readonly class HorizontalRule implements BlockElement
 {
