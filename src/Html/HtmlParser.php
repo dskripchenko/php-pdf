@@ -187,15 +187,23 @@ final class HtmlParser
                     $blocks[] = $block;
                 }
             } elseif ($this->isBlockImage($node)) {
-                // <img> с явным block-context (например, выпадает на top level
-                // без wrapping <p>). Wrap pending inlines + emit image as block.
+                // <img> или <svg> с явным block-context. Wrap pending inlines +
+                // emit как block.
                 if ($pendingInlines !== []) {
                     $blocks[] = new Paragraph($pendingInlines);
                     $pendingInlines = [];
                 }
-                $img = $this->parseImage($node);
-                if ($img !== null) {
-                    $blocks[] = $img;
+                $tag = strtolower($node->nodeName);
+                if ($tag === 'svg') {
+                    $svg = $this->parseInlineSvg($node);
+                    if ($svg !== null) {
+                        $blocks[] = $svg;
+                    }
+                } else {
+                    $img = $this->parseImage($node);
+                    if ($img !== null) {
+                        $blocks[] = $img;
+                    }
                 }
             } else {
                 $inlines = $this->walkInlines($node);
@@ -250,7 +258,7 @@ final class HtmlParser
     private function isBlockImage(\DOMNode $node): bool
     {
         return $node instanceof \DOMElement
-            && strtolower($node->nodeName) === 'img';
+            && (strtolower($node->nodeName) === 'img' || strtolower($node->nodeName) === 'svg');
     }
 
     private function parseBlock(\DOMElement $node): ?BlockElement
@@ -859,6 +867,12 @@ final class HtmlParser
 
             return $img !== null ? [$img] : [];
         }
+        // Phase 236: inline <svg> — extract outerHTML и wrap в SvgElement.
+        if ($tag === 'svg') {
+            $svg = $this->parseInlineSvg($node);
+
+            return $svg !== null ? [$svg] : [];
+        }
 
         // Anchor — wraps inner inlines.
         if ($tag === 'a') {
@@ -1040,6 +1054,49 @@ final class HtmlParser
         }
 
         return [Hyperlink::external($href, $children)];
+    }
+
+    /**
+     * Phase 236: parse inline <svg> element — extract outerHTML via DOM
+     * serialization, wrap в SvgElement.
+     */
+    private function parseInlineSvg(\DOMElement $node): ?\Dskripchenko\PhpPdf\Element\SvgElement
+    {
+        $svgXml = $node->ownerDocument?->saveXML($node);
+        if ($svgXml === false || $svgXml === null) {
+            return null;
+        }
+        // Width/height from attributes. Per SVG-in-HTML spec, unitless
+        // values treated as px (we convert к pt: 1px = 0.75pt @ 96 DPI).
+        $widthPt = $this->parseSvgDimension($node->getAttribute('width')) ?? 100.0;
+        $heightPt = $this->parseSvgDimension($node->getAttribute('height')) ?? 100.0;
+
+        try {
+            return new \Dskripchenko\PhpPdf\Element\SvgElement(
+                svgXml: $svgXml,
+                widthPt: $widthPt,
+                heightPt: $heightPt,
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Phase 236: parse SVG dimension attribute. Unitless = px (per SVG spec
+     * in HTML context), explicit units honored via parseLengthOrNull.
+     */
+    private function parseSvgDimension(string $value): ?float
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+        if (preg_match('/^([\d.]+)$/', $value, $m)) {
+            return (float) $m[1] * 0.75; // px → pt
+        }
+
+        return $this->parseLengthOrNull($value);
     }
 
     /**
