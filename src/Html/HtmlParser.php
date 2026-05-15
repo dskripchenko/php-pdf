@@ -172,6 +172,15 @@ final class HtmlParser
 
                     continue;
                 }
+                // Phase 235: <details><summary> — summary as bold heading,
+                // content as indented block sequence.
+                if ($tag === 'details') {
+                    foreach ($this->parseDetails($node) as $b) {
+                        $blocks[] = $b;
+                    }
+
+                    continue;
+                }
 
                 $block = $this->parseBlock($node);
                 if ($block !== null) {
@@ -233,6 +242,8 @@ final class HtmlParser
             'figure', 'figcaption',
             // Phase 230: legacy block.
             'center',
+            // Phase 235: address (semantic block), details (collapsible).
+            'address', 'details',
         ], true);
     }
 
@@ -255,10 +266,99 @@ final class HtmlParser
             'table' => $this->parseTable($node),
             // Phase 230: legacy <center> — convert к Paragraph с Alignment::Center.
             'center' => $this->parseCenterBlock($node),
-            // 'dl' и semantic containers handled inline в walkBlocks
+            // Phase 235: <address> — italic paragraph (HTML5 spec semantics).
+            'address' => $this->parseAddressBlock($node),
+            // 'dl', 'details', semantic containers handled inline в walkBlocks
             // (multi-block flatten).
             default => null,
         };
+    }
+
+    /**
+     * Phase 235: <address> — italic paragraph для contact info.
+     */
+    private function parseAddressBlock(\DOMElement $node): Paragraph
+    {
+        $inlines = [];
+        foreach ($node->childNodes as $child) {
+            $inlines = array_merge($inlines, $this->walkInlines($child));
+        }
+        $italicized = array_map(
+            fn ($i) => $i instanceof Run
+                ? new Run($i->text, $i->style->withItalic())
+                : $i,
+            $inlines,
+        );
+
+        return new Paragraph($italicized);
+    }
+
+    /**
+     * Phase 235: <details> с optional <summary> — render summary as bold
+     * paragraph, then content as indented block sequence.
+     *
+     * Note: collapsibility не reproducible в static PDF — output always
+     * shows полностью expanded content.
+     *
+     * @return list<BlockElement>
+     */
+    private function parseDetails(\DOMElement $node): array
+    {
+        $blocks = [];
+        $summaryFound = false;
+        foreach ($node->childNodes as $child) {
+            if ($child instanceof \DOMElement && strtolower($child->nodeName) === 'summary') {
+                $summaryFound = true;
+                $inlines = [];
+                foreach ($child->childNodes as $inner) {
+                    $inlines = array_merge($inlines, $this->walkInlines($inner));
+                }
+                $bolded = array_map(
+                    fn ($i) => $i instanceof Run
+                        ? new Run($i->text, $i->style->withBold())
+                        : $i,
+                    $inlines,
+                );
+                $blocks[] = new Paragraph(
+                    $bolded,
+                    style: new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
+                        spaceBeforePt: 6.0,
+                        spaceAfterPt: 4.0,
+                    ),
+                );
+            } elseif ($this->isBlockTag($child)) {
+                $childBlock = $this->parseBlock($child);
+                if ($childBlock !== null) {
+                    $blocks[] = $this->indentBlock($childBlock, 16.0);
+                }
+            }
+            // Inline text children of details — collected пока пропускаем
+            // (details обычно содержит block content).
+        }
+        if (! $summaryFound) {
+            // Fallback "Details" prefix.
+            $blocks = array_merge(
+                [new Paragraph([new Run('Details', new \Dskripchenko\PhpPdf\Style\RunStyle(bold: true))])],
+                $blocks,
+            );
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * Add left indent к existing paragraph block (для details content).
+     */
+    private function indentBlock(BlockElement $block, float $indentPt): BlockElement
+    {
+        if (! $block instanceof Paragraph) {
+            return $block; // Heading/Table — no indent helper
+        }
+        $newStyle = $block->style->copy(
+            indentLeftPt: $block->style->indentLeftPt + $indentPt,
+        );
+
+        return new Paragraph($block->children, $newStyle);
     }
 
     /**
@@ -741,8 +841,21 @@ final class HtmlParser
         if ($tag === 'br') {
             return [new LineBreak];
         }
+        // Phase 235: <wbr> — word break opportunity (soft hyphen-like marker).
+        // Render as U+00AD soft hyphen char.
+        if ($tag === 'wbr') {
+            return [new Run("\u{00AD}", $this->currentStyle())];
+        }
         if ($tag === 'img') {
             $img = $this->parseImage($node);
+
+            return $img !== null ? [$img] : [];
+        }
+        // Phase 235: <picture> — emit first descendant <img> as fallback.
+        // libxml may nest <img> inside <source> (since <source> isn't
+        // void-closed без </source>), so search recursively.
+        if ($tag === 'picture') {
+            $img = $this->findFirstImg($node);
 
             return $img !== null ? [$img] : [];
         }
@@ -927,6 +1040,24 @@ final class HtmlParser
         }
 
         return [Hyperlink::external($href, $children)];
+    }
+
+    /**
+     * Phase 235: recursive search для first <img> descendant.
+     */
+    private function findFirstImg(\DOMNode $node): ?Image
+    {
+        if ($node instanceof \DOMElement && strtolower($node->nodeName) === 'img') {
+            return $this->parseImage($node);
+        }
+        foreach ($node->childNodes as $child) {
+            $found = $this->findFirstImg($child);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+
+        return null;
     }
 
     private function parseImage(\DOMElement $node): ?Image
