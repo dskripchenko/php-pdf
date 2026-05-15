@@ -2,7 +2,7 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-236
+## v1.6.0-dev (unreleased) — Phases 214-237
 
 Major dev cycle: HTML input + PDF output optimization + layout enhancements
 + barcode coverage + API ergonomics + print conformance.
@@ -34,6 +34,12 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
   fallback to first descendant `<img>`.
 - Phase 236: inline `<svg>` support — extracts outerHTML via DOM
   serialization, wraps в SvgElement, supports px/unit conversions.
+
+### Barcodes (additional)
+- Phase 237: DataMatrix 144×144 — largest standard ECC 200 symbol size.
+  ZXing-verified parameters: 1558 data + 620 ECC, 36 regions of 22×22
+  modules, 10 RS blocks с uneven 8×156 + 2×155 distribution через
+  round-robin interleaving.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
@@ -72,7 +78,7 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
   VO + `Pdf\Document::enablePdfX()` + Document constructor `pdfX` param.
   Emits /S /GTS_PDFX OutputIntent + /Trapped key + pdfx: XMP markers.
 
-**Tests:** 1683 → 1956 (+273 new tests across 23-phase batch).
+**Tests:** 1683 → 1966 (+283 new tests across 24-phase batch).
 
 ## v1.5.0 — 2026-05-14
 

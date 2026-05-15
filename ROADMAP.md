@@ -18,8 +18,10 @@ Production-ready. Active backlog: v1.6+ scope items.
 - **QR V11-V40 large versions** — ~120 ECC_PARAMS entries + extended
   ALIGN_POSITIONS data tables. Risk: numerical entry без real QR decoder
   для validation. Нужен ZXing source или ISO 18004 Annex D PDF.
-- **DataMatrix 144×144** — special interleaved layout (different placement
-  algorithm от standard square sizes).
+- ~~DataMatrix 144×144~~ ✅ **Phase 237 closed**. Added к SYMBOLS table
+  с explicit blockCountOverride (10 blocks) — round-robin interleaving
+  naturally handles uneven distribution (8×156 + 2×155 data per block).
+  Existing 36-region infrastructure used as-is.
 - **Aztec Rune mode** — single-character symbol variant, 11×11 fixed format.
   XOR mask spec uncertain.
 - ~~Aztec Structured Append~~ ✅ **Phase 221 closed** (ISO 24778 §8.4 —
