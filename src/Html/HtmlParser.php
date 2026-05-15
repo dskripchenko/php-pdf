@@ -152,6 +152,17 @@ final class HtmlParser
 
                     continue;
                 }
+                // Phase 233: <table> caption — extract first child <caption>
+                // и prepend as separate centered/bold paragraph.
+                if ($tag === 'table') {
+                    $captionBlock = $this->extractTableCaption($node);
+                    if ($captionBlock !== null) {
+                        $blocks[] = $captionBlock;
+                    }
+                    $blocks[] = $this->parseTable($node);
+
+                    continue;
+                }
 
                 $block = $this->parseBlock($node);
                 if ($block !== null) {
@@ -602,9 +613,45 @@ final class HtmlParser
                     }
                 }
             }
+            // <caption> и <colgroup> skipped — caption extracted separately
+            // (Phase 233 в walkBlocks); colgroup not yet supported.
         }
 
         return new Table($rows);
+    }
+
+    /**
+     * Phase 233: extract `<caption>` from `<table>` если present, render as
+     * centered bold paragraph (rendered before table). Returns null если
+     * no caption.
+     */
+    private function extractTableCaption(\DOMElement $tableNode): ?Paragraph
+    {
+        foreach ($tableNode->childNodes as $child) {
+            if ($child instanceof \DOMElement && strtolower($child->nodeName) === 'caption') {
+                $inlines = [];
+                foreach ($child->childNodes as $inner) {
+                    $inlines = array_merge($inlines, $this->walkInlines($inner));
+                }
+                // Bold + centered.
+                $boldedInlines = array_map(
+                    fn ($i) => $i instanceof Run
+                        ? new Run($i->text, $i->style->withBold())
+                        : $i,
+                    $inlines,
+                );
+
+                return new Paragraph(
+                    $boldedInlines,
+                    style: new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
+                        alignment: \Dskripchenko\PhpPdf\Style\Alignment::Center,
+                        spaceAfterPt: 4.0,
+                    ),
+                );
+            }
+        }
+
+        return null;
     }
 
     private function parseTableRow(\DOMElement $tr): Row
