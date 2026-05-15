@@ -1175,9 +1175,11 @@ final class Document
 
             // Phase 220: /Parent points к immediate parent (root или intermediate).
             $parentId = $pageTree['parentOf'][$i];
+            // Phase 226: optional /Tabs entry для form field tab navigation.
+            $tabsRef = $page->tabOrder() !== null ? ' /Tabs /'.$page->tabOrder() : '';
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
-                .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s%s >>',
+                .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s%s%s >>',
                 $parentId,
                 $this->fmt($page->widthPt()),
                 $this->fmt($page->heightPt()),
@@ -1190,6 +1192,7 @@ final class Document
                 $rotateRef,
                 $boxRef,
                 $aaRef,
+                $tabsRef,
             ));
         }
 

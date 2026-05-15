@@ -208,6 +208,32 @@ final class Page
     }
 
     /**
+     * Phase 226: form field tab navigation order. Affects Tab key cycling
+     * через AcroForm widgets + links на page.
+     *
+     * Values per PDF spec §12.5:
+     *  - 'R' (row): top-to-bottom, left-to-right (visual default)
+     *  - 'C' (column): left-to-right, top-to-bottom by column
+     *  - 'S' (structure): follow Tagged PDF struct tree (PDF/UA recommends)
+     */
+    private ?string $tabOrder = null;
+
+    public function setTabOrder(string $order): self
+    {
+        if (! in_array($order, ['R', 'C', 'S'], true)) {
+            throw new \InvalidArgumentException("Tab order must be 'R', 'C' или 'S', got '$order'");
+        }
+        $this->tabOrder = $order;
+
+        return $this;
+    }
+
+    public function tabOrder(): ?string
+    {
+        return $this->tabOrder;
+    }
+
+    /**
      * Phase 85: Set page transition effect.
      *
      * @param  string  $style  'Split'|'Blinds'|'Box'|'Wipe'|'Dissolve'|'Glitter'|'Fly'|'Push'|'Cover'|'Uncover'|'Fade'|'R'
