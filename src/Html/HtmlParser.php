@@ -56,6 +56,14 @@ final class HtmlParser
     private ?string $linkHref = null;
 
     /**
+     * Phase 234: text-transform stack. Each entry: 'none' | 'uppercase' |
+     * 'lowercase' | 'capitalize'. Applied к Run text при создании.
+     *
+     * @var list<string>
+     */
+    private array $textTransformStack = [];
+
+    /**
      * Parse HTML string → list of BlockElements.
      *
      * @return list<BlockElement>
@@ -74,6 +82,7 @@ final class HtmlParser
             return [];
         }
         $this->styleStack = [new RunStyle];
+        $this->textTransformStack = ['none'];
 
         return $this->walkBlocks($root);
     }
@@ -313,9 +322,20 @@ final class HtmlParser
 
     private function parseParagraph(\DOMElement $node): Paragraph
     {
-        $inlines = [];
-        foreach ($node->childNodes as $child) {
-            $inlines = array_merge($inlines, $this->walkInlines($child));
+        // Phase 234: block-level text-transform via push к stack.
+        $blockTransform = $this->cssTextTransform($node);
+        if ($blockTransform !== null) {
+            $this->textTransformStack[] = $blockTransform;
+        }
+        try {
+            $inlines = [];
+            foreach ($node->childNodes as $child) {
+                $inlines = array_merge($inlines, $this->walkInlines($child));
+            }
+        } finally {
+            if ($blockTransform !== null) {
+                array_pop($this->textTransformStack);
+            }
         }
 
         $style = $this->parseBlockCssStyle($node);
@@ -325,9 +345,20 @@ final class HtmlParser
 
     private function parseHeading(\DOMElement $node, int $level): Heading
     {
-        $inlines = [];
-        foreach ($node->childNodes as $child) {
-            $inlines = array_merge($inlines, $this->walkInlines($child));
+        // Phase 234: same block-level transform support.
+        $blockTransform = $this->cssTextTransform($node);
+        if ($blockTransform !== null) {
+            $this->textTransformStack[] = $blockTransform;
+        }
+        try {
+            $inlines = [];
+            foreach ($node->childNodes as $child) {
+                $inlines = array_merge($inlines, $this->walkInlines($child));
+            }
+        } finally {
+            if ($blockTransform !== null) {
+                array_pop($this->textTransformStack);
+            }
         }
 
         $style = $this->parseBlockCssStyle($node);
@@ -694,6 +725,8 @@ final class HtmlParser
             if ($text === '') {
                 return [];
             }
+            // Phase 234: apply current text-transform.
+            $text = $this->applyTextTransform($text);
 
             return [new Run($text, $this->currentStyle())];
         }
@@ -728,7 +761,11 @@ final class HtmlParser
         $newStyle = $this->styleForTag($this->currentStyle(), $tag);
         $newStyle = $this->applyInlineCssStyle($newStyle, $node);
 
+        // Phase 234: text-transform per-tag pushed к stack.
+        $newTransform = $this->cssTextTransform($node) ?? $this->currentTransform();
+
         $this->styleStack[] = $newStyle;
+        $this->textTransformStack[] = $newTransform;
         try {
             $result = [];
             foreach ($node->childNodes as $child) {
@@ -738,7 +775,47 @@ final class HtmlParser
             return $result;
         } finally {
             array_pop($this->styleStack);
+            array_pop($this->textTransformStack);
         }
+    }
+
+    /**
+     * Phase 234: detect text-transform CSS на element. Returns 'uppercase'/
+     * 'lowercase'/'capitalize'/'none' или null если не задан.
+     */
+    private function cssTextTransform(\DOMElement $node): ?string
+    {
+        $css = $node->getAttribute('style');
+        if ($css === '') {
+            return null;
+        }
+        $decl = $this->parseCssDeclarations($css);
+        if (! isset($decl['text-transform'])) {
+            return null;
+        }
+
+        return match (strtolower(trim($decl['text-transform']))) {
+            'uppercase' => 'uppercase',
+            'lowercase' => 'lowercase',
+            'capitalize' => 'capitalize',
+            'none' => 'none',
+            default => null,
+        };
+    }
+
+    private function currentTransform(): string
+    {
+        return end($this->textTransformStack) ?: 'none';
+    }
+
+    private function applyTextTransform(string $text): string
+    {
+        return match ($this->currentTransform()) {
+            'uppercase' => mb_strtoupper($text, 'UTF-8'),
+            'lowercase' => mb_strtolower($text, 'UTF-8'),
+            'capitalize' => mb_convert_case($text, MB_CASE_TITLE_SIMPLE, 'UTF-8'),
+            default => $text,
+        };
     }
 
     /**
