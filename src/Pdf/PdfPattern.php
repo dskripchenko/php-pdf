@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 82+95: PDF Pattern object (ISO 32000-1 §8.7).
+ * PDF Pattern object (ISO 32000-1 §8.7).
  *
- * Type 2 (shading pattern) — references PdfShading. Used для gradient
+ * Type 2 (shading pattern) — references PdfShading. Used for gradient
  * fills via SVG linearGradient / radialGradient.
  *
- * Optional /Matrix transform applied к pattern coordinate system —
- * used для SVG gradientTransform attribute.
+ * Optional /Matrix transform applied to the pattern coordinate system —
+ * used for the SVG gradientTransform attribute.
  *
- * Type 1 (tiling pattern) — для repeated tiles. Not implemented — use case
+ * Type 1 (tiling pattern) — for repeated tiles. Not implemented — use case
  * rare; SVG patterns mostly cover gradient needs.
  */
 final readonly class PdfPattern

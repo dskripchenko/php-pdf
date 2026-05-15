@@ -5,35 +5,35 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Builder для содержимого Page content stream'а — графического PostScript-
- * подмножества PDF (ISO 32000-1 § 7.8).
+ * Builder for the Page content stream — the graphical PostScript-style
+ * subset of PDF (ISO 32000-1 § 7.8).
  *
- * Operators (минимальный для POC-R9.a):
+ * Operators (minimal set):
  *   q / Q     — push / pop graphics state
  *   BT / ET   — begin / end text object
  *   Tf        — set font + size (`/F1 12 Tf`)
- *   Td        — move text position (`x y Td`, в pt от origin)
+ *   Td        — move text position (`x y Td`, in pt from origin)
  *   Tj        — show text string (`(Hello) Tj`)
- *   re / S / f — rectangle / stroke / fill (для прямоугольников)
+ *   re / S / f — rectangle / stroke / fill (for rectangles)
  *   rg        — set non-stroking RGB color (`0.5 0.5 0.5 rg`)
  *
- * Coordinate system: origin в **левом нижнем** углу страницы; X растёт
- * вправо, Y растёт вверх. Это противоположно CSS / экранным координатам.
- * Единица — 1 pt (1/72 inch).
+ * Coordinate system: origin at the **bottom-left** corner of the page; X grows
+ * right, Y grows up. This is opposite of CSS / screen coordinates.
+ * Unit is 1 pt (1/72 inch).
  */
 final class ContentStream
 {
     private string $body = '';
 
-    // Phase 160: cache last emitted graphics state. Drop redundant q/rg/Q
-    // wraps when consecutive operations use same fill color.
+    // Cache last emitted graphics state. Drop redundant q/rg/Q
+    // wraps when consecutive operations use the same fill color.
     private ?float $lastFillR = null;
     private ?float $lastFillG = null;
     private ?float $lastFillB = null;
-    private bool $lastWasTextColorQ = false; // true если последний emit был q/rg wrap
+    private bool $lastWasTextColorQ = false; // true if the last emit was a q/rg wrap
 
     /**
-     * Текстовая операция. Координаты в pt от origin (левый-нижний).
+     * Text operation. Coordinates in pt from origin (bottom-left).
      */
     public function text(
         string $fontName, float $sizePt, float $xPt, float $yPt, string $text,
@@ -56,8 +56,8 @@ final class ContentStream
     }
 
     /**
-     * Текст с pre-encoded hex glyph-ID string (для Type0 composite fonts
-     * с Identity-H encoding). $hexString должен включать угловые скобки:
+     * Text with a pre-encoded hex glyph-ID string (for Type0 composite fonts
+     * with Identity-H encoding). $hexString must include angle brackets:
      *   `<00480065006C006C006F>` — encoded "Hello"
      */
     public function textHexString(
@@ -80,15 +80,15 @@ final class ContentStream
     }
 
     /**
-     * Текст с kerning через PDF `TJ` operator (показывает glyphs с
+     * Text with kerning via the PDF `TJ` operator (shows glyphs with
      * inter-glyph position adjustments).
      *
      * $tjOps — alternating list<string|int>:
-     *  - string '<NNNN...>' — hex glyph-ID run (shown через TJ)
-     *  - int N — position adjustment в 1000/em units (positive = move
-     *    next glyph LEFT, less space между chars; e.g. kerning AV)
+     *  - string '<NNNN...>' — hex glyph-ID run (shown via TJ)
+     *  - int N — position adjustment in 1000/em units (positive = move
+     *    next glyph LEFT, less space between chars; e.g. kerning AV)
      *
-     * Example для kerning'нутого «AVA»:
+     * Example for kerned "AVA":
      *   $cs->textTjArray('F1', 12, 72, 720, ['<0036>', 74, '<00570036>']);
      *   // → BT /F1 12 Tf 72 720 Td [<0036> 74 <00570036>] TJ ET
      *
@@ -118,17 +118,15 @@ final class ContentStream
     }
 
     /**
-     * Phase 160: persistent fill-color tracking. Старый подход — обернуть
-     * каждый text emit в q/Q wrap (изолировать color change) — тратил
-     * ~30-50 bytes per emit. Новый подход:
+     * Persistent fill-color tracking:
      *  - Drop q/Q wrap entirely (rely on PDF gstate persistence)
-     *  - Emit `rg` ТОЛЬКО когда color реально меняется
-     *  - fillRectangle и similar ops wrap своими q/Q (isolate их state)
+     *  - Emit `rg` ONLY when color actually changes
+     *  - fillRectangle and similar ops wrap with their own q/Q (isolate their state)
      *
-     * Caveat: caller отвечает за clean state — если кто-то external меняет
-     * gstate fill color (fillRect внутри own q/Q OK, но persistant rg —
-     * нет), tracker рассинхронится. Все эмиттеры в этом классе используют
-     * q/Q wrap для own state changes.
+     * Caveat: caller is responsible for clean state — if some external code changes
+     * the gstate fill color (fillRect inside its own q/Q is OK, but a persistent rg
+     * is not), the tracker desyncs. All emitters in this class use a
+     * q/Q wrap for their own state changes.
      */
     private function openTextColor(?float $r, ?float $g, ?float $b): void
     {
@@ -137,7 +135,7 @@ final class ContentStream
         }
         $g ??= 0;
         $b ??= 0;
-        // Skip emit если color уже в gstate.
+        // Skip emit if color is already in gstate.
         if ($this->lastFillR === $r && $this->lastFillG === $g && $this->lastFillB === $b) {
             return;
         }
@@ -153,12 +151,12 @@ final class ContentStream
 
     private function closeTextColor(?float $r): void
     {
-        // Phase 160: no-op. Color persists в gstate — нет нужды restore.
-        // Метод оставлен для compat с existing call sites.
+        // No-op. Color persists in gstate — no need to restore.
+        // Method kept for compatibility with existing call sites.
     }
 
     /**
-     * Filled rectangle с цветом RGB (0..1).
+     * Filled rectangle with RGB color (0..1).
      */
     public function fillRectangle(
         float $xPt,
@@ -179,11 +177,11 @@ final class ContentStream
     }
 
     /**
-     * Stroked rectangle (только outline, без fill). RGB stroke color
-     * 0..1, line width в pt.
+     * Stroked rectangle (outline only, no fill). RGB stroke color
+     * 0..1, line width in pt.
      */
     /**
-     * Phase 53: Generic path emission для SVG path support.
+     * Generic path emission for SVG path support.
      *
      * Commands tuple per entry:
      *  - ['M', x, y]
@@ -261,8 +259,8 @@ final class ContentStream
     }
 
     /**
-     * Phase 82: fill rectangle с shading pattern. Operators:
-     *  /Pattern cs    — switch к pattern color space.
+     * Fill rectangle with shading pattern. Operators:
+     *  /Pattern cs    — switch to pattern color space.
      *  /Pn scn        — use pattern resource named Pn.
      *  x y w h re f   — rect path + fill.
      */
@@ -281,7 +279,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 48: Begin tagged marked content. Pairs с emitEndMarkedContent().
+     * Begin tagged marked content. Pairs with emitEndMarkedContent().
      */
     public function emitBeginMarkedContent(string $tag, int $mcid): self
     {
@@ -298,7 +296,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 86: Begin /Artifact marked content (PDF/UA — content
+     * Begin /Artifact marked content (PDF/UA — content
      * excluded from struct tree / screen readers). No MCID.
      */
     public function emitBeginArtifact(string $type = 'Pagination'): self
@@ -309,7 +307,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 45: filled polygon. Points = list<[x, y]>; closed path.
+     * Filled polygon. Points = list<[x, y]>; closed path.
      *
      * @param  list<array{0: float, 1: float}>  $points
      */
@@ -330,7 +328,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 45: stroked polyline (НЕ closed) для line charts.
+     * Stroked polyline (NOT closed) for line charts.
      *
      * @param  list<array{0: float, 1: float}>  $points
      */
@@ -355,7 +353,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 44: stroked straight line from (x1,y1) to (x2,y2).
+     * Stroked straight line from (x1,y1) to (x2,y2).
      */
     public function strokeLine(
         float $x1, float $y1, float $x2, float $y2,
@@ -394,14 +392,14 @@ final class ContentStream
     }
 
     /**
-     * Draw image (XObject) с translation + scale.
+     * Draw image (XObject) with translation + scale.
      *
-     * PDF coords: image XObject родной 1×1 unit. Чтобы получить ширину
-     * widthPt × heightPt в точке (xPt, yPt) — CTM matrix:
+     * PDF coords: image XObject is natively a 1×1 unit. To get
+     * widthPt × heightPt at point (xPt, yPt) — CTM matrix:
      *   widthPt 0 0 heightPt xPt yPt cm
-     * Origin image = left-bottom corner.
+     * Image origin = bottom-left corner.
      *
-     * @param  string  $name  Имя в page /Resources/XObject << /Im1 ... >>
+     * @param  string  $name  Name in page /Resources/XObject << /Im1 ... >>
      */
     public function drawImage(string $name, float $xPt, float $yPt, float $widthPt, float $heightPt): self
     {
@@ -419,7 +417,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 107: paint a Form XObject через scale+translate CTM + `/Name Do`.
+     * Paint a Form XObject via scale+translate CTM + `/Name Do`.
      */
     public function useFormXObject(string $name, float $sx, float $sy, float $tx, float $ty): self
     {
@@ -437,7 +435,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 112: begin Optional Content section — `/OC /name BDC`.
+     * Begin Optional Content section — `/OC /name BDC`.
      */
     public function beginLayerContent(string $resourceName): self
     {
@@ -447,7 +445,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 112: end Optional Content section — `EMC`.
+     * End Optional Content section — `EMC`.
      */
     public function endLayerContent(): self
     {
@@ -457,8 +455,8 @@ final class ContentStream
     }
 
     /**
-     * Phase 114: set line dash pattern. `[a b c d] phase d`.
-     * Empty array resets к solid line.
+     * Set line dash pattern. `[a b c d] phase d`.
+     * Empty array resets to solid line.
      *
      * @param  list<float>  $pattern  alternating on/off lengths (PDF units)
      */
@@ -470,7 +468,7 @@ final class ContentStream
         return $this;
     }
 
-    /** Phase 114: reset к solid line. */
+    /** Reset to solid line. */
     public function resetLineDashPattern(): self
     {
         $this->body .= "[] 0 d\n";
@@ -479,7 +477,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 114: set line cap style. 0=butt, 1=round, 2=projecting square.
+     * Set line cap style. 0=butt, 1=round, 2=projecting square.
      */
     public function setLineCap(int $cap): self
     {
@@ -492,7 +490,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 114: set line join style. 0=miter, 1=round, 2=bevel.
+     * Set line join style. 0=miter, 1=round, 2=bevel.
      */
     public function setLineJoin(int $join): self
     {
@@ -504,7 +502,7 @@ final class ContentStream
         return $this;
     }
 
-    /** Phase 114: set miter limit (controls miter→bevel switchover). */
+    /** Set miter limit (controls miter→bevel switchover). */
     public function setMiterLimit(float $limit): self
     {
         $this->body .= sprintf("%s M\n", $this->formatNumber($limit));
@@ -513,11 +511,11 @@ final class ContentStream
     }
 
     /**
-     * Phase 116: установить clipping rect для последующих ops.
+     * Set a clipping rect for subsequent ops.
      *
      * Emits `q x y w h re W n` — pushes graphics state, builds rect,
-     * marks как clip path (nonzero winding), discards stroke/fill.
-     * Subsequent drawing is masked к rect. End с popGraphicsState().
+     * marks it as a clip path (nonzero winding), discards stroke/fill.
+     * Subsequent drawing is masked to the rect. End with popGraphicsState().
      */
     public function clipRect(float $x, float $y, float $w, float $h): self
     {
@@ -531,7 +529,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 116: установить clipping polygon. Uses non-zero winding rule.
+     * Set a clipping polygon. Uses non-zero winding rule.
      *
      * @param  list<array{0: float, 1: float}>  $points
      */
@@ -554,7 +552,7 @@ final class ContentStream
         return $this;
     }
 
-    /** Phase 116: emit Q — restore graphics state (ends clip + всё). */
+    /** Emit Q — restore graphics state (ends clip and everything). */
     public function endClip(): self
     {
         $this->body .= "Q\n";
@@ -563,7 +561,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 117: set DeviceCMYK non-stroking (fill) color. Values 0..1.
+     * Set DeviceCMYK non-stroking (fill) color. Values 0..1.
      * Emits `c m y k k`.
      */
     public function setCmykFillColor(float $c, float $m, float $y, float $k): self
@@ -578,7 +576,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 117: set DeviceCMYK stroking color. Values 0..1.
+     * Set DeviceCMYK stroking color. Values 0..1.
      * Emits `c m y k K`.
      */
     public function setCmykStrokeColor(float $c, float $m, float $y, float $k): self
@@ -596,23 +594,23 @@ final class ContentStream
     {
         foreach ([$c, $m, $y, $k] as $v) {
             if ($v < 0.0 || $v > 1.0) {
-                throw new \InvalidArgumentException('CMYK components must be в диапазоне 0..1');
+                throw new \InvalidArgumentException('CMYK components must be in range 0..1');
             }
         }
     }
 
     /**
-     * Phase 118: set text rendering mode.
+     * Set text rendering mode.
      *
      * Modes (ISO 32000-1 §9.3.6 Table 106):
      *  - 0: fill (default)
      *  - 1: stroke (outline only)
      *  - 2: fill + stroke
-     *  - 3: invisible (useful для searchable OCR layer над scanned image)
-     *  - 4: fill + add to path для clipping
-     *  - 5: stroke + add to path для clipping
-     *  - 6: fill + stroke + add to path для clipping
-     *  - 7: add to path для clipping only
+     *  - 3: invisible (useful for a searchable OCR layer over a scanned image)
+     *  - 4: fill + add to path for clipping
+     *  - 5: stroke + add to path for clipping
+     *  - 6: fill + stroke + add to path for clipping
+     *  - 7: add to path for clipping only
      *
      * Emits `N Tr`.
      */
@@ -627,7 +625,7 @@ final class ContentStream
     }
 
     /**
-     * Phase 102: drawImage с rotation вокруг (xPt + widthPt/2, yPt + heightPt/2).
+     * drawImage with rotation around (xPt + widthPt/2, yPt + heightPt/2).
      * angleRad — counter-clockwise (PDF convention).
      *
      * Composed CTM: T(cx, cy) · R(θ) · T(-cx, -cy) · S(w, h) · T(x, y).
@@ -641,11 +639,11 @@ final class ContentStream
         $sin = sin($angleRad);
 
         $this->body .= "q\n";
-        // Translate к center, rotate, translate back, then scale + position.
+        // Translate to center, rotate, translate back, then scale + position.
         // Combined matrix: precompute final CTM analytically.
-        // Image XObject 1×1 unit. Need transform: scale(w,h) → rotate around center → translate.
-        // Equivalently: a=cos, b=sin, c=-sin, d=cos для rotation around origin
-        // applied к scaled image, then translated так что center остаётся at (cx, cy).
+        // Image XObject is a 1×1 unit. Need transform: scale(w,h) → rotate around center → translate.
+        // Equivalently: a=cos, b=sin, c=-sin, d=cos for rotation around origin
+        // applied to scaled image, then translated so that center stays at (cx, cy).
         $a = $cos * $widthPt;
         $b = $sin * $widthPt;
         $c = -$sin * $heightPt;
@@ -664,9 +662,9 @@ final class ContentStream
     }
 
     /**
-     * Phase 31: drawImage с применением ExtGState (opacity) перед draw.
-     * Operator sequence: q / gs / cm / Do / Q — Q восстановит graphics
-     * state, так что opacity не утечёт на последующий контент.
+     * drawImage with an ExtGState (opacity) applied before the draw.
+     * Operator sequence: q / gs / cm / Do / Q — Q restores graphics
+     * state, so opacity does not leak to subsequent content.
      */
     public function drawImageWithGs(
         string $name,
@@ -691,8 +689,8 @@ final class ContentStream
     }
 
     /**
-     * Phase 31: pushes a graphics state save и applies ExtGState by name.
-     * Caller must pair with popGraphicsState() через PDF operator Q.
+     * Pushes a graphics state save and applies ExtGState by name.
+     * Caller must pair with popGraphicsState() via PDF operator Q.
      */
     public function pushGraphicsStateWithGs(string $gsName): self
     {
@@ -710,7 +708,7 @@ final class ContentStream
     }
 
     /**
-     * Stroked rounded rectangle. Rounded corners через 4 cubic Bezier
+     * Stroked rounded rectangle. Rounded corners via 4 cubic Bezier
      * arcs (quarter-circle approximation, control points = r × 0.5523).
      */
     public function strokeRoundedRectangle(
@@ -727,7 +725,7 @@ final class ContentStream
         $this->body .= 'q'."\n";
         $this->body .= sprintf("%s w\n", $f($lineWidthPt));
         $this->body .= sprintf("%s %s %s RG\n", $f($r), $f($g), $f($b));
-        // Path: start at (x+r, y), follow rect's outer edge через arcs.
+        // Path: start at (x+r, y), follow rect's outer edge via arcs.
         $this->body .= sprintf("%s %s m\n", $f($x + $r0), $f($y));
         // Bottom edge → bottom-right corner.
         $this->body .= sprintf("%s %s l\n", $f($x + $w - $r0), $f($y));
@@ -810,14 +808,14 @@ final class ContentStream
     }
 
     /**
-     * Rotated text для watermarks. $angleRad — counter-clockwise angle
-     * относительно X-axis. Поворот around точки (xPt, yPt). $color — RGB
+     * Rotated text for watermarks. $angleRad — counter-clockwise angle
+     * relative to the X-axis. Rotated around point (xPt, yPt). $color — RGB
      * 0..1.
      *
-     * Использует text matrix Tm:
+     * Uses text matrix Tm:
      *   cos(a) sin(a) -sin(a) cos(a) x y Tm
      *
-     * Для embedded font передавай $hexString с угловыми скобками (Identity-H
+     * For embedded fonts pass $hexString with angle brackets (Identity-H
      * encoded) + $isHex=true.
      */
     public function rotatedText(
@@ -872,8 +870,8 @@ final class ContentStream
     }
 
     /**
-     * Эскейпинг для PDF literal string `(…)`. По ISO 32000-1 §7.3.4.2:
-     * нужно escape'ить `\`, `(`, `)`. Также non-printable bytes → \nnn.
+     * Escape a PDF literal string `(…)`. Per ISO 32000-1 §7.3.4.2:
+     * must escape `\`, `(`, `)`. Also non-printable bytes → \nnn.
      */
     private function escapeString(string $s): string
     {
@@ -895,8 +893,8 @@ final class ContentStream
     }
 
     /**
-     * Без локали-зависимого float-decimal-separator'а.
-     * Минимум trailing zeros.
+     * Without a locale-dependent float decimal separator.
+     * Minimal trailing zeros.
      */
     private function formatNumber(float $n): string
     {

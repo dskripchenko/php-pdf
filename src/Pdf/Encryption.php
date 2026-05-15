@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 41-42+50: PDF Standard Security Handler.
+ * PDF Standard Security Handler.
  *
  * ISO 32000-1 §7.6, Algorithms 2-7; Adobe Supplement to ISO 32000 §3.5.
  *
@@ -13,15 +13,12 @@ namespace Dskripchenko\PhpPdf\Pdf;
  *  - RC4_128: V=2, R=3, Length=128 (RC4-128 stream cipher).
  *  - AES_128: V=4, R=4, Length=128 + CFM AESV2 (AES-128-CBC).
  *  - AES_256: V=5, R=5, Length=256 + CFM AESV3 (AES-256-CBC).
- *  - User password (для opening); owner = user если не задан.
+ *  - AES_256 R6: ISO 32000-2 Algorithm 2.B iterative hash (PDF 2.0).
+ *  - User password (for opening); owner falls back to user if omitted.
  *  - Permissions bits (printing, copying, modification, ...).
  *
- * Не реализовано:
- *  - Public-key encryption (/Filter /PubSec) — moved к v1.3 backlog.
- *
- * Closed в later phases:
- *  - V5 R6 (PDF 2.0 hash 64 rounds) → Phase 106
- *  - String encryption (literal strings → encrypted hex) → Phase 77
+ * Not implemented:
+ *  - Public-key encryption (/Filter /PubSec).
  */
 final class Encryption
 {
@@ -61,7 +58,7 @@ final class Encryption
 
     public readonly EncryptionAlgorithm $algorithm;
 
-    /** Phase 50: AES-256 V5 R5 additional fields. */
+    /** AES-256 V5 R5/R6 additional fields. */
     public readonly string $oeValue;
 
     public readonly string $ueValue;
@@ -91,14 +88,14 @@ final class Encryption
 
             return;
         }
-        // Phase 106: V5 R6 (PDF 2.0) — same dictionary layout, iterative
-        // hash 2.B used вместо single SHA-256 call.
+        // V5 R6 (PDF 2.0) — same dictionary layout, iterative Algorithm 2.B
+        // hash used instead of a single SHA-256 call.
         if ($algorithm === EncryptionAlgorithm::Aes_256_R6) {
             $this->initAes256($userPassword, $ownerPassword, $permissions, useR6Hash: true);
 
             return;
         }
-        // Defaults для V5-only fields when using V2/V4.
+        // Defaults for V5-only fields when using V2/V4.
         $this->oeValue = '';
         $this->ueValue = '';
         $this->permsValue = '';
@@ -106,7 +103,7 @@ final class Encryption
         $userPadded = self::padPassword($userPassword);
         $ownerPadded = self::padPassword($owner);
 
-        // Permissions: combine с reserved bits; signed 32-bit.
+        // Permissions: combine with reserved bits; signed 32-bit.
         $p = ($permissions | self::RESERVED_BITS) & 0xFFFFFFFF;
         // Convert to signed for PDF /P entry.
         if ($p >= 0x80000000) {
@@ -128,16 +125,17 @@ final class Encryption
     }
 
     /**
-     * Encrypts data для PDF object N gen G (typically G=0).
+     * Encrypt data for PDF object N generation G (typically G=0).
      *
-     * RC4_128: Algorithm 1 — RC4 stream cipher с per-object key.
-     * AES_128: Algorithm 1.b — AES-128-CBC с per-object key + random IV,
-     *          IV prepended к ciphertext.
+     * RC4_128: Algorithm 1 — RC4 stream cipher with a per-object key.
+     * AES_128: Algorithm 1.b — AES-128-CBC with per-object key + random
+     *          IV, IV prepended to the ciphertext.
+     * AES_256 (V5 R5/R6): uses the fileKey directly + random IV.
      */
     public function encryptObject(string $data, int $objNum, int $genNum = 0): string
     {
-        // Phase 50/106: V5 R5+R6 use fileKey directly + random IV — no
-        // per-object derivation. Stream encryption identical между R5 и R6.
+        // V5 R5+R6 use fileKey directly + random IV — no per-object
+        // derivation. Stream encryption is identical between R5 and R6.
         if ($this->algorithm === EncryptionAlgorithm::Aes_256
             || $this->algorithm === EncryptionAlgorithm::Aes_256_R6) {
             $iv = random_bytes(16);
@@ -161,7 +159,7 @@ final class Encryption
             . chr(($genNum >> 8) & 0xFF);
 
         if ($this->algorithm === EncryptionAlgorithm::Aes_128) {
-            // AES per-object key: salt "sAlT" appended перед MD5.
+            // AES per-object key: salt "sAlT" appended before MD5.
             $key = substr(md5($base . "sAlT", true), 0, min(16, strlen($this->fileKey) + 5));
             $iv = random_bytes(16);
             $cipher = (string) openssl_encrypt(
@@ -193,7 +191,7 @@ final class Encryption
             && in_array('aes-256-ecb', openssl_get_cipher_methods(), true);
     }
 
-    /** Phase 106: R6 hash needs AES-128-CBC additionally. */
+    /** R6 hash needs AES-128-CBC in addition to AES-256. */
     public static function aes256R6Available(): bool
     {
         return self::aes256Available()
@@ -201,15 +199,15 @@ final class Encryption
     }
 
     /**
-     * Phase 50: Initialize V5 R5 (Adobe Supplement) AES-256 encryption.
+     * Initialize V5 R5 (Adobe Supplement) or R6 (PDF 2.0) AES-256 encryption.
      *
      * Algorithm overview:
-     *  - User pw: pad? нет. UTF-8 bytes truncated к 127.
+     *  - User pw: not padded; UTF-8 bytes truncated to 127.
      *  - Generate 8-byte user validation salt + 8-byte user key salt.
      *  - userHash = SHA-256(pw + userValidationSalt). /U = userHash || saltA || saltB (48 bytes).
      *  - userIntermediateKey = SHA-256(pw + userKeySalt). AES-256-CBC(userIntermediateKey, IV=0)
      *    encrypts fileEncryptionKey → /UE.
-     *  - Similar для owner pw, но включает U в hash inputs.
+     *  - Similar for owner pw, but the /U value is mixed into the hash inputs.
      *  - /Perms = AES-256-ECB(extendedPermBytes, fileEncryptionKey).
      */
     private function initAes256(string $userPassword, ?string $ownerPassword, int $permissions, bool $useR6Hash): void
@@ -230,12 +228,12 @@ final class Encryption
         if ($p >= 0x80000000) {
             $p -= 0x100000000;
         }
-        // Reassign readonly via reflection-free path: this->permissions is
-        // readonly + uninitialized — direct assignment OK в ctor.
+        // Direct assignment is valid for a readonly + uninitialized field
+        // inside the constructor.
         $this->permissions = $p;
         $this->fileId = random_bytes(16);
 
-        // Phase 106: R6 заменяет single SHA-256 на iterative Algorithm 2.B.
+        // R6 replaces the single SHA-256 with iterative Algorithm 2.B.
         $hashFn = $useR6Hash
             ? fn (string $pw, string $salt, string $udata = ''): string => self::computeR6Hash($pw, $salt, $udata)
             : fn (string $pw, string $salt, string $udata = ''): string => hash('sha256', $pw . $salt . $udata, true);
@@ -245,7 +243,7 @@ final class Encryption
         $this->uValue = $userHash . $userValidationSalt . $userKeySalt;
 
         // /O entry: hash(pw + valSalt + U[0..48]) || valSalt || keySalt.
-        // U в hash input — 48 bytes /U value computed above.
+        // U in the hash input is the 48-byte /U value computed above.
         $ownerHash = $hashFn($ownerBytes, $ownerValidationSalt, $this->uValue);
         $this->oValue = $ownerHash . $ownerValidationSalt . $ownerKeySalt;
 
@@ -255,7 +253,7 @@ final class Encryption
             $userInterKey, str_repeat("\x00", 16), $fileEncryptionKey,
         );
 
-        // /OE: similar с owner + U.
+        // /OE: similar with owner + U.
         $ownerInterKey = $hashFn($ownerBytes, $ownerKeySalt, $this->uValue);
         $this->oeValue = self::aes256CbcNoPadding(
             $ownerInterKey, str_repeat("\x00", 16), $fileEncryptionKey,
@@ -280,8 +278,8 @@ final class Encryption
     }
 
     /**
-     * AES-256-CBC без padding (key 32, iv 16, plaintext must be 16-byte
-     * multiple).
+     * AES-256-CBC without padding (key 32, iv 16, plaintext must be a
+     * 16-byte multiple).
      */
     private static function aes256CbcNoPadding(string $key, string $iv, string $data): string
     {
@@ -320,7 +318,7 @@ final class Encryption
         }
         // c. Take first 16 bytes as RC4 key.
         $rc4Key = substr($hash, 0, 16);
-        // d. Encrypt user_padded с RC4.
+        // d. Encrypt user_padded with RC4.
         $encrypted = self::rc4($rc4Key, $userPadded);
         // e. Iterate XOR cycling key bytes 19 times.
         for ($i = 1; $i <= 19; $i++) {
@@ -341,12 +339,12 @@ final class Encryption
     {
         $data = $userPadded;
         $data .= $oValue;
-        // Permissions как 4-byte LE.
+        // Permissions as 4-byte LE.
         $p = $permissions < 0 ? $permissions + 0x100000000 : $permissions;
         $data .= chr($p & 0xFF) . chr(($p >> 8) & 0xFF)
             . chr(($p >> 16) & 0xFF) . chr(($p >> 24) & 0xFF);
         $data .= $fileId;
-        // Step (f): metadata flag — for V4+ only. Skip для V2.
+        // Step (f): metadata flag — for V4+ only. Skip for V2.
 
         $hash = md5($data, true);
         // V≥2, R≥3: iterate MD5 50 more times truncated to 16 bytes.
@@ -364,9 +362,9 @@ final class Encryption
     {
         // MD5 of padding + fileID.
         $hash = md5(self::PADDING . $fileId, true);
-        // RC4 encrypt the 16-byte hash с fileKey.
+        // RC4 encrypt the 16-byte hash with fileKey.
         $encrypted = self::rc4($fileKey, $hash);
-        // Iterate 19 rounds с XOR'd key.
+        // Iterate 19 rounds with XOR'd key.
         for ($i = 1; $i <= 19; $i++) {
             $alt = '';
             for ($j = 0; $j < 16; $j++) {
@@ -374,15 +372,15 @@ final class Encryption
             }
             $encrypted = self::rc4($alt, $encrypted);
         }
-        // Pad encrypted (16 bytes) к 32 bytes appending arbitrary 16 bytes
-        // (стандарт: append arbitrary; many encoders append zeros, others
-        // duplicate first 16). Duplicate первые 16 (commonly seen).
+        // Pad encrypted (16 bytes) to 32 bytes by appending 16 arbitrary
+        // bytes. Spec allows any; many encoders append zeros, others
+        // duplicate the first 16. We duplicate the first 16 (commonly seen).
         return $encrypted . substr($encrypted, 0, 16);
     }
 
     /**
-     * RC4 stream cipher. Не используем openssl_encrypt — RC4 удалён в
-     * OpenSSL 3.0 default provider. Self-contained ~30 строк.
+     * RC4 stream cipher. We avoid openssl_encrypt because RC4 was removed
+     * from the OpenSSL 3.0 default provider. Self-contained, ~30 lines.
      */
     public static function rc4(string $key, string $data): string
     {
@@ -410,7 +408,7 @@ final class Encryption
     }
 
     /**
-     * Encode bytes как PDF literal string with hex form: <abcdef...>.
+     * Encode bytes as a PDF literal string in hex form: <abcdef...>.
      */
     public static function asHexString(string $bytes): string
     {
@@ -418,14 +416,14 @@ final class Encryption
     }
 
     /**
-     * Phase 106: ISO 32000-2 Algorithm 2.B — R6 iterative hash.
+     * ISO 32000-2 Algorithm 2.B — R6 iterative hash.
      *
      * Mixes password + intermediate hash + optional U-value through 64+
      * rounds of AES-128-CBC and a SHA-2 variant picked dynamically by
      * `int(E[0..16]) mod 3`. Terminates after round ≥64 when the last
      * byte of E ≤ (round - 32).
      *
-     * @param  string  $udata  optional 48-byte U value (for /O hash) или ''.
+     * @param  string  $udata  optional 48-byte U value (for /O hash) or ''.
      */
     public static function computeR6Hash(string $password, string $salt, string $udata = ''): string
     {
@@ -466,7 +464,7 @@ final class Encryption
     /**
      * Big-endian unsigned integer mod 3, byte-by-byte (no GMP dependency).
      *
-     * Iterates: acc = (acc * 256 + byte) % 3. Mathematically identical к
+     * Iterates acc = (acc * 256 + byte) % 3. Mathematically identical to
      * BigInteger().mod(3) but works on arbitrary-length byte strings.
      */
     private static function bigIntMod3(string $bytes): int

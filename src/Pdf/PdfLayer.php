@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 112: Optional Content Group (PDF layer).
+ * Optional Content Group (PDF layer).
  *
  * ISO 32000-1 §8.11 — /Type /OCG dictionary with /Name. Layers can be
- * toggled on/off в PDF reader UI (Acrobat → Layers panel).
+ * toggled on/off in the PDF reader UI (Acrobat → Layers panel).
  *
  * Use cases:
  *  - Watermarks toggleable per workflow stage.
@@ -16,7 +16,7 @@ namespace Dskripchenko\PhpPdf\Pdf;
  *  - Multi-language overlays.
  *  - Print vs screen variants.
  *
- * Created via Document::addLayer(), referenced на пages через
+ * Created via Document::addLayer(); referenced on pages through
  * Page::beginLayer()/endLayer().
  */
 final class PdfLayer

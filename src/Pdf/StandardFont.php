@@ -5,24 +5,24 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * The 14 standard PDF fonts (Adobe base-14), которые гарантированно
- * доступны в каждом PDF reader'е без embedding'а.
+ * The 14 standard PDF fonts (Adobe base-14) — guaranteed to be available
+ * in every PDF reader without embedding.
  *
- * Ограничения:
- *  - WinAnsi encoding (Latin-1 + some extended Latin); НЕТ Cyrillic,
- *    Greek, CJK, и т.д.
- *  - Symbol использует custom encoding для Greek/math glyphs.
- *  - ZapfDingbats использует custom encoding для shapes/arrows.
+ * Limitations:
+ *  - WinAnsi encoding (Latin-1 + some extended Latin); no Cyrillic,
+ *    Greek, CJK, etc.
+ *  - Symbol uses a custom encoding for Greek/math glyphs.
+ *  - ZapfDingbats uses a custom encoding for shapes/arrows.
  *
  * Use cases:
- *  - Минимальный bundle размер (~600 байт on disk vs ~411KB for embedded
- *    Liberation)
- *  - Текст только Latin-1 (английский, западноевропейские языки)
+ *  - Minimal bundle size (~600 bytes on disk vs ~411KB for embedded
+ *    Liberation).
+ *  - Latin-1-only text (English, Western European languages).
  *
- * Для Cyrillic / Unicode требуется embedded TTF — см. PdfFont
- * (Phase 2 даёт subset, ToUnicode CMap, kerning, ligatures).
+ * For Cyrillic / full Unicode use an embedded TTF — see PdfFont (subset,
+ * ToUnicode CMap, kerning, ligatures).
  *
- * Reference: ISO 32000-1 § 9.6.2.2.
+ * Reference: ISO 32000-1 §9.6.2.2.
  */
 enum StandardFont: string
 {
@@ -45,8 +45,8 @@ enum StandardFont: string
     case ZapfDingbats = 'ZapfDingbats';
 
     /**
-     * PostScript name для /BaseFont в font dictionary. Совпадает с
-     * value enum'а.
+     * PostScript name for /BaseFont in the font dictionary — equal to
+     * the enum value.
      */
     public function postScriptName(): string
     {
@@ -54,11 +54,11 @@ enum StandardFont: string
     }
 
     /**
-     * PDF font dictionary эмиссия для Type1 standard font:
+     * PDF font dictionary emission for a Type1 standard font:
      *   << /Type /Font /Subtype /Type1 /BaseFont /<name> /Encoding /WinAnsiEncoding >>
      *
-     * Symbol и ZapfDingbats имеют built-in encoding (не /WinAnsiEncoding),
-     * поэтому /Encoding опускаем.
+     * Symbol and ZapfDingbats have a built-in encoding (not /WinAnsiEncoding),
+     * so /Encoding is omitted for them.
      */
     public function pdfDictionary(): string
     {
@@ -73,7 +73,7 @@ enum StandardFont: string
     }
 
     /**
-     * Heuristics: какой stylesheet group принадлежит font'у.
+     * Heuristic: which stylesheet group this font belongs to.
      */
     public function isSerif(): bool
     {

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Минимальный PDF-эмиттер на уровне формата (без layout/font logic).
+ * Minimal format-level PDF emitter (without layout/font logic).
  *
  * Pattern:
  *   $w = new Writer(version: '1.7');
@@ -18,10 +18,10 @@ namespace Dskripchenko\PhpPdf\Pdf;
  *   $w->setRoot($catalogId);
  *   echo $w->toBytes();
  *
- * Структура итогового PDF:
+ * Resulting PDF structure:
  *   %PDF-1.7
- *   %ÂÅÒÓ          ← high-byte comment (рекомендация ISO 32000-1 §7.5.2:
- *                    помогает определять binary mode при transmission)
+ *   %ÂÅÒÓ          <- high-byte comment (ISO 32000-1 §7.5.2 recommendation:
+ *                    helps detect binary mode during transmission)
  *   1 0 obj
  *     <<...>>
  *   endobj
@@ -37,14 +37,14 @@ namespace Dskripchenko\PhpPdf\Pdf;
  *     <offset>
  *   %%EOF
  *
- * Indirect object IDs выдаются монотонно начиная с 1. Generation number
- * у всех new-объектов = 0 (incremental updates не поддерживаются).
+ * Indirect object IDs are issued monotonically starting from 1. Generation number
+ * for all new objects = 0 (incremental updates are not supported).
  */
 final class Writer
 {
     private const string LINE_ENDING = "\n";
 
-    /** @var array<int, ?string> objectId → serialised body (без `N 0 obj`-обёртки) */
+    /** @var array<int, ?string> objectId -> serialised body (without `N 0 obj` wrapper) */
     private array $objects = [];
 
     private int $nextId = 1;
@@ -53,33 +53,33 @@ final class Writer
 
     private ?int $infoId = null;
 
-    /** Phase 41: encryption config (null = no encryption). */
+    /** Encryption config (null = no encryption). */
     private ?Encryption $encryption = null;
 
     private ?int $encryptId = null;
 
-    /** Phase 108: PKCS#7 signing config (null = no signature). */
+    /** PKCS#7 signing config (null = no signature). */
     private ?SignatureConfig $signature = null;
 
     private ?int $signatureDictId = null;
 
-    /** Phase 212: cached document file identifier (16-byte hex string). */
+    /** Cached document file identifier (16-byte hex string). */
     private ?string $cachedFileIdHex = null;
 
     /**
      * @param  string  $version  PDF version header (e.g. '1.4', '1.7', '2.0').
-     * @param  bool  $useXrefStream  Phase 208: emit cross-reference table as
-     *                                XRef stream object (PDF 1.5+) instead of
-     *                                classic `xref...trailer` table. More compact
+     * @param  bool  $useXrefStream  Emit cross-reference table as XRef stream
+     *                                object (PDF 1.5+) instead of classic
+     *                                `xref...trailer` table. More compact
      *                                (binary packed + FlateDecode). Auto-disabled
-     *                                для signed documents (PKCS#7 path keeps
-     *                                classic xref для simpler /ByteRange patching).
-     * @param  bool  $useObjectStreams  Phase 214: pack non-stream uncompressed
-     *                                   objects (catalog, page tree, info, etc.)
-     *                                   в single compressed Object Stream (PDF 1.5+).
+     *                                for signed documents (PKCS#7 path keeps
+     *                                classic xref for simpler /ByteRange patching).
+     * @param  bool  $useObjectStreams  Pack non-stream uncompressed objects
+     *                                   (catalog, page tree, info, etc.)
+     *                                   into single compressed Object Stream (PDF 1.5+).
      *                                   Requires `useXrefStream: true` (objects use
-     *                                   type-2 xref entries). Auto-disabled при
-     *                                   encryption или signing.
+     *                                   type-2 xref entries). Auto-disabled with
+     *                                   encryption or signing.
      */
     public function __construct(
         private readonly string $version = '1.7',
@@ -88,12 +88,12 @@ final class Writer
     ) {}
 
     /**
-     * Phase 212: compute deterministic document /ID hex string.
+     * Compute deterministic document /ID hex string.
      *
-     * Uses encryption fileId если encryption configured. Else MD5-derives
-     * 16 bytes от concatenated object bodies — это даёт stable per-document
-     * fingerprint (same content → same /ID across toBytes/toStream calls
-     * на same Writer state).
+     * Uses encryption fileId if encryption is configured. Otherwise MD5-derives
+     * 16 bytes from concatenated object bodies, giving a stable per-document
+     * fingerprint (same content -> same /ID across toBytes/toStream calls
+     * on same Writer state).
      */
     private function fileIdHex(): string
     {
@@ -103,7 +103,7 @@ final class Writer
         if ($this->encryption !== null) {
             return $this->cachedFileIdHex = bin2hex($this->encryption->fileId);
         }
-        // Deterministic hash from content для stable /ID.
+        // Deterministic hash from content for stable /ID.
         $material = '';
         foreach ($this->objects as $id => $body) {
             $material .= $id.':'.($body ?? '').'|';
@@ -114,7 +114,7 @@ final class Writer
     }
 
     /**
-     * Phase 41: Enable encryption — encrypt streams через RC4-128 V2 R3.
+     * Enable encryption — encrypt streams via RC4-128 V2 R3.
      */
     public function setEncryption(Encryption $encryption, int $encryptObjectId): void
     {
@@ -123,8 +123,8 @@ final class Writer
     }
 
     /**
-     * Phase 108: enable PKCS#7 detached signing — patches /ByteRange и
-     * /Contents placeholders в the signature dictionary post-emission.
+     * Enable PKCS#7 detached signing — patches /ByteRange and
+     * /Contents placeholders in the signature dictionary post-emission.
      */
     public function setSignature(SignatureConfig $sig, int $sigDictId): void
     {
@@ -133,9 +133,9 @@ final class Writer
     }
 
     /**
-     * Резервирует object ID. Используется когда нужно создать
-     * cross-references раньше, чем тело объекта (например, Catalog ссылается
-     * на Pages, который ещё не написан).
+     * Reserve an object ID. Used when cross-references need to be created
+     * before the object body (e.g. Catalog references Pages, which has
+     * not been written yet).
      */
     public function reserveObject(): int
     {
@@ -146,7 +146,7 @@ final class Writer
     }
 
     /**
-     * Записывает тело уже зарезервированного объекта.
+     * Write the body of an already-reserved object.
      */
     public function setObject(int $id, string $body): void
     {
@@ -157,7 +157,7 @@ final class Writer
     }
 
     /**
-     * Append-shortcut: сразу резервирует и заполняет.
+     * Append shortcut: reserves and fills in one call.
      */
     public function addObject(string $body): int
     {
@@ -173,8 +173,8 @@ final class Writer
     }
 
     /**
-     * Sets /Info dictionary reference (PDF metadata). Trailer добавит
-     * `/Info N 0 R` если задан.
+     * Sets /Info dictionary reference (PDF metadata). Trailer adds
+     * `/Info N 0 R` when set.
      */
     public function setInfo(int $infoId): void
     {
@@ -182,7 +182,7 @@ final class Writer
     }
 
     /**
-     * Сериализует весь PDF в string. Бросает исключение если есть unfilled-объекты.
+     * Serialise the entire PDF to a string. Throws if any objects are unfilled.
      *
      * Internally calls {@see toStream()} via php://memory.
      */
@@ -207,10 +207,10 @@ final class Writer
     }
 
     /**
-     * Phase 129: streaming output. Writes PDF incrementally к $stream resource,
-     * avoiding accumulating final document в string memory.
+     * Streaming output. Writes PDF incrementally to $stream resource,
+     * avoiding accumulating final document in string memory.
      *
-     * Use case: writing large PDFs к file/HTTP response без full-document
+     * Use case: writing large PDFs to file/HTTP response without full-document
      * memory overhead.
      *
      * @param  resource  $stream  any writable stream resource
@@ -234,10 +234,10 @@ final class Writer
         // /ByteRange + /Contents placeholders, sign hash, splice in
         // signature).
         //
-        // Phase 191: streaming optimization. Если stream is seekable (file
-        // handle), emit incrementally + seek back для patch. Avoids full
-        // document buffer. Non-seekable streams (pipe, socket) — fall back
-        // к buffered approach.
+        // Streaming optimization: if stream is seekable (file handle),
+        // emit incrementally + seek back for patch. Avoids full document
+        // buffer. Non-seekable streams (pipe, socket) fall back to
+        // buffered approach.
         if ($this->signature !== null) {
             if (self::streamIsSeekable($stream)) {
                 return $this->toSeekableStreamWithSignature($stream);
@@ -248,9 +248,9 @@ final class Writer
             return self::writeAll($stream, $bytes);
         }
 
-        // Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
-        // в single FlateDecode stream. Requires XRef stream (type-2 entries).
-        // Disabled при encryption / signing для simplicity.
+        // Object Streams (PDF 1.5+): pack uncompressed dict objects
+        // into single FlateDecode stream. Requires XRef stream (type-2 entries).
+        // Disabled with encryption / signing for simplicity.
         $useObjStm = $this->useObjectStreams
             && $this->useXrefStream
             && $this->encryption === null
@@ -261,7 +261,7 @@ final class Writer
         $written += self::writeAll($stream, "%\xE2\xE3\xCF\xD3" . self::LINE_ENDING);
 
         $offsets = [];
-        $compressedEntries = []; // Phase 214: id → [objStreamId, indexInStream] для type-2 xref
+        $compressedEntries = []; // id -> [objStreamId, indexInStream] for type-2 xref
 
         if ($useObjStm) {
             [$packed, $direct, $objStreamId, $objStreamBody] = $this->buildObjectStream();
@@ -274,7 +274,7 @@ final class Writer
                 $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
             }
 
-            // Emit object stream itself как direct stream object.
+            // Emit object stream itself as a direct stream object.
             if ($objStreamBody !== null) {
                 $offsets[$objStreamId] = $written;
                 $written += self::writeAll($stream, $objStreamId . ' 0 obj' . self::LINE_ENDING);
@@ -282,7 +282,7 @@ final class Writer
                 $written += self::writeAll($stream, 'endobj' . self::LINE_ENDING);
             }
 
-            // Track compressed entries для xref.
+            // Track compressed entries for xref.
             foreach ($packed as $index => $packedId) {
                 $compressedEntries[$packedId] = [$objStreamId, $index];
             }
@@ -320,7 +320,7 @@ final class Writer
         if ($this->encryption !== null && $this->encryptId !== null) {
             $encryptPart = ' /Encrypt ' . $this->encryptId . ' 0 R';
         }
-        // Phase 212: always emit /ID (encryption uses its own fileId,
+        // Always emit /ID (encryption uses its own fileId,
         // others get auto-generated random fingerprint).
         $idPart = ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
         $written += self::writeAll($stream, '<< /Size ' . $count . ' /Root ' . $this->rootId . ' 0 R' . $infoPart . $encryptPart . $idPart . ' >>' . self::LINE_ENDING);
@@ -332,18 +332,18 @@ final class Writer
     }
 
     /**
-     * Phase 214: partition objects на "packable" (могут быть в Object Stream)
-     * и "direct" (streams, encryption dict, signature dict).
+     * Partition objects into "packable" (can go into an Object Stream)
+     * and "direct" (streams, encryption dict, signature dict).
      *
-     * Spec §7.5.7: object stream может содержать только uncompressed direct
-     * objects без stream payload, generation 0.
+     * Spec §7.5.7: object stream may contain only uncompressed direct
+     * objects without stream payload, generation 0.
      *
-     * Heuristic для detecting stream object: ищем `\nstream\n` substring
-     * в body (надёжный signal — все stream objects содержат этот marker).
+     * Heuristic for detecting stream object: look for `\nstream\n` substring
+     * in body (reliable signal — all stream objects contain this marker).
      *
      * @return array{0: list<int>, 1: array<int, string>, 2: int, 3: ?string}
-     *   [list of packed object IDs (в order), direct objects (id→body),
-     *    objStreamId, compressed object stream body или null если nothing к pack]
+     *   [list of packed object IDs (in order), direct objects (id->body),
+     *    objStreamId, compressed object stream body or null if nothing to pack]
      */
     private function buildObjectStream(): array
     {
@@ -365,7 +365,7 @@ final class Writer
             }
         }
 
-        // Если packable too few — overhead > savings; fall back to all-direct.
+        // If packable too few, overhead > savings; fall back to all-direct.
         if (count($packable) < 3) {
             return [[], $this->objects, $this->nextId, null];
         }
@@ -404,19 +404,19 @@ final class Writer
     }
 
     /**
-     * Phase 208: emit cross-reference table as XRef stream object (PDF 1.5+).
+     * Emit cross-reference table as XRef stream object (PDF 1.5+).
      *
-     * Replaces classic `xref...trailer` keywords с binary-packed FlateDecode
+     * Replaces classic `xref...trailer` keywords with binary-packed FlateDecode
      * stream object. Entries packed as type(1) + offset(4) + gen(2) bytes.
-     * The xref stream object получает own id = current nextId, is registered
-     * в /Size, и its own entry is included в the table.
+     * The xref stream object receives its own id = current nextId, is registered
+     * in /Size, and its own entry is included in the table.
      *
-     * Phase 214: support type-2 entries для objects packed в Object Stream.
+     * Supports type-2 entries for objects packed into an Object Stream.
      * Type 2 entry: type(1)=2 + objStmId(4 bytes) + indexInStream(2 bytes).
      *
      * @param  resource  $stream
      * @param  array<int, int>  $offsets
-     * @param  array<int, array{0: int, 1: int}>  $compressedEntries  id → [objStreamId, index]
+     * @param  array<int, array{0: int, 1: int}>  $compressedEntries  id -> [objStreamId, index]
      */
     private function writeXrefStream($stream, int $startWritten, array $offsets, array $compressedEntries = []): int
     {
@@ -432,7 +432,7 @@ final class Writer
         $entries .= chr(0).pack('N', 0).pack('n', 65535);
         for ($id = 1; $id < $sizeCount; $id++) {
             if (isset($compressedEntries[$id])) {
-                // Type 2: compressed — refers к ObjStm + index.
+                // Type 2: compressed — refers to ObjStm + index.
                 [$objStmId, $index] = $compressedEntries[$id];
                 $entries .= chr(2).pack('N', $objStmId).pack('n', $index);
             } else {
@@ -458,7 +458,7 @@ final class Writer
         if ($this->encryption !== null && $this->encryptId !== null) {
             $dict .= ' /Encrypt '.$this->encryptId.' 0 R';
         }
-        // Phase 212: always emit /ID (PDF 1.5 XRef stream).
+        // Always emit /ID (PDF 1.5 XRef stream).
         $dict .= ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
         $dict .= ' /W [1 4 2]';
         $dict .= ' /Filter /FlateDecode';
@@ -480,8 +480,8 @@ final class Writer
     }
 
     /**
-     * Internal: build PDF в memory string без signing. Used by signing
-     * path which needs full bytes для post-emit patching.
+     * Internal: build PDF in a memory string without signing. Used by the
+     * signing path which needs full bytes for post-emit patching.
      */
     private function buildBytes(): string
     {
@@ -506,8 +506,8 @@ final class Writer
      * @param  resource  $stream
      */
     /**
-     * Phase 191: detect если stream supports random-access seek (fseek).
-     * File handles seekable; pipes/sockets/php://output обычно нет.
+     * Detect whether stream supports random-access seek (fseek).
+     * File handles are seekable; pipes/sockets/php://output usually are not.
      *
      * @param  resource  $stream
      */
@@ -519,15 +519,15 @@ final class Writer
     }
 
     /**
-     * Phase 191: streaming PKCS#7 signing для seekable streams.
-     * Emits объекты incrementally, после полного emit seek'ает back и
-     * patches /ByteRange + /Contents placeholders с actual signature.
+     * Streaming PKCS#7 signing for seekable streams.
+     * Emits objects incrementally, then after the full emit seeks back and
+     * patches /ByteRange + /Contents placeholders with actual signature.
      *
      * @param  resource  $stream
      */
     private function toSeekableStreamWithSignature($stream): int
     {
-        // Emit identical к non-signed path, then patch in-place в stream.
+        // Emit identical to non-signed path, then patch in-place in stream.
         // Strategy: write everything, remember start offset, seek back, patch.
         $startOffset = ftell($stream);
         $written = 0;
@@ -562,7 +562,7 @@ final class Writer
         if ($this->encryption !== null && $this->encryptId !== null) {
             $trailer .= ' /Encrypt ' . $this->encryptId . ' 0 R';
         }
-        // Phase 212: always emit /ID. Prefer pre-set fileId (signing path),
+        // Always emit /ID. Prefer pre-set fileId (signing path),
         // else encryption fileId, else auto-generated.
         if ($this->fileId !== null) {
             $fid = strtoupper(bin2hex($this->fileId));
@@ -577,11 +577,11 @@ final class Writer
         $written += self::writeAll($stream, $xrefOffset . self::LINE_ENDING);
         $written += self::writeAll($stream, '%%EOF' . self::LINE_ENDING);
 
-        // Now patch signature: seek к start, read full content, apply
+        // Now patch signature: seek to start, read full content, apply
         // applyPkcs7Signature, seek back, rewrite content.
-        // Note: для very large documents эта оптимизация partial — final
-        // hashing still needs full read. Но avoiding intermediate string
-        // concatenation savings memory bandwidth.
+        // Note: for very large documents this optimization is partial — final
+        // hashing still needs full read. But avoiding intermediate string
+        // concatenation saves memory bandwidth.
         fseek($stream, $startOffset);
         $content = '';
         while (! feof($stream)) {
@@ -595,7 +595,7 @@ final class Writer
         // Rewrite signed content.
         fseek($stream, $startOffset);
         $writtenFinal = self::writeAll($stream, $signed);
-        // Truncate если signed content shorter than original.
+        // Truncate if signed content shorter than original.
         $endOffset = $startOffset + $writtenFinal;
         if (function_exists('ftruncate')) {
             ftruncate($stream, $endOffset);
@@ -620,21 +620,21 @@ final class Writer
     }
 
     /**
-     * Phase 108: locate placeholders in assembled bytes, compute byte
-     * range, sign data outside /Contents, patch dictionary в-place.
+     * Locate placeholders in assembled bytes, compute byte range, sign
+     * data outside /Contents, patch dictionary in-place.
      */
     private function applyPkcs7Signature(string $bytes): string
     {
         // Locate /ByteRange [<digits> <digits> <digits> <digits>] placeholder.
-        // The placeholder values are all zeros, padded с trailing spaces к
-        // 10 digits each для room под actual integers up to ~10 GB files.
+        // The placeholder values are all zeros, padded with trailing spaces to
+        // 10 digits each, leaving room for actual integers up to ~10 GB files.
         if (! preg_match(
             '@/ByteRange \[(\d+ +\d+ +\d+ +\d+) +\]@',
             $bytes,
             $brMatch,
             PREG_OFFSET_CAPTURE,
         )) {
-            throw new \RuntimeException('Phase 108: /ByteRange placeholder not found in PDF stream');
+            throw new \RuntimeException('/ByteRange placeholder not found in PDF stream');
         }
         $brStart = (int) $brMatch[0][1];
         $brLen = strlen((string) $brMatch[0][0]);
@@ -646,12 +646,12 @@ final class Writer
             $cMatch,
             PREG_OFFSET_CAPTURE,
         )) {
-            throw new \RuntimeException('Phase 108: /Contents placeholder not found');
+            throw new \RuntimeException('/Contents placeholder not found');
         }
         $cStart = (int) $cMatch[0][1];
         $cLen = strlen((string) $cMatch[0][0]);
 
-        // Byte ranges: [0, gapStart] и [gapEnd, EOF].
+        // Byte ranges: [0, gapStart] and [gapEnd, EOF].
         // gapStart = '<' position; gapEnd = position right after '>'.
         $gapStart = $cStart + strlen('/Contents ');
         $gapEnd = $cStart + $cLen;
@@ -660,10 +660,10 @@ final class Writer
         $c = $gapEnd;
         $d = strlen($bytes) - $gapEnd;
 
-        // Compute ByteRange string padded к original length.
+        // Compute ByteRange string padded to original length.
         $brContent = sprintf('/ByteRange [%d %d %d %d]', $a, $b, $c, $d);
         if (strlen($brContent) > $brLen) {
-            throw new \RuntimeException('Phase 108: /ByteRange replacement exceeds placeholder');
+            throw new \RuntimeException('/ByteRange replacement exceeds placeholder');
         }
         $brContent = str_pad($brContent, $brLen, ' ', STR_PAD_RIGHT);
         $bytes = substr_replace($bytes, $brContent, $brStart, $brLen);
@@ -675,7 +675,7 @@ final class Writer
         $infile = tempnam(sys_get_temp_dir(), 'phppdf-sig-in-');
         $outfile = tempnam(sys_get_temp_dir(), 'phppdf-sig-out-');
         if ($infile === false || $outfile === false) {
-            throw new \RuntimeException('Phase 108: failed to create temp files for signing');
+            throw new \RuntimeException('Failed to create temp files for signing');
         }
         file_put_contents($infile, $signedData);
 
@@ -695,17 +695,17 @@ final class Writer
         @unlink($infile);
         @unlink($outfile);
         if (! $ok) {
-            throw new \RuntimeException('Phase 108: openssl_pkcs7_sign failed: ' . openssl_error_string());
+            throw new \RuntimeException('openssl_pkcs7_sign failed: ' . openssl_error_string());
         }
 
-        // Extract DER PKCS#7 bytes из S/MIME envelope.
+        // Extract DER PKCS#7 bytes from S/MIME envelope.
         $der = self::extractPkcs7FromSmime($smime);
         $sigHex = strtoupper(bin2hex($der));
 
         $placeholderHexLen = $cLen - strlen('/Contents <') - 1; // minus '>'
         if (strlen($sigHex) > $placeholderHexLen) {
             throw new \RuntimeException(sprintf(
-                'Phase 108: PKCS#7 signature %d hex chars exceeds placeholder %d',
+                'PKCS#7 signature %d hex chars exceeds placeholder %d',
                 strlen($sigHex), $placeholderHexLen,
             ));
         }
@@ -739,21 +739,21 @@ final class Writer
             $smime,
             $m,
         )) {
-            throw new \RuntimeException('Phase 108: PKCS#7 base64 portion not found в S/MIME');
+            throw new \RuntimeException('PKCS#7 base64 portion not found in S/MIME');
         }
         $b64 = (string) preg_replace('@\s+@', '', $m[1]);
         $der = base64_decode($b64, true);
         if ($der === false || $der === '') {
-            throw new \RuntimeException('Phase 108: base64_decode failed for PKCS#7 envelope');
+            throw new \RuntimeException('base64_decode failed for PKCS#7 envelope');
         }
 
         return $der;
     }
 
     /**
-     * Phase 41+77: encrypt streams + strings в object body.
-     * Streams: `stream\n<bytes>\nendstream` → RC4/AES per-object.
-     * Strings: literal `(...)` (Phase 77) → encrypted, then re-encoded.
+     * Encrypt streams and strings in an object body.
+     * Streams: `stream\n<bytes>\nendstream` -> RC4/AES per-object.
+     * Strings: literal `(...)` -> encrypted, then re-encoded.
      */
     private function encryptStreamsInBody(string $body, int $objId): string
     {
@@ -762,8 +762,8 @@ final class Writer
         }
         $enc = $this->encryption;
 
-        // Phase 77: encrypt literal strings первый (before streams чтобы
-        // не повредить regex с binary).
+        // Encrypt literal strings first (before streams, so the regex is
+        // not corrupted by binary content).
         $body = $this->encryptLiteralStrings($body, $objId);
 
         // Encrypt stream content: `stream\n<bytes>\nendstream`.
@@ -779,8 +779,8 @@ final class Writer
     }
 
     /**
-     * Phase 77: Encrypt literal PDF strings (...) → output as hex form
-     * <ENCRYPTED_HEX>. Walks body manually для correct paren-balance
+     * Encrypt literal PDF strings (...) -> output as hex form
+     * <ENCRYPTED_HEX>. Walks body manually for correct paren balance
      * (literal strings allow nested () pairs balanced).
      */
     private function encryptLiteralStrings(string $body, int $objId): string

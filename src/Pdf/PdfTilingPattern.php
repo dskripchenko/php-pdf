@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 111: Tiling Pattern (Type 1) — repeating fill pattern.
+ * Tiling Pattern (Type 1) — repeating fill pattern.
  *
  * ISO 32000-1 §8.7.3. A pattern cell with bbox + xStep/yStep defines
- * the repeat geometry. Filled regions are tiled с the pattern stream.
+ * the repeat geometry. Filled regions are tiled with the pattern stream.
  *
  * Layout in output PDF:
  *   N 0 obj
@@ -22,7 +22,7 @@ namespace Dskripchenko\PhpPdf\Pdf;
  * PaintType 1 (colored): pattern stream contains color ops; reference via
  * `/Pattern cs /Name scn`.
  *
- * Not supported в первой итерации:
+ * Not supported:
  *  - PaintType 2 (uncolored — color set externally per use).
  *  - Pattern-specific /Resources (no font/image inside pattern cell).
  */
@@ -36,7 +36,7 @@ final readonly class PdfTilingPattern
         public float $bboxUry,
         public float $xStep,
         public float $yStep,
-        /** Optional /Matrix [a b c d e f] для rotated/sheared tile. */
+        /** Optional /Matrix [a b c d e f] for rotated/sheared tile. */
         public ?array $matrix = null,
     ) {
         if ($bboxUrx <= $bboxLlx || $bboxUry <= $bboxLly) {
@@ -51,7 +51,7 @@ final readonly class PdfTilingPattern
     }
 
     /**
-     * Build the dictionary head fragment (без /Length и stream body).
+     * Build the dictionary head fragment (without /Length and stream body).
      */
     public function dictHead(): string
     {

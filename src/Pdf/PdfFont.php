@@ -7,26 +7,26 @@ namespace Dskripchenko\PhpPdf\Pdf;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 
 /**
- * Builds a Type0 composite font в PDF из TtfFile.
+ * Builds a Type0 composite font in PDF from TtfFile.
  *
- * Структура PDF font objects (ISO 32000-1 §9.7):
+ * PDF font object structure (ISO 32000-1 §9.7):
  *
  *   Font (Type0)
  *     /BaseFont /<PostScriptName>
- *     /Encoding /Identity-H        ← 2-byte glyph IDs as character codes
+ *     /Encoding /Identity-H        2-byte glyph IDs as character codes
  *     /DescendantFonts [<<CIDFontType2>>]
- *     /ToUnicode <<CMap stream>>   ← для copy-paste correctness
+ *     /ToUnicode <<CMap stream>>   for copy-paste correctness
  *
  *   CIDFontType2 (descendant)
  *     /BaseFont /<PostScriptName>
  *     /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>
- *     /CIDToGIDMap /Identity        ← CID == glyph ID напрямую
+ *     /CIDToGIDMap /Identity        CID == glyph ID directly
  *     /FontDescriptor <<...>>
  *     /W [<gid> [<width>]]
  *
  *   FontDescriptor
  *     /FontName /<PostScriptName>
- *     /Flags <integer>              ← bit-flags: serif, fixed-pitch, italic, etc.
+ *     /Flags <integer>              bit-flags: serif, fixed-pitch, italic, etc.
  *     /FontBBox [xMin yMin xMax yMax]
  *     /Ascent / /Descent / /CapHeight / /ItalicAngle / /StemV
  *     /FontFile2 <<embedded TTF stream>>
@@ -35,26 +35,26 @@ use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
  *     /Length <compressed length>
  *     /Length1 <original TTF length>
  *
- * Encoding text: 2-byte big-endian glyph IDs в hex string
- *   `<00480065006C006C006F>` для "Hello"
+ * Encoding text: 2-byte big-endian glyph IDs in hex string
+ *   `<00480065006C006C006F>` for "Hello"
  *
- * Coords для widths: PDF convention — 1000/em. TTF FUnit → PDF unit
- * пересчёт: `PDF_width = TTF_width * 1000 / unitsPerEm`.
+ * Coords for widths: PDF convention is 1000/em. TTF FUnit to PDF unit
+ * conversion: `PDF_width = TTF_width * 1000 / unitsPerEm`.
  */
 final class PdfFont
 {
     /**
-     * glyphId → list of source codepoints (для ToUnicode CMap построения).
-     * Для обычных glyph'ов — single-element list. Для ligature-glyph'ов —
-     * список codepoint'ов исходной sequence (e.g., glyph "fi" → ['f', 'i']).
+     * glyphId to list of source codepoints (for ToUnicode CMap construction).
+     * For regular glyphs, a single-element list. For ligature glyphs,
+     * the list of codepoints of the source sequence (e.g., glyph "fi" -> ['f', 'i']).
      *
      * @var array<int, list<int>>
      */
     private array $usedGlyphs = [];
 
     /**
-     * Phase 130: per-Writer registration cache. Allows safe reuse of same
-     * PdfFont instance across multiple Documents — каждый writer gets свой
+     * Per-Writer registration cache. Allows safe reuse of the same
+     * PdfFont instance across multiple Documents - each writer gets its own
      * fontObjectId.
      *
      * @var \SplObjectStorage<Writer, int>
@@ -62,22 +62,22 @@ final class PdfFont
     private \SplObjectStorage $writerRegistrations;
 
     /**
-     * @var bool  Применять ligature substitutions из GSUB ('liga' feature).
-     *            False — disable (для debug или fonts с проблемными liga).
+     * @var bool  Apply ligature substitutions from GSUB ('liga' feature).
+     *            False disables them (for debug or fonts with problematic liga).
      */
     private bool $ligaturesEnabled = true;
 
     /**
-     * @param  bool  $subset  Если true — embed только used glyph'ы через
-     *                        TtfSubsetter (от ~411KB до ~5-50KB обычно).
-     *                        Если false — full TTF (backward-compat для
-     *                        корнер-кейсов где subset причинит проблем).
+     * @param  bool  $subset  If true, embed only used glyphs via
+     *                        TtfSubsetter (typically from ~411KB to ~5-50KB).
+     *                        If false, full TTF (backward-compat for
+     *                        corner-cases where subsetting causes issues).
      */
     /**
-     * @param  array<string, float>  $axes  Phase 134: variable font axis coords
-     *                                       (e.g., ['wght' => 700]). При embedding
-     *                                       glyph outlines pre-interpolate'ятся
-     *                                       и static subset emit'ится.
+     * @param  array<string, float>  $axes  Variable font axis coords
+     *                                       (e.g., ['wght' => 700]). When embedding,
+     *                                       glyph outlines are pre-interpolated
+     *                                       and a static subset is emitted.
      *                                       Empty array = default instance.
      */
     public function __construct(
@@ -85,13 +85,13 @@ final class PdfFont
         private readonly bool $subset = true,
         private readonly array $axes = [],
         /**
-         * Phase 194: vertical writing mode для CJK text. When true:
+         * Vertical writing mode for CJK text. When true:
          *  - CIDFontType2 dict gets /WMode 1
-         *  - /W2 array emitted с vertical advance metrics from vmtx table
-         *  - Caller responsible для using vertical positioning в layout
+         *  - /W2 array emitted with vertical advance metrics from vmtx table
+         *  - Caller is responsible for using vertical positioning in layout
          *
-         * Font must have vhea+vmtx tables — check TtfFile::hasVerticalMetrics()
-         * перед setting verticalWriting=true.
+         * Font must have vhea+vmtx tables - check TtfFile::hasVerticalMetrics()
+         * before setting verticalWriting=true.
          */
         private readonly bool $verticalWriting = false,
     ) {
@@ -109,12 +109,12 @@ final class PdfFont
     }
 
     /**
-     * Phase 130: explicitly clear per-Writer registration cache + used glyphs.
-     * Use case: same PdfFont instance reused across many Documents где каждый
-     * doc должен иметь fresh subset (containing only ITS glyphs).
+     * Explicitly clear per-Writer registration cache and used glyphs.
+     * Use case: same PdfFont instance reused across many Documents where each
+     * doc must have a fresh subset (containing only ITS glyphs).
      *
-     * Без reset() usedGlyphs accumulates across docs (each subsequent doc
-     * embeds superset). С reset() — per-doc subset точный к данным doc'у.
+     * Without reset() usedGlyphs accumulates across docs (each subsequent doc
+     * embeds a superset). With reset(), per-doc subset is accurate to that doc.
      */
     public function reset(): void
     {
@@ -124,20 +124,20 @@ final class PdfFont
     }
 
     /**
-     * Регистрирует font в Writer'е. Создаёт все необходимые объекты,
-     * возвращает Type0 font dict object ID — этот ID используется
-     * в page Resources /Font dict.
+     * Registers the font with a Writer. Creates all necessary objects and
+     * returns the Type0 font dict object ID - this ID is used in the page
+     * Resources /Font dict.
      */
     public function registerWith(Writer $writer, bool $compressStreams = true): int
     {
-        // Phase 130: per-Writer cache (instead of single $fontObjectId).
+        // per-Writer cache (instead of single $fontObjectId).
         if (isset($this->writerRegistrations[$writer])) {
             return $this->writerRegistrations[$writer];
         }
 
-        // 1. Embed TTF binary как FontFile2 stream object. С FlateDecode
-        //    font subsets ~50-70% меньше (typical 30-70KB → 15-35KB).
-        // Phase 134: variation instance, если font is variable и axes заданы.
+        // 1. Embed TTF binary as FontFile2 stream object. With FlateDecode
+        //    font subsets are ~50-70% smaller (typical 30-70KB to 15-35KB).
+        // variation instance, if font is variable and axes are set.
         $variableInstance = null;
         if ($this->axes !== [] && $this->ttf->isVariable()) {
             $variableInstance = new \Dskripchenko\PhpPdf\Font\Ttf\VariableInstance($this->ttf, $this->axes);
@@ -170,9 +170,9 @@ final class PdfFont
         $cidFontBody = $this->buildCIDFont($descriptorId);
         $cidFontId = $writer->addObject($cidFontBody);
 
-        // 4. ToUnicode CMap (placeholder — filled later когда usedGlyphs known).
-        //    Но для POC мы регистрируем все glyph'ы используемые в content
-        //    stream'ах ДО registerWith(). См. addUsedChar().
+        // 4. ToUnicode CMap (placeholder, filled later when usedGlyphs known).
+        //    But for POC we register all glyphs used in content
+        //    streams BEFORE registerWith(). See addUsedChar().
         $toUnicodeId = $writer->addObject($this->buildToUnicodeCMap());
 
         // 5. Top-level Type0 font dict.
@@ -191,8 +191,8 @@ final class PdfFont
     }
 
     /**
-     * Внутренний raw-access на TtfFile (для TextMeasurer + LineBreaker,
-     * которые сами не должны парсить TTF).
+     * Internal raw-access to TtfFile (for TextMeasurer and LineBreaker,
+     * which should not parse TTF themselves).
      */
     public function ttf(): \Dskripchenko\PhpPdf\Font\Ttf\TtfFile
     {
@@ -200,9 +200,9 @@ final class PdfFont
     }
 
     /**
-     * Phase 76: Check whether all codepoints в $text есть в font cmap.
-     * ASCII control chars + space treated as supported. Used для Engine
-     * font fallback chain — main font lacks glyph → try next в chain.
+     * Check whether all codepoints in $text exist in the font cmap.
+     * ASCII control chars and space are treated as supported. Used for Engine
+     * font fallback chain - if main font lacks glyph, try next in chain.
      */
     public function supportsText(string $text): bool
     {
@@ -214,7 +214,7 @@ final class PdfFont
             $ch = mb_substr($text, $i, 1, 'UTF-8');
             $cp = mb_ord($ch, 'UTF-8');
             if ($cp === false || $cp <= 32) {
-                // Control/space — universally supported.
+                // Control/space - universally supported.
                 continue;
             }
             if ($this->ttf->glyphIdForChar($cp) === 0) {
@@ -225,19 +225,19 @@ final class PdfFont
         return true;
     }
 
-    /** Phase 135: enable Arabic contextual shaping (init/medi/fina/isol). */
+    /** Enable Arabic contextual shaping (init/medi/fina/isol). */
     private bool $arabicShapingEnabled = true;
 
-    /** Phase 136: enable Unicode Bidi reordering (UAX 9). */
+    /** Enable Unicode Bidi reordering (UAX 9). */
     private bool $bidiEnabled = true;
 
-    /** Phase 137: enable Indic pre-base matra reordering. */
+    /** Enable Indic pre-base matra reordering. */
     private bool $indicShapingEnabled = true;
 
     /**
-     * Phase 154: bounded LRU cache для decodeUtf8 results — TextMeasurer
-     * (Engine layout) повторно вызывает на тех же словах при measuring
-     * line-fits, justification, и т.п.
+     * Bounded LRU cache for decodeUtf8 results - TextMeasurer
+     * (Engine layout) repeatedly calls on the same words while measuring
+     * line-fits, justification, etc.
      *
      * @var array<string, list<array{cp: int, gid: int}>>
      */
@@ -246,8 +246,8 @@ final class PdfFont
     private const DECODE_CACHE_MAX = 2048;
 
     /**
-     * Phase 135: disable Arabic shaping (для debug или если font handles
-     * shaping itself через GSUB rather than Presentation Forms B).
+     * Disable Arabic shaping (for debug or if font handles
+     * shaping itself via GSUB rather than Presentation Forms B).
      */
     public function disableArabicShaping(): void
     {
@@ -255,7 +255,7 @@ final class PdfFont
     }
 
     /**
-     * Phase 136: disable Bidi reordering. Useful когда caller предоставляет
+     * Disable Bidi reordering. Useful when the caller provides
      * pre-ordered visual text (e.g., from external Bidi pipeline).
      */
     public function disableBidi(): void
@@ -264,7 +264,7 @@ final class PdfFont
     }
 
     /**
-     * Phase 137: disable Indic pre-base matra reordering.
+     * Disable Indic pre-base matra reordering.
      */
     public function disableIndicShaping(): void
     {
@@ -272,31 +272,31 @@ final class PdfFont
     }
 
     /**
-     * Decode UTF-8 в list (codepoint, glyphId) — низкоуровневый decoder.
-     * НЕ применяет ligature substitution. Side-effect: НЕ накапливает в
-     * usedGlyphs (это делает shapedGlyphs/encodeText).
+     * Decode UTF-8 into a list of (codepoint, glyphId) - low-level decoder.
+     * Does NOT apply ligature substitution. Side-effect: does NOT accumulate
+     * into usedGlyphs (that's done by shapedGlyphs/encodeText).
      *
-     * Pipeline (Phase 135 + 136):
-     *  1. UTF-8 → codepoints (logical order)
-     *  2. ArabicShaper::shapeLogical — contextual shaping в logical order
-     *  3. BidiAlgorithm::reorderCodepoints — UAX 9 visual reordering
+     * Pipeline:
+     *  1. UTF-8 to codepoints (logical order)
+     *  2. ArabicShaper::shapeLogical - contextual shaping in logical order
+     *  3. BidiAlgorithm::reorderCodepoints - UAX 9 visual reordering
      *  4. Cmap lookup per visual codepoint
      *
      * @return list<array{cp: int, gid: int}>
      */
     public function decodeUtf8(string $utf8): array
     {
-        // Phase 154: memo cache. TextMeasurer повторно зовёт decodeUtf8
-        // на одних и тех же словах при layout passes; без cache pipeline
-        // (utf8→cps + Arabic/Indic shape + Bidi + cmap + rphf) запускается
-        // каждый раз и blows memory. Bounded FIFO cap = 2048 entries.
+        // Memo cache. TextMeasurer repeatedly calls decodeUtf8
+        // on the same words during layout passes; without cache the pipeline
+        // (utf8 to cps + Arabic/Indic shape + Bidi + cmap + rphf) runs
+        // every time and blows memory. Bounded FIFO cap = 2048 entries.
         if (isset($this->decodeCache[$utf8])) {
             return $this->decodeCache[$utf8];
         }
 
         $cps = self::utf8ToCps($utf8);
 
-        // Phase 135: Arabic contextual shaping в logical order.
+        // Arabic contextual shaping in logical order.
         if ($this->arabicShapingEnabled && self::containsArabic($cps)) {
             $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shapeLogical($cps);
         }
@@ -307,13 +307,13 @@ final class PdfFont
             $indicApplied = true;
         }
 
-        // Phase 136: Bidi reordering для visual display.
+        // Bidi reordering for visual display.
         if ($this->bidiEnabled && self::containsRtl($cps)) {
             $cps = \Dskripchenko\PhpPdf\Text\BidiAlgorithm::reorderCodepoints($cps);
         }
 
-        // Phase 144: detect reph positions BEFORE cmap (need codepoint
-        // context: RA+virama preceded by non-virama → reph candidate).
+        // Detect reph positions BEFORE cmap (need codepoint
+        // context: RA+virama preceded by non-virama -> reph candidate).
         $rphfPositions = $indicApplied ? self::detectRphPositions($cps) : [];
 
         $out = [];
@@ -321,7 +321,7 @@ final class PdfFont
             $out[] = ['cp' => $cp, 'gid' => $this->ttf->glyphIdForChar($cp)];
         }
 
-        // Phase 144: apply GSUB 'rphf' single substitution to reph positions.
+        // Apply GSUB 'rphf' single substitution to reph positions.
         if ($rphfPositions !== []) {
             $rphf = $this->ttf->singleSubstitutionsForFeature('rphf');
             if ($rphf !== null) {
@@ -343,7 +343,7 @@ final class PdfFont
     }
 
     /**
-     * Phase 144: identify codepoint positions where RA + virama forms a reph.
+     * Identify codepoint positions where RA + virama forms a reph.
      * After Indic shaping, reph clusters have RA + virama at end of syllable
      * (NOT at start). Detection: RA followed by virama, where previous cp
      * is NOT virama (excluding subscript-RA case "halant + RA").
@@ -351,7 +351,7 @@ final class PdfFont
      * @param  list<int>  $cps
      * @return array<int, true>  Index of RA codepoint that should be rphf-substituted.
      */
-    /** @internal exposed для unit testing of reph detection */
+    /** @internal exposed for unit testing of reph detection */
     public static function detectRphPositionsForTest(array $cps): array
     {
         return self::detectRphPositions($cps);
@@ -361,7 +361,7 @@ final class PdfFont
     {
         $positions = [];
         $n = count($cps);
-        for ($i = 1; $i < $n - 1; $i++) {  // i > 0 (skip start) и i+1 < n (need following virama)
+        for ($i = 1; $i < $n - 1; $i++) {  // i > 0 (skip start) and i+1 < n (need following virama)
             if (\Dskripchenko\PhpPdf\Text\IndicShaper::isRA($cps[$i])
                 && \Dskripchenko\PhpPdf\Text\IndicShaper::isVirama($cps[$i + 1])
                 && ! \Dskripchenko\PhpPdf\Text\IndicShaper::isVirama($cps[$i - 1])
@@ -454,13 +454,13 @@ final class PdfFont
     }
 
     /**
-     * High-level: UTF-8 → list of «shaped» glyph entries после GSUB liga
-     * substitution. Каждый entry = {gid, sourceCps} — sourceCps это
-     * codepoint'ы которые этот gid представляет (1 для regular glyph'ов,
-     * 2+ для ligature glyph'ов).
+     * High-level: UTF-8 to list of "shaped" glyph entries after GSUB liga
+     * substitution. Each entry = {gid, sourceCps} - sourceCps is the
+     * codepoints that this gid represents (1 for regular glyphs,
+     * 2+ for ligature glyphs).
      *
-     * Side-effect: записывает в usedGlyphs со всеми source codepoint'ами
-     * (для построения ToUnicode CMap с правильным copy-paste).
+     * Side-effect: writes into usedGlyphs with all source codepoints
+     * (for building the ToUnicode CMap with correct copy-paste).
      *
      * @return list<array{gid: int, sourceCps: list<int>}>
      */
@@ -473,7 +473,7 @@ final class PdfFont
         $ligatures = $this->ligaturesEnabled ? $this->ttf->ligatures() : null;
 
         if ($ligatures === null) {
-            // No GSUB liga — straight mapping.
+            // No GSUB liga - straight mapping.
             $out = [];
             foreach ($decoded as $i => $entry) {
                 $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
@@ -484,16 +484,16 @@ final class PdfFont
         }
 
         $result = $ligatures->apply($glyphIds);
-        // Mapping: source-glyph-index ranges → result glyph + sources.
-        // ligatures->apply() возвращает {glyphs, sourceMap (ligatureGid → component-gids)}
-        // Мы нужно знать какие исходные CODEPOINTS соответствуют каждому
-        // ligature gid'у. Это требует matching от LigatureSubstitutions.
+        // Mapping: source-glyph-index ranges to result glyph + sources.
+        // ligatures->apply() returns {glyphs, sourceMap (ligatureGid -> component-gids)}
+        // We need to know which source CODEPOINTS correspond to each
+        // ligature gid. This requires matching from LigatureSubstitutions.
 
-        // Простой подход: re-run apply on (cp, gid) pairs sequentially,
-        // отслеживая source-cp positions.
+        // Simple approach: re-run apply on (cp, gid) pairs sequentially,
+        // tracking source-cp positions.
         $out = [];
         $shaped = $result['glyphs'];
-        $sourceMap = $result['sourceMap']; // ligatureGid → list<componentGid>
+        $sourceMap = $result['sourceMap']; // ligatureGid -> list<componentGid>
         $sourceIdx = 0;
         foreach ($shaped as $shapedGid) {
             if (isset($sourceMap[$shapedGid])) {
@@ -512,11 +512,10 @@ final class PdfFont
     }
 
     /**
-     * Backward-compat: iterate как было раньше. Использует decodeUtf8 без
-     * shaping. Side-effect: pollutes usedGlyphs single-cp entries.
+     * Backward-compat: iterate as before. Uses decodeUtf8 without
+     * shaping. Side-effect: pollutes usedGlyphs with single-cp entries.
      *
-     * Используется только для legacy кода; новый код должен использовать
-     * shapedGlyphs().
+     * Used only for legacy code; new code should use shapedGlyphs().
      *
      * @return iterable<array{cp: int, gid: int}>
      */
@@ -529,8 +528,8 @@ final class PdfFont
     }
 
     /**
-     * Отключить ligature substitution. Полезно когда font имеет проблемные
-     * 'liga' rules или нужен exact-glyph layout.
+     * Disable ligature substitution. Useful when a font has problematic
+     * 'liga' rules or an exact-glyph layout is required.
      */
     public function disableLigatures(): self
     {
@@ -540,17 +539,17 @@ final class PdfFont
     }
 
     /**
-     * Kerning adjustment между (left, right) glyph'ами в PDF text-space units
-     * (1000/em), уже sign-flipped для готового использования в TJ operator
-     * и width-measurement subtraction.
+     * Kerning adjustment between (left, right) glyphs in PDF text-space units
+     * (1000/em), already sign-flipped for ready use in the TJ operator
+     * and width-measurement subtraction.
      *
      * Convention:
-     *  - Возвращает POSITIVE для tighter pairs (less space, AV например)
-     *  - Возвращает NEGATIVE для loose pairs (more space — редко)
-     *  - 0 если pair не имеет kerning'а
+     *  - Returns POSITIVE for tighter pairs (less space, e.g., AV)
+     *  - Returns NEGATIVE for loose pairs (more space - rare)
+     *  - 0 if the pair has no kerning
      *
-     * Для измерения width: total_pdf_units -= kerningPdfUnits(prev, cur).
-     * Для TJ operator: между runs insert int value = +kerningPdfUnits(prev, cur).
+     * For width measurement: total_pdf_units -= kerningPdfUnits(prev, cur).
+     * For TJ operator: between runs insert int value = +kerningPdfUnits(prev, cur).
      */
     public function kerningPdfUnits(int $leftGid, int $rightGid): int
     {
@@ -562,19 +561,19 @@ final class PdfFont
         if ($xAdvanceFu === 0) {
             return 0;
         }
-        // GPOS xAdvance negative → reduce advance → tighter pair.
-        // PDF TJ value positive → subtract from position → next glyph left.
+        // GPOS xAdvance negative -> reduce advance -> tighter pair.
+        // PDF TJ value positive -> subtract from position -> next glyph left.
         // Convert: PDF_value = -GPOS_value * 1000/em.
         return (int) round(-$xAdvanceFu * 1000 / $this->ttf->unitsPerEm());
     }
 
     /**
-     * Кодирует UTF-8 текст в hex glyph-ID string для simple Tj operator
-     * при Identity-H encoding. Применяет ligature substitution через
-     * shapedGlyphs(). БЕЗ kerning'а — для kerning-aware версии см.
+     * Encodes UTF-8 text as a hex glyph-ID string for the simple Tj operator
+     * with Identity-H encoding. Applies ligature substitution via
+     * shapedGlyphs(). Without kerning - for the kerning-aware version see
      * encodeTextTjArray().
      *
-     * Side-effect: usedGlyphs накапливается для ToUnicode CMap.
+     * Side-effect: usedGlyphs accumulates for the ToUnicode CMap.
      */
     public function encodeText(string $utf8): string
     {
@@ -587,20 +586,20 @@ final class PdfFont
     }
 
     /**
-     * Kerning-aware encoding для TJ operator. Возвращает array состоящий
-     * из чередующихся hex-string'ов и int adjustment'ов.
+     * Kerning-aware encoding for the TJ operator. Returns an array of
+     * alternating hex-strings and int adjustments.
      *
-     * Example «AVA»:
+     * Example "AVA":
      *   ['<0036>', 74, '<00570036>']
-     *   ──────  ──  ──────────
+     *   ------  --  ----------
      *   A run   AV  V+A run
      *           kern
      *
-     * Если у font'а нет kerning table'а ИЛИ ни одной из pair-ов нет
-     * kerning'а — array содержит один single hex-string (можно тогда
-     * использовать обычный Tj вместо TJ — but caller сам решает).
+     * If the font has no kerning table OR no pairs have kerning, the array
+     * contains a single hex-string (in which case the caller can use plain
+     * Tj instead of TJ - but it's up to the caller).
      *
-     * Side-effect: usedGlyphs накапливается.
+     * Side-effect: usedGlyphs accumulates.
      *
      * @return list<string|int>
      */
@@ -630,8 +629,8 @@ final class PdfFont
     }
 
     /**
-     * Width одного UTF-8 character'а в PDF text-space units (1000/em).
-     * Полезно для measure / layout — Phase 3 будет переиспользовать.
+     * Width of a single UTF-8 character in PDF text-space units (1000/em).
+     * Useful for measure / layout.
      */
     public function widthOfCharPdfUnits(int $unicodeCodepoint): int
     {
@@ -642,8 +641,8 @@ final class PdfFont
     }
 
     /**
-     * Width одного glyph'а в PDF text-space units (1000/em).
-     * Аналог widthOfCharPdfUnits, но принимает уже-разрешённый glyph ID.
+     * Width of a single glyph in PDF text-space units (1000/em).
+     * Analog of widthOfCharPdfUnits, but takes an already-resolved glyph ID.
      */
     public function widthOfGlyphPdfUnits(int $gid): int
     {
@@ -653,7 +652,7 @@ final class PdfFont
     }
 
     /**
-     * FontDescriptor — содержит metrics + reference на embedded font file.
+     * FontDescriptor - contains metrics and reference to the embedded font file.
      */
     private function buildFontDescriptor(int $fontFileObjId): string
     {
@@ -668,10 +667,10 @@ final class PdfFont
             $toPdf($bbox[3]),
         );
 
-        // PDF Flags (ISO 32000-1 Table 123). Bit-positions начинаются с 1.
+        // PDF Flags (ISO 32000-1 Table 123). Bit-positions start at 1.
         //   bit 1: FixedPitch
         //   bit 2: Serif
-        //   bit 3: Symbolic (любой non-Adobe-Latin charset)
+        //   bit 3: Symbolic (any non-Adobe-Latin charset)
         //   bit 4: Script
         //   bit 6: Nonsymbolic
         //   bit 7: Italic
@@ -682,7 +681,7 @@ final class PdfFont
         if ($this->ttf->isFixedPitch()) {
             $flags |= 1; // bit 1
         }
-        $flags |= 32; // bit 6 — Nonsymbolic (наш default; работает с Latin + Cyrillic)
+        $flags |= 32; // bit 6 - Nonsymbolic (our default; works with Latin + Cyrillic)
         if ($this->ttf->italicAngle() !== 0) {
             $flags |= 64; // bit 7
         }
@@ -698,15 +697,15 @@ final class PdfFont
             $this->ttf->italicAngle(),
             $toPdf($this->ttf->ascent()),
             $toPdf($this->ttf->descent()),
-            $toPdf($this->ttf->ascent()), // CapHeight ≈ ascent для POC; уточним позже
+            $toPdf($this->ttf->ascent()), // CapHeight ~ ascent for POC; refine later
             $fontFileObjId,
         );
     }
 
     /**
-     * CIDFontType2 descendant — содержит glyph widths и связь с descriptor'ом.
+     * CIDFontType2 descendant - contains glyph widths and link to the descriptor.
      *
-     * Phase 194: vertical writing — adds /WMode 1 + /W2 array (vertical
+     * Vertical writing adds /WMode 1 + /W2 array (vertical
      * advance metrics from vmtx).
      */
     private function buildCIDFont(int $descriptorId): string
@@ -729,12 +728,12 @@ final class PdfFont
     }
 
     /**
-     * Phase 194: /W2 array per PDF spec §9.7.4.3 — vertical metrics для CIDFont.
+     * /W2 array per PDF spec §9.7.4.3 - vertical metrics for CIDFont.
      * Format: [<gid> [<v_y> <v_y_origin> <w1y>] ...]
-     * Где:
-     *   v_y — vertical displacement к origin point (default 880 thousandths)
-     *   v_y_origin — y coordinate относительно horizontal origin
-     *   w1y — vertical advance (negative — moves downward).
+     * Where:
+     *   v_y - vertical displacement to origin point (default 880 thousandths)
+     *   v_y_origin - y coordinate relative to horizontal origin
+     *   w1y - vertical advance (negative - moves downward).
      *
      * Simplified emission: per glyph derive w1y from vmtx advanceHeight,
      * v_y / v_y_origin use defaults (PDF readers typically tolerate this).
@@ -749,7 +748,7 @@ final class PdfFont
         ksort($this->usedGlyphs);
         foreach (array_keys($this->usedGlyphs) as $gid) {
             $advHeight = $this->ttf->advanceHeight($gid) ?? 1000;
-            // PDF /W2 advance в negative thousandths (1000 unitsPerEm = 1 em).
+            // PDF /W2 advance in negative thousandths (1000 unitsPerEm = 1 em).
             $w1y = -(int) round($advHeight * 1000 / $upem);
             // v_y default: 880 (PDF §9.7.4.3); v_y_origin default 500.
             $parts[] = "$gid [880 500 $w1y]";
@@ -759,11 +758,11 @@ final class PdfFont
     }
 
     /**
-     * /W array — widths для каждого использованного glyph'а. Формат:
+     * /W array - widths for each used glyph. Format:
      *   [<gid> [<width1> <width2> ...]  ...]
      *
-     * Для POC эмитим individual entries (по одному glyph'у на запись).
-     * Phase 2 будет оптимизировать в diapason'ы.
+     * For POC emit individual entries (one glyph per entry).
+     * Future work: optimize into ranges.
      */
     private function buildWidthsArray(): string
     {
@@ -772,7 +771,7 @@ final class PdfFont
         }
         $upem = $this->ttf->unitsPerEm();
         $parts = [];
-        // Sort by glyphId для readability и (возможно) future-optimization.
+        // Sort by glyphId for readability and (possibly) future optimization.
         ksort($this->usedGlyphs);
         foreach (array_keys($this->usedGlyphs) as $gid) {
             $pdfWidth = (int) round($this->ttf->advanceWidth($gid) * 1000 / $upem);
@@ -783,11 +782,10 @@ final class PdfFont
     }
 
     /**
-     * ToUnicode CMap stream — позволяет PDF reader'у конвертировать
-     * 2-byte glyph IDs обратно в Unicode для copy-paste, text-search,
-     * accessibility.
+     * ToUnicode CMap stream - lets a PDF reader convert 2-byte glyph IDs
+     * back to Unicode for copy-paste, text-search, and accessibility.
      *
-     * Минимальный CMap:
+     * Minimal CMap:
      *   /CIDInit /ProcSet findresource begin
      *   12 dict begin
      *   begincmap
@@ -817,10 +815,10 @@ final class PdfFont
         if ($count > 0) {
             $body .= "$count beginbfchar\n";
             foreach ($this->usedGlyphs as $gid => $cps) {
-                // cps — list<int>: один codepoint для regular glyph,
-                // несколько для ligature glyph (e.g., fi → ['f','i']).
-                // PDF ToUnicode bfchar: <gid> <utf16-hex> где utf16-hex
-                // может быть multi-character для ligatures.
+                // cps - list<int>: single codepoint for regular glyph,
+                // multiple for ligature glyph (e.g., fi -> ['f','i']).
+                // PDF ToUnicode bfchar: <gid> <utf16-hex> where utf16-hex
+                // may be multi-character for ligatures.
                 $utf16 = '';
                 foreach ($cps as $cp) {
                     $utf16 .= $this->codepointToUtf16BeHex($cp);
@@ -836,15 +834,15 @@ final class PdfFont
     }
 
     /**
-     * Codepoint → UTF-16BE hex для CMap entries. BMP — 4 hex chars.
-     * Supplementary plane — 8 hex chars (surrogate pair).
+     * Codepoint to UTF-16BE hex for CMap entries. BMP is 4 hex chars.
+     * Supplementary plane is 8 hex chars (surrogate pair).
      */
     private function codepointToUtf16BeHex(int $cp): string
     {
         if ($cp <= 0xFFFF) {
             return sprintf('%04X', $cp);
         }
-        // Surrogate pair: высокий 0xD800..0xDBFF, низкий 0xDC00..0xDFFF.
+        // Surrogate pair: high 0xD800..0xDBFF, low 0xDC00..0xDFFF.
         $cp -= 0x10000;
         $high = 0xD800 + ($cp >> 10);
         $low = 0xDC00 + ($cp & 0x3FF);

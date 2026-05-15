@@ -5,20 +5,20 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 90: PDF Type 3 stitching function (ISO 32000-1 §7.10.4).
+ * PDF Type 3 stitching function (ISO 32000-1 §7.10.4).
  *
  * Composes N sub-functions sequentially across domain [0, 1]:
  *  - At t = bounds[0], first sub-function active.
  *  - Sub-function inputs mapped via /Encode entries.
  *
- * Used для multi-stop gradients: каждый pair of adjacent stops → Type 2
+ * Used for multi-stop gradients: each pair of adjacent stops → Type 2
  * sub-function, stitched together by Type 3.
  */
 final readonly class PdfStitchingFunction
 {
     /**
      * @param  list<PdfFunction>  $subFunctions  N functions, one per stop pair.
-     * @param  list<float>  $bounds  (N - 1) values — split points в [0,1].
+     * @param  list<float>  $bounds  (N - 1) values — split points in [0,1].
      * @param  list<float>  $encode  2N values: per sub-function input range.
      */
     public function __construct(

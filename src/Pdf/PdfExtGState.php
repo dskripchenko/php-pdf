@@ -5,21 +5,21 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 31: PDF Extended Graphics State (ExtGState).
+ * PDF Extended Graphics State (ExtGState).
  *
- * Описывает параметры graphics state, которые не выражаются inline
- * операторами (например opacity / transparency). Применяется в content
- * stream через оператор `<name> gs`.
+ * Describes graphics state parameters that cannot be expressed via inline
+ * operators (for example opacity / transparency). Applied in a content
+ * stream via the `<name> gs` operator.
  *
  * ISO 32000-1 §8.4.5 / §11.3 — Transparent imaging model.
- * Для прозрачности нужен PDF 1.4+. php-pdf header'ит 1.7 → OK.
+ * Transparency requires PDF 1.4+. php-pdf headers as 1.7 → OK.
  *
- * Поля:
- *  - $fillOpacity (/ca, 0..1) — alpha для fill operators (включая image Do).
- *  - $strokeOpacity (/CA, 0..1) — alpha для stroke operators.
+ * Fields:
+ *  - $fillOpacity (/ca, 0..1) — alpha for fill operators (including image Do).
+ *  - $strokeOpacity (/CA, 0..1) — alpha for stroke operators.
  *
- * Хеширование: VO с readonly + равенство по содержимому делегируется
- * вызывающему коду (см. Page::registerExtGState).
+ * Hashing: readonly VO; equality by content is delegated to the
+ * caller (see Page::registerExtGState).
  */
 final readonly class PdfExtGState
 {
@@ -29,7 +29,7 @@ final readonly class PdfExtGState
     ) {}
 
     /**
-     * Уникальный ключ для dedup'а внутри page (one ExtGState на
+     * Unique key for dedup within a page (one ExtGState per
      * comparable opacity tuple).
      */
     public function key(): string
@@ -42,7 +42,7 @@ final readonly class PdfExtGState
     }
 
     /**
-     * Body для PDF object emission.
+     * Body for PDF object emission.
      */
     public function toDictBody(): string
     {

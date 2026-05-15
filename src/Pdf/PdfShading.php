@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 79-82: PDF Shading object (ISO 32000-1 §8.7.4).
+ * PDF Shading object (ISO 32000-1 §8.7.4).
  *
- * Type 2 (axial) — linear gradient between (x0, y0) и (x1, y1).
- * Type 3 (radial) — radial gradient между circles (cx0, cy0, r0) и
+ * Type 2 (axial) — linear gradient between (x0, y0) and (x1, y1).
+ * Type 3 (radial) — radial gradient between circles (cx0, cy0, r0) and
  * (cx1, cy1, r1).
  *
  * Color interpolation through PdfFunction child.
@@ -20,8 +20,8 @@ final readonly class PdfShading
     public const TYPE_RADIAL = 3;
 
     /**
-     * @param  list<float>  $coords  [x0, y0, x1, y1] для axial;
-     *                                 [cx0, cy0, r0, cx1, cy1, r1] для radial.
+     * @param  list<float>  $coords  [x0, y0, x1, y1] for axial;
+     *                                 [cx0, cy0, r0, cx1, cy1, r1] for radial.
      */
     public function __construct(
         public int $shadingType,
@@ -29,7 +29,7 @@ final readonly class PdfShading
         public PdfFunction|PdfStitchingFunction $function,
     ) {
         if ($shadingType !== self::TYPE_AXIAL && $shadingType !== self::TYPE_RADIAL) {
-            throw new \InvalidArgumentException('PdfShading supports type 2 (axial) или 3 (radial)');
+            throw new \InvalidArgumentException('PdfShading supports type 2 (axial) or 3 (radial)');
         }
     }
 

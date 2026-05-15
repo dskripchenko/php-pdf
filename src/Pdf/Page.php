@@ -9,16 +9,16 @@ use Dskripchenko\PhpPdf\Style\Orientation;
 use Dskripchenko\PhpPdf\Style\PaperSize;
 
 /**
- * Single PDF page с накопленными draw-командами.
+ * Single PDF page with accumulated draw commands.
  *
- * Phase 1 scope: text + simple shapes + images, всё на absolute-positioned
- * координатах. Никакого layout / wrapping / line-breaking — это работа
- * Phase 3 (Layout Engine).
+ * Scope: text + simple shapes + images, all on absolute-positioned
+ * coordinates. No layout / wrapping / line-breaking — that is handled by
+ * the Layout Engine.
  *
- * Coordinate system: PDF origin = lower-left угол. X растёт вправо,
- * Y вверх. Единица — 1 pt (1/72 inch).
+ * Coordinate system: PDF origin = lower-left corner. X grows rightward,
+ * Y grows upward. Unit is 1 pt (1/72 inch).
  *
- * Используется через Document::addPage():
+ * Used via Document::addPage():
  *
  *   $doc = Document::new(PaperSize::A4);
  *   $page = $doc->addPage();
@@ -26,7 +26,7 @@ use Dskripchenko\PhpPdf\Style\PaperSize;
  */
 final class Page
 {
-    /** Накопление content stream commands — отложенный рендер на toBytes(). */
+    /** Accumulates content stream commands — deferred render on toBytes(). */
     private ContentStream $stream;
 
     /** @var array<string, StandardFont> name → font (resource registration) */
@@ -38,54 +38,54 @@ final class Page
     /** @var array<string, PdfImage> name → image */
     private array $images = [];
 
-    /** @var array<string, PdfExtGState> name → extGState (Phase 31) */
+    /** @var array<string, PdfExtGState> name → extGState */
     private array $extGStates = [];
 
     private int $extGStateCounter = 0;
 
-    /** Phase 48: per-page MCID counter (monotone increment). */
+    /** Per-page MCID counter (monotone increment). */
     private int $mcidCounter = 0;
 
-    /** @var array<string, PdfPattern> name → pattern (Phase 82) */
+    /** @var array<string, PdfPattern> name → pattern */
     private array $patterns = [];
 
     private int $patternCounter = 0;
 
-    /** @var array<string, PdfFormXObject> name → form (Phase 107) */
+    /** @var array<string, PdfFormXObject> name → form */
     private array $formXObjects = [];
 
     private int $formXObjectCounter = 0;
 
-    /** @var array<string, PdfTilingPattern> name → tiling pattern (Phase 111) */
+    /** @var array<string, PdfTilingPattern> name → tiling pattern */
     private array $tilingPatterns = [];
 
     private int $tilingPatternCounter = 0;
 
-    /** @var array<string, PdfLayer> name (resource) → layer (Phase 112) */
+    /** @var array<string, PdfLayer> name (resource) → layer */
     private array $layerProperties = [];
 
     private int $layerCounter = 0;
 
-    /** Phase 85: Page transition (slideshow effect) — emitted as /Trans dict. */
+    /** Page transition (slideshow effect) — emitted as /Trans dict. */
     private ?array $transition = null;
 
-    /** Phase 94: Page rotation в degrees (0, 90, 180, 270). */
+    /** Page rotation in degrees (0, 90, 180, 270). */
     private int $rotation = 0;
 
-    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /CropBox [llx lly urx ury]. */
+    /** @var array{0:float,1:float,2:float,3:float}|null /CropBox [llx lly urx ury]. */
     private ?array $cropBox = null;
 
-    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /BleedBox. */
+    /** @var array{0:float,1:float,2:float,3:float}|null /BleedBox. */
     private ?array $bleedBox = null;
 
-    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /TrimBox. */
+    /** @var array{0:float,1:float,2:float,3:float}|null /TrimBox. */
     private ?array $trimBox = null;
 
-    /** @var array{0:float,1:float,2:float,3:float}|null Phase 110: /ArtBox. */
+    /** @var array{0:float,1:float,2:float,3:float}|null /ArtBox. */
     private ?array $artBox = null;
 
     /**
-     * Phase 94: Set page rotation. Multiple of 90.
+     * Set page rotation. Multiple of 90.
      */
     public function setRotation(int $degrees): self
     {
@@ -104,8 +104,8 @@ final class Page
     }
 
     /**
-     * Phase 110: set /CropBox (visible/printable area). All values в PDF
-     * points в bottom-left origin coordinate system. Spec: §14.11.2.
+     * Set /CropBox (visible/printable area). All values in PDF
+     * points in bottom-left origin coordinate system. Spec: §14.11.2.
      */
     public function setCropBox(float $llx, float $lly, float $urx, float $ury): self
     {
@@ -115,7 +115,7 @@ final class Page
     }
 
     /**
-     * Phase 110: set /BleedBox (printed area incl. bleed past trim).
+     * Set /BleedBox (printed area incl. bleed past trim).
      */
     public function setBleedBox(float $llx, float $lly, float $urx, float $ury): self
     {
@@ -125,7 +125,7 @@ final class Page
     }
 
     /**
-     * Phase 110: set /TrimBox (final trimmed page after print finishing).
+     * Set /TrimBox (final trimmed page after print finishing).
      */
     public function setTrimBox(float $llx, float $lly, float $urx, float $ury): self
     {
@@ -135,7 +135,7 @@ final class Page
     }
 
     /**
-     * Phase 110: set /ArtBox (extent of meaningful artistic content).
+     * Set /ArtBox (extent of meaningful artistic content).
      */
     public function setArtBox(float $llx, float $lly, float $urx, float $ury): self
     {
@@ -168,17 +168,17 @@ final class Page
         return $this->artBox;
     }
 
-    /** Phase 85: Auto-advance duration в seconds (display time). */
+    /** Auto-advance duration in seconds (display time). */
     private ?float $autoAdvanceDuration = null;
 
-    /** Phase 115: JavaScript executed когда page opens (/AA /O). */
+    /** JavaScript executed when page opens (/AA /O). */
     private ?string $openActionScript = null;
 
-    /** Phase 115: JavaScript executed когда page closes (/AA /C). */
+    /** JavaScript executed when page closes (/AA /C). */
     private ?string $closeActionScript = null;
 
     /**
-     * Phase 115: set JavaScript executed when this page becomes visible.
+     * Set JavaScript executed when this page becomes visible.
      */
     public function setOpenActionScript(string $script): self
     {
@@ -188,7 +188,7 @@ final class Page
     }
 
     /**
-     * Phase 115: set JavaScript executed when reader navigates away from this page.
+     * Set JavaScript executed when reader navigates away from this page.
      */
     public function setCloseActionScript(string $script): self
     {
@@ -208,8 +208,8 @@ final class Page
     }
 
     /**
-     * Phase 226: form field tab navigation order. Affects Tab key cycling
-     * через AcroForm widgets + links на page.
+     * Form field tab navigation order. Affects Tab key cycling
+     * through AcroForm widgets + links on the page.
      *
      * Values per PDF spec §12.5:
      *  - 'R' (row): top-to-bottom, left-to-right (visual default)
@@ -221,7 +221,7 @@ final class Page
     public function setTabOrder(string $order): self
     {
         if (! in_array($order, ['R', 'C', 'S'], true)) {
-            throw new \InvalidArgumentException("Tab order must be 'R', 'C' или 'S', got '$order'");
+            throw new \InvalidArgumentException("Tab order must be 'R', 'C' or 'S', got '$order'");
         }
         $this->tabOrder = $order;
 
@@ -234,12 +234,12 @@ final class Page
     }
 
     /**
-     * Phase 85: Set page transition effect.
+     * Set page transition effect.
      *
      * @param  string  $style  'Split'|'Blinds'|'Box'|'Wipe'|'Dissolve'|'Glitter'|'Fly'|'Push'|'Cover'|'Uncover'|'Fade'|'R'
-     * @param  float  $duration  transition duration в seconds (default 1).
-     * @param  string|null  $dimension  H|V (для Split/Blinds).
-     * @param  int|null  $direction  0|90|180|270|315 (для directional transitions).
+     * @param  float  $duration  transition duration in seconds (default 1).
+     * @param  string|null  $dimension  H|V (for Split/Blinds).
+     * @param  int|null  $direction  0|90|180|270|315 (for directional transitions).
      */
     public function setTransition(string $style, float $duration = 1.0, ?string $dimension = null, ?int $direction = null): self
     {
@@ -284,14 +284,14 @@ final class Page
     }
 
     /**
-     * Link annotations накопленные на этой page.
+     * Link annotations accumulated on this page.
      *
      * @var list<array{kind: 'uri'|'internal', x1: float, y1: float, x2: float, y2: float, target: string}>
      */
     private array $linkAnnotations = [];
 
     /**
-     * Phase 43+46: AcroForm fields on этой page.
+     * AcroForm fields on this page.
      *
      * @var list<array<string, mixed>>
      */
@@ -303,7 +303,7 @@ final class Page
 
     /**
      * @param  array{0: float, 1: float}|null  $customDimensionsPt  [widthPt, heightPt]
-     *                                                              в portrait orientation; orientation swap applied automatically.
+     *                                                              in portrait orientation; orientation swap applied automatically.
      */
     public function __construct(
         public readonly PaperSize $paperSize,
@@ -337,7 +337,7 @@ final class Page
 
     /**
      * Show text using a PDF base-14 font. Encoding — WinAnsi (Latin-1).
-     * Для Cyrillic / Unicode используй showEmbeddedText() с PdfFont.
+     * For Cyrillic / Unicode use showEmbeddedText() with PdfFont.
      */
     public function showText(
         string $text, float $x, float $y, StandardFont $font, float $sizePt,
@@ -351,20 +351,20 @@ final class Page
     }
 
     /**
-     * Phase 128: vertical text (CJK/East-Asian writing mode).
+     * Vertical text (CJK/East-Asian writing mode).
      *
-     * Stacks chars top-to-bottom от (x, y), каждый char placed individually
-     * с y-advance = lineHeightPt (default 1.2 × sizePt). Char x-position
-     * фиксированный — каждый символ остаётся upright (не повёрнут как в
+     * Stacks chars top-to-bottom from (x, y), each char placed individually
+     * with y-advance = lineHeightPt (default 1.2 × sizePt). Char x-position
+     * is fixed — each glyph stays upright (not rotated like in
      * "sideways" labels).
      *
-     * Suitable для traditional CJK vertical writing где each glyph is
-     * upright и stacked. Mixed Latin/CJK works since chars are placed
+     * Suitable for traditional CJK vertical writing where each glyph is
+     * upright and stacked. Mixed Latin/CJK works since chars are placed
      * individually.
      *
      * Note: PDF spec-compliant Type 0 CIDFont vertical (UniJIS-UTF16-V CMap +
-     * /WMode 1 + vmtx table) даёт smoother results, но this API is
-     * font-agnostic и проще для simple labels/certificates.
+     * /WMode 1 + vmtx table) yields smoother results, but this API is
+     * font-agnostic and simpler for plain labels/certificates.
      */
     public function showTextVertical(
         string $text, float $x, float $y, StandardFont $font, float $sizePt,
@@ -383,7 +383,7 @@ final class Page
     }
 
     /**
-     * Phase 128: vertical text using embedded TTF font (для CJK / Unicode).
+     * Vertical text using embedded TTF font (for CJK / Unicode).
      */
     public function showEmbeddedTextVertical(
         string $text, float $x, float $y, PdfFont $font, float $sizePt,
@@ -414,12 +414,12 @@ final class Page
     }
 
     /**
-     * Show text using embedded TTF font (via PdfFont). Поддерживает Unicode
-     * (Cyrillic, Greek, и т.д.).
+     * Show text using embedded TTF font (via PdfFont). Supports Unicode
+     * (Cyrillic, Greek, etc).
      *
-     * Auto-применяет kerning если font имеет GPOS table (Liberation,
-     * Noto и большинство modern font'ов). Без kerning'а — fall back на
-     * простой Tj operator.
+     * Auto-applies kerning when the font has a GPOS table (Liberation,
+     * Noto and most modern fonts). Without kerning falls back to the
+     * plain Tj operator.
      */
     public function showEmbeddedText(
         string $text, float $x, float $y, PdfFont $font, float $sizePt,
@@ -431,9 +431,9 @@ final class Page
         if (count($tjOps) === 1) {
             $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0], $r, $g, $b, $letterSpacingPt);
         } else {
-            // textTjArray не имеет letter-spacing поддержки (TJ кernit'инг
-            // делает adjustments сам); если задан letter-spacing — fall
-            // back на Tc + hex single string.
+            // textTjArray has no letter-spacing support (TJ kerning
+            // performs adjustments itself); when letter-spacing is set fall
+            // back to Tc + hex single string.
             if ($letterSpacingPt !== 0.0) {
                 $hex = $font->encodeText($text);
                 $this->stream->textHexString($resourceName, $sizePt, $x, $y, $hex, $r, $g, $b, $letterSpacingPt);
@@ -446,8 +446,8 @@ final class Page
     }
 
     /**
-     * Drawn watermark — large diagonal text behind content. Use StandardFont
-     * вариант для base14 или embedded для PdfFont.
+     * Drawn watermark — large diagonal text behind content. Use the
+     * StandardFont variant for base14 or embedded for PdfFont.
      */
     public function drawWatermark(
         string $text,
@@ -497,8 +497,8 @@ final class Page
     }
 
     /**
-     * Phase 31: для opacity ∈ (0, 1) регистрирует ExtGState и возвращает
-     * имя ресурса; null/1.0/out-of-range → null (no-op).
+     * For opacity ∈ (0, 1) registers an ExtGState and returns its
+     * resource name; null/1.0/out-of-range → null (no-op).
      */
     private function maybeRegisterOpacityGs(?float $opacity): ?string
     {
@@ -511,7 +511,7 @@ final class Page
     }
 
     /**
-     * Phase 82: register shading pattern, return resource name.
+     * Register shading pattern, return resource name.
      */
     public function registerShadingPattern(PdfPattern $pattern): string
     {
@@ -532,7 +532,7 @@ final class Page
     }
 
     /**
-     * Phase 82: fill rectangle с shading pattern.
+     * Fill rectangle with shading pattern.
      */
     public function fillRectWithPattern(float $x, float $y, float $w, float $h, string $patternName): self
     {
@@ -542,7 +542,7 @@ final class Page
     }
 
     /**
-     * Phase 111: register a Type 1 tiling pattern; return resource name.
+     * Register a Type 1 tiling pattern; return resource name.
      */
     public function registerTilingPattern(PdfTilingPattern $pattern): string
     {
@@ -563,8 +563,8 @@ final class Page
     }
 
     /**
-     * Phase 111: fill rectangle с tiling pattern (same content stream ops
-     * as shading pattern fill — Pattern color space через `/Pattern cs`).
+     * Fill rectangle with tiling pattern (same content stream ops
+     * as shading pattern fill — Pattern color space via `/Pattern cs`).
      */
     public function fillRectWithTilingPattern(float $x, float $y, float $w, float $h, string $patternName): self
     {
@@ -574,7 +574,7 @@ final class Page
     }
 
     /**
-     * Phase 114: set line dash pattern для subsequent stroke ops.
+     * Set line dash pattern for subsequent stroke ops.
      *
      * @param  list<float>  $pattern  alternating on/off lengths
      */
@@ -585,7 +585,7 @@ final class Page
         return $this;
     }
 
-    /** Phase 114: reset к solid line. */
+    /** Reset to solid line. */
     public function resetLineDashPattern(): self
     {
         $this->stream->resetLineDashPattern();
@@ -593,7 +593,7 @@ final class Page
         return $this;
     }
 
-    /** Phase 114: set line cap (0=butt, 1=round, 2=projecting square). */
+    /** Set line cap (0=butt, 1=round, 2=projecting square). */
     public function setLineCap(int $cap): self
     {
         $this->stream->setLineCap($cap);
@@ -601,7 +601,7 @@ final class Page
         return $this;
     }
 
-    /** Phase 114: set line join (0=miter, 1=round, 2=bevel). */
+    /** Set line join (0=miter, 1=round, 2=bevel). */
     public function setLineJoin(int $join): self
     {
         $this->stream->setLineJoin($join);
@@ -609,7 +609,7 @@ final class Page
         return $this;
     }
 
-    /** Phase 114: set miter limit. */
+    /** Set miter limit. */
     public function setMiterLimit(float $limit): self
     {
         $this->stream->setMiterLimit($limit);
@@ -618,8 +618,8 @@ final class Page
     }
 
     /**
-     * Phase 118: set text rendering mode (0..7). См.
-     * ContentStream::setTextRenderingMode для list режимов.
+     * Set text rendering mode (0..7). See
+     * ContentStream::setTextRenderingMode for the list of modes.
      */
     public function setTextRenderingMode(int $mode): self
     {
@@ -629,7 +629,7 @@ final class Page
     }
 
     /**
-     * Phase 117: set DeviceCMYK fill color для последующих fill ops.
+     * Set DeviceCMYK fill color for subsequent fill ops.
      * Effective until next color change or graphics state restore.
      */
     public function setCmykFillColor(float $c, float $m, float $y, float $k): self
@@ -640,7 +640,7 @@ final class Page
     }
 
     /**
-     * Phase 117: set DeviceCMYK stroke color.
+     * Set DeviceCMYK stroke color.
      */
     public function setCmykStrokeColor(float $c, float $m, float $y, float $k): self
     {
@@ -650,8 +650,8 @@ final class Page
     }
 
     /**
-     * Phase 116: clip subsequent drawing к a rectangle. Helper wraps
-     * push/clip/draw/pop в одну операцию.
+     * Clip subsequent drawing to a rectangle. Helper wraps
+     * push/clip/draw/pop in one operation.
      */
     public function withClipRect(float $x, float $y, float $w, float $h, callable $draw): self
     {
@@ -663,7 +663,7 @@ final class Page
     }
 
     /**
-     * Phase 116: clip subsequent drawing к arbitrary polygon.
+     * Clip subsequent drawing to an arbitrary polygon.
      *
      * @param  list<array{0: float, 1: float}>  $points
      */
@@ -677,8 +677,8 @@ final class Page
     }
 
     /**
-     * Phase 112: begin Optional Content section. Content emitted между
-     * beginLayer/endLayer wrap'ится в `/OC /MCn BDC ... EMC` so layer
+     * Begin Optional Content section. Content emitted between
+     * beginLayer/endLayer is wrapped in `/OC /MCn BDC ... EMC` so layer
      * visibility from /OCProperties toggles its rendering.
      */
     public function beginLayer(PdfLayer $layer): self
@@ -690,7 +690,7 @@ final class Page
     }
 
     /**
-     * Phase 112: end Optional Content section. Must match preceding beginLayer.
+     * End Optional Content section. Must match preceding beginLayer.
      */
     public function endLayer(): self
     {
@@ -723,10 +723,10 @@ final class Page
     }
 
     /**
-     * Phase 107: draw a reusable Form XObject at (x, y) scaled к (w, h).
+     * Draw a reusable Form XObject at (x, y) scaled to (w, h).
      *
      * Emits `q sx 0 0 sy tx ty cm /Name Do Q`.
-     * sx, sy chosen так что form's /BBox maps в requested rect.
+     * sx, sy chosen so that the form's /BBox maps to the requested rect.
      */
     public function useFormXObject(
         PdfFormXObject $form,
@@ -771,8 +771,8 @@ final class Page
     }
 
     /**
-     * Phase 81: separate fill/stroke opacity registration. Returns gs
-     * resource name либо null если оба opacity >= 1.
+     * Separate fill/stroke opacity registration. Returns gs
+     * resource name or null when both opacity values are >= 1.
      */
     public function maybeRegisterFillStrokeOpacityGs(?float $fillOpacity, ?float $strokeOpacity): ?string
     {
@@ -786,8 +786,8 @@ final class Page
     }
 
     /**
-     * Phase 81: wrap arbitrary operations с ExtGState opacity through
-     * push/pop graphics state. Use case — apply opacity к multiple draw
+     * Wrap arbitrary operations with ExtGState opacity through
+     * push/pop graphics state. Use case — apply opacity to multiple draw
      * calls inside callable.
      *
      * @param  callable(): void  $draw
@@ -819,7 +819,7 @@ final class Page
     }
 
     /**
-     * Filled rounded rectangle. radius=0 фолбэк на fillRect.
+     * Filled rounded rectangle. radius=0 falls back to fillRect.
      */
     public function fillRoundedRect(
         float $x, float $y, float $width, float $height, float $radius,
@@ -863,7 +863,7 @@ final class Page
     }
 
     /**
-     * Phase 48: Tagged PDF — emit BDC/EMC pair around content.
+     * Tagged PDF — emit BDC/EMC pair around content.
      */
     public function beginMarkedContent(string $tag, int $mcid): self
     {
@@ -880,7 +880,7 @@ final class Page
     }
 
     /**
-     * Phase 86: Begin /Artifact marked content (PDF/UA — content
+     * Begin /Artifact marked content (PDF/UA — content
      * excluded from struct tree).
      */
     public function beginArtifact(string $type = 'Pagination'): self
@@ -891,7 +891,7 @@ final class Page
     }
 
     /**
-     * Phase 44: stroked straight line.
+     * Stroked straight line.
      */
     public function strokeLine(
         float $x1, float $y1, float $x2, float $y2,
@@ -904,7 +904,7 @@ final class Page
     }
 
     /**
-     * Phase 45: filled polygon (closed path).
+     * Filled polygon (closed path).
      *
      * @param  list<array{0: float, 1: float}>  $points
      */
@@ -916,7 +916,7 @@ final class Page
     }
 
     /**
-     * Phase 45: stroked polyline (not closed).
+     * Stroked polyline (not closed).
      *
      * @param  list<array{0: float, 1: float}>  $points
      */
@@ -931,7 +931,7 @@ final class Page
     }
 
     /**
-     * Phase 53: Emit generic path (with cubic Bezier curves).
+     * Emit generic path (with cubic Bezier curves).
      *
      * @param  list<array|string>  $commands
      * @param  array{r: float, g: float, b: float}|null  $fillRgb
@@ -961,7 +961,7 @@ final class Page
     }
 
     /**
-     * Phase 102: drawImage с rotation around image center (counter-clockwise radians).
+     * drawImage with rotation around image center (counter-clockwise radians).
      */
     public function drawImageRotated(
         PdfImage $image, float $x, float $y, float $widthPt, float $heightPt, float $angleRad,
@@ -973,8 +973,8 @@ final class Page
     }
 
     /**
-     * Phase 31: drawImage с opacity. opacity ∈ (0, 1) — fill alpha
-     * через ExtGState `/ca`. 1.0 эквивалентен plain drawImage.
+     * drawImage with opacity. opacity ∈ (0, 1) — fill alpha
+     * via ExtGState `/ca`. 1.0 is equivalent to plain drawImage.
      */
     public function drawImageWithOpacity(
         PdfImage $image,
@@ -997,7 +997,7 @@ final class Page
     }
 
     /**
-     * Внешний URL link — клик в Rect открывает $uri.
+     * External URL link — click inside Rect opens $uri.
      */
     public function addExternalLink(float $x, float $y, float $width, float $height, string $uri): self
     {
@@ -1011,11 +1011,11 @@ final class Page
         return $this;
     }
 
-    /** @var list<array<string, mixed>> Phase 109: markup annotations (Text/Highlight/Underline/StrikeOut/FreeText). */
+    /** @var list<array<string, mixed>> markup annotations (Text/Highlight/Underline/StrikeOut/FreeText). */
     private array $markupAnnotations = [];
 
     /**
-     * Phase 109: Sticky note text annotation. Click показывает popup с $contents.
+     * Sticky note text annotation. Click shows popup with $contents.
      *
      * @param  string  $icon  one of Comment|Note|Help|NewParagraph|Paragraph|Insert (default Note)
      * @param  array{0:float,1:float,2:float}|null  $color  RGB 0..1
@@ -1046,7 +1046,7 @@ final class Page
     }
 
     /**
-     * Phase 109: Highlight markup annotation over rect.
+     * Highlight markup annotation over rect.
      *
      * @param  array{0:float,1:float,2:float}|null  $color  default yellow (1,1,0)
      */
@@ -1062,7 +1062,7 @@ final class Page
     }
 
     /**
-     * Phase 109: Underline markup annotation.
+     * Underline markup annotation.
      */
     public function addUnderlineAnnotation(
         float $x,
@@ -1076,7 +1076,7 @@ final class Page
     }
 
     /**
-     * Phase 109: Strike-out markup annotation.
+     * Strike-out markup annotation.
      */
     public function addStrikeOutAnnotation(
         float $x,
@@ -1090,7 +1090,7 @@ final class Page
     }
 
     /**
-     * Phase 120: Square (rectangle) annotation — outlines a region.
+     * Square (rectangle) annotation — outlines a region.
      *
      * @param  array{0:float,1:float,2:float}|null  $strokeColor  /C border
      * @param  array{0:float,1:float,2:float}|null  $fillColor    /IC interior
@@ -1118,7 +1118,7 @@ final class Page
     }
 
     /**
-     * Phase 120: Circle (ellipse) annotation — outlines an oval inscribed
+     * Circle (ellipse) annotation — outlines an oval inscribed
      * within (x, y, width, height) rect.
      */
     public function addCircleAnnotation(
@@ -1144,7 +1144,7 @@ final class Page
     }
 
     /**
-     * Phase 121: Stamp annotation — predefined rubber-stamp icon.
+     * Stamp annotation — predefined rubber-stamp icon.
      *
      * @param  string  $stampName  one of Approved, Confidential, Draft,
      *                             Experimental, Expired, Final, ForComment,
@@ -1179,7 +1179,7 @@ final class Page
     }
 
     /**
-     * Phase 122: Ink annotation — freehand drawing с multiple pen strokes.
+     * Ink annotation — freehand drawing with multiple pen strokes.
      *
      * @param  list<list<array{0:float,1:float}>>  $strokes  outer list = strokes (pen-down spans);
      *                                                       inner list = (x, y) points per stroke
@@ -1219,7 +1219,7 @@ final class Page
     }
 
     /**
-     * Phase 121: Polygon annotation — closed shape with vertex list.
+     * Polygon annotation — closed shape with vertex list.
      *
      * @param  list<array{0:float,1:float}>  $vertices
      */
@@ -1237,7 +1237,7 @@ final class Page
     }
 
     /**
-     * Phase 121: PolyLine annotation — open polyline.
+     * PolyLine annotation — open polyline.
      *
      * @param  list<array{0:float,1:float}>  $vertices
      */
@@ -1277,7 +1277,7 @@ final class Page
     }
 
     /**
-     * Phase 120: Line annotation — emits a thin line between two endpoints.
+     * Line annotation — emits a thin line between two endpoints.
      */
     public function addLineAnnotation(
         float $x1,
@@ -1302,7 +1302,7 @@ final class Page
     }
 
     /**
-     * Phase 109: FreeText annotation — text rendered directly на page surface.
+     * FreeText annotation — text rendered directly on the page surface.
      */
     public function addFreeTextAnnotation(
         float $x,
@@ -1352,7 +1352,7 @@ final class Page
     }
 
     /**
-     * Internal link — клик в Rect переходит к named destination $destName.
+     * Internal link — click inside Rect jumps to named destination $destName.
      */
     public function addInternalLink(float $x, float $y, float $width, float $height, string $destName): self
     {
@@ -1367,7 +1367,7 @@ final class Page
     }
 
     /**
-     * Phase 113: named navigation link — click triggers reader action.
+     * Named navigation link — click triggers reader action.
      *
      * @param  string  $action  one of: NextPage, PrevPage, FirstPage, LastPage,
      *                          Find, Print, SaveAs, GoBack, GoForward.
@@ -1389,7 +1389,7 @@ final class Page
     }
 
     /**
-     * Phase 113: JavaScript link — click executes $script.
+     * JavaScript link — click executes $script.
      */
     public function addJavaScriptLink(float $x, float $y, float $width, float $height, string $script): self
     {
@@ -1404,7 +1404,7 @@ final class Page
     }
 
     /**
-     * Phase 113: launch link — click opens external file (e.g. companion .docx).
+     * Launch link — click opens external file (e.g. companion .docx).
      *
      * Note: most PDF readers disable launch actions by default for security.
      */
@@ -1431,10 +1431,10 @@ final class Page
     }
 
     /**
-     * Phase 43+46: Add interactive form field widget на page.
+     * Add interactive form field widget on the page.
      *
-     * @param  list<string>  $options  для combo/list/radio-group
-     * @param  list<array{x: float, y: float, w: float, h: float}>  $radioWidgets  для radio-group (one widget per option)
+     * @param  list<string>  $options  for combo/list/radio-group
+     * @param  list<array{x: float, y: float, w: float, h: float}>  $radioWidgets  for radio-group (one widget per option)
      */
     public function addFormField(
         string $type,
@@ -1493,10 +1493,10 @@ final class Page
     }
 
     /**
-     * Низкоуровневый escape-hatch — append raw content stream command'ы.
-     * Используется для unsupported операторов (Bezier curves, text matrices,
-     * graphic state save/restore manual'но). Caller отвечает за валидность
-     * PDF syntax'а.
+     * Low-level escape hatch — append raw content stream commands.
+     * Used for unsupported operators (Bezier curves, text matrices,
+     * manual graphics state save/restore). Caller is responsible for
+     * valid PDF syntax.
      */
     public function rawContentStream(): ContentStream
     {
@@ -1504,7 +1504,7 @@ final class Page
     }
 
     /**
-     * Build content stream body для эмиссии в Writer.
+     * Build content stream body for emission into the Writer.
      *
      * @internal Used by Document.
      */
@@ -1546,8 +1546,8 @@ final class Page
     }
 
     /**
-     * Register standard font for use on this page. Возвращает resource name.
-     * Если font уже зарегистрирован — возвращает existing name.
+     * Register standard font for use on this page. Returns resource name.
+     * If the font is already registered, returns the existing name.
      */
     private function registerStandardFont(StandardFont $font): string
     {
@@ -1589,8 +1589,8 @@ final class Page
     }
 
     /**
-     * Phase 31: Register ExtGState (opacity). Dedup по key() —
-     * одинаковые opacity tuples переиспользуют resource.
+     * Register ExtGState (opacity). Dedup by key() —
+     * identical opacity tuples reuse the same resource.
      *
      * @return string Resource name (`Gs1`, `Gs2`, ...).
      */

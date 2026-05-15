@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf;
 
 /**
- * Phase 82: PDF Function object (ISO 32000-1 §7.10).
+ * PDF Function object (ISO 32000-1 §7.10).
  *
- * Type 2 — exponential interpolation между двумя color values.
- * Used by axial/radial shadings для 2-stop linear gradients.
+ * Type 2 — exponential interpolation between two color values.
+ * Used by axial/radial shadings for 2-stop linear gradients.
  *
- * Multi-stop gradients support — см. PdfStitchingFunction (Type 3, Phase 90).
+ * Multi-stop gradients support — see PdfStitchingFunction (Type 3).
  */
 final readonly class PdfFunction
 {
