@@ -370,6 +370,22 @@ final class HtmlParser
             }
         }
 
+        // Phase 232: text-indent (first-line indentation).
+        $indentFirstLine = $defaults->indentFirstLinePt;
+        if (isset($decl['text-indent'])) {
+            $parsed = $this->parseLengthOrNull($decl['text-indent']);
+            if ($parsed !== null) {
+                $indentFirstLine = $parsed;
+            }
+        }
+
+        // Phase 232: border shorthand / individual sides.
+        $borders = $defaults->borders;
+        $borderParsed = $this->parseBorderShorthand($decl);
+        if ($borderParsed !== null) {
+            $borders = $borderParsed;
+        }
+
         [$pt, $pr, $pb, $pl] = $this->parseBoxShorthand($decl['padding'] ?? null);
         $padTop = $pt ?? $this->parseLengthOrNull($decl['padding-top'] ?? '') ?? $defaults->paddingTopPt;
         $padRight = $pr ?? $this->parseLengthOrNull($decl['padding-right'] ?? '') ?? $defaults->paddingRightPt;
@@ -388,16 +404,97 @@ final class HtmlParser
             spaceAfterPt: $spaceAfter,
             indentLeftPt: $indentLeft,
             indentRightPt: $indentRight,
-            indentFirstLinePt: $defaults->indentFirstLinePt,
+            indentFirstLinePt: $indentFirstLine,
             lineHeightMult: $lineHeightMult,
             lineHeightPt: $defaults->lineHeightPt,
             pageBreakBefore: $defaults->pageBreakBefore,
-            borders: $defaults->borders,
+            borders: $borders,
             paddingTopPt: $padTop,
             paddingRightPt: $padRight,
             paddingBottomPt: $padBottom,
             paddingLeftPt: $padLeft,
             backgroundColor: $bgColor,
+        );
+    }
+
+    /**
+     * Phase 232: parse `border: <width> <style> <color>` shorthand или
+     * individual `border-top`/`border-right`/etc. Returns BorderSet или null.
+     *
+     * @param  array<string, string>  $decl
+     */
+    private function parseBorderShorthand(array $decl): ?\Dskripchenko\PhpPdf\Style\BorderSet
+    {
+        $allBorder = isset($decl['border']) ? $this->parseSingleBorder($decl['border']) : null;
+        $top = $this->parseSingleBorder($decl['border-top'] ?? null) ?? $allBorder;
+        $right = $this->parseSingleBorder($decl['border-right'] ?? null) ?? $allBorder;
+        $bottom = $this->parseSingleBorder($decl['border-bottom'] ?? null) ?? $allBorder;
+        $left = $this->parseSingleBorder($decl['border-left'] ?? null) ?? $allBorder;
+
+        if ($top === null && $right === null && $bottom === null && $left === null) {
+            return null;
+        }
+
+        return new \Dskripchenko\PhpPdf\Style\BorderSet(
+            top: $top,
+            right: $right,
+            bottom: $bottom,
+            left: $left,
+        );
+    }
+
+    /**
+     * Parse single border shorthand: "1px solid #000" → Border.
+     */
+    private function parseSingleBorder(?string $value): ?\Dskripchenko\PhpPdf\Style\Border
+    {
+        if ($value === null || trim($value) === '' || trim($value) === 'none') {
+            return null;
+        }
+        $parts = preg_split('/\s+/', trim($value)) ?: [];
+        $width = null;
+        $style = \Dskripchenko\PhpPdf\Style\BorderStyle::Single;
+        $color = '000000';
+
+        foreach ($parts as $part) {
+            $p = trim($part);
+            // Length?
+            $len = $this->parseLengthOrNull($p);
+            if ($len !== null && $width === null) {
+                $width = $len;
+
+                continue;
+            }
+            // Style keyword?
+            $styleVal = match (strtolower($p)) {
+                'solid' => \Dskripchenko\PhpPdf\Style\BorderStyle::Single,
+                'double' => \Dskripchenko\PhpPdf\Style\BorderStyle::Double,
+                'dashed' => \Dskripchenko\PhpPdf\Style\BorderStyle::Dashed,
+                'dotted' => \Dskripchenko\PhpPdf\Style\BorderStyle::Dotted,
+                'none', 'hidden' => null,
+                default => false,
+            };
+            if ($styleVal === null) {
+                return null; // none → no border
+            }
+            if ($styleVal !== false) {
+                $style = $styleVal;
+
+                continue;
+            }
+            // Color?
+            $parsedColor = $this->parseColor($p);
+            if ($parsedColor !== null) {
+                $color = $parsedColor;
+            }
+        }
+
+        $sizeEighths = max(1, (int) round(($width ?? 1.0) * 8));
+
+        return new \Dskripchenko\PhpPdf\Style\Border(
+            style: $style,
+            sizeEighthsOfPoint: $sizeEighths,
+            color: $color,
         );
     }
 
