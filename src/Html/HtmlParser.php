@@ -321,7 +321,11 @@ final class HtmlParser
 
         $style = $this->parseBlockCssStyle($node);
 
-        return new Heading($level, $inlines, $style);
+        // Phase 231: heading anchor from id attribute если задан
+        // (для linkability через <a href="#anchor-id">).
+        $anchor = $node->getAttribute('id') !== '' ? $node->getAttribute('id') : null;
+
+        return new Heading($level, $inlines, $style, $anchor);
     }
 
     /**

@@ -411,6 +411,17 @@ final class Engine
             $ctx->currentPage->beginMarkedContent('H'.$h->level, $mcid);
         }
 
+        // Phase 231: register named destination if heading has anchor.
+        // Position = current cursor (top of heading line).
+        if ($h->anchor !== null && $h->anchor !== '') {
+            $ctx->pdf->registerDestination(
+                $h->anchor,
+                $ctx->currentPage,
+                $ctx->leftX,
+                $ctx->cursorY,
+            );
+        }
+
         $size = $h->defaultFontSizePt();
         $paraStyle = $h->style
             ?? new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
