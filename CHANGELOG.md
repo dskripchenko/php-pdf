@@ -2,7 +2,7 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-237
+## v1.6.0-dev (unreleased) — Phases 214-238
 
 Major dev cycle: HTML input + PDF output optimization + layout enhancements
 + barcode coverage + API ergonomics + print conformance.
@@ -40,6 +40,10 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
   ZXing-verified parameters: 1558 data + 620 ECC, 36 regions of 22×22
   modules, 10 RS blocks с uneven 8×156 + 2×155 distribution через
   round-robin interleaving.
+- Phase 238: Aztec FLG(n) ECI escape (ISO 24778 §6.5). `withEci()` factory
+  prepends bit-level FLG header (U→M→P latches, Punct FLG codeword 0,
+  3-bit n length, n digits, P→U latch). Spec-risky implementation —
+  validate against real decoder for production critical paths.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
@@ -78,7 +82,7 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
   VO + `Pdf\Document::enablePdfX()` + Document constructor `pdfX` param.
   Emits /S /GTS_PDFX OutputIntent + /Trapped key + pdfx: XMP markers.
 
-**Tests:** 1683 → 1966 (+283 new tests across 24-phase batch).
+**Tests:** 1683 → 1977 (+294 new tests across 25-phase batch).
 
 ## v1.5.0 — 2026-05-14
 

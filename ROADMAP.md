@@ -23,12 +23,16 @@ Production-ready. Active backlog: v1.6+ scope items.
   naturally handles uneven distribution (8×156 + 2×155 data per block).
   Existing 36-region infrastructure used as-is.
 - **Aztec Rune mode** — single-character symbol variant, 11×11 fixed format.
-  XOR mask spec uncertain.
+  Attempted Phase 239 but declined: 28-bit mode message bit placement
+  в 11×11 matrix is critical unknown without verified spec source.
+  Wrong placement = symbol generates но не decodes на real readers.
+  Unlike FLG (encoder-internal), Rune bits go directly в visible output.
 - ~~Aztec Structured Append~~ ✅ **Phase 221 closed** (ISO 24778 §8.4 —
   header-prefixed " AB<data>" or "fileID AB<data>" format, up to 26 symbols).
-- **Aztec FLG(n) ECI escape** — still open. Inserts ECI/SA markers внутри
-  encoded data stream через FLG escape codes — needs Aztec encoder
-  internals refactor.
+- ~~Aztec FLG(n) ECI escape~~ ✅ **Phase 238 closed**. `AztecEncoder::withEci()`
+  factory prepends bit-level FLG(n) header per ISO 24778 §6.5: U→M→P latches,
+  Punct code 0 (FLG), 3-bit n length, n digit codewords, P→U latch back.
+  Marked spec-risky — production users should validate с real decoder.
 
 ### Multi-day / multi-week refactors
 
