@@ -5,26 +5,26 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * GSUB table parser — извлекает ligature substitutions для basic Latin
+ * GSUB table parser — extracts ligature substitutions for the basic Latin
  * `liga` feature (fi, fl, ffi, ffl, etc.).
  *
- * Scope (Phase 2d):
- *  - lookup type 4 (Ligature Substitution) format 1 — единственный format
- *  - Только feature 'liga' (basic Latin ligatures fi, fl, ffi, ffl, ff)
- *  - Если 'liga' не найден — пустой LigatureSubstitutions (no fallback).
- *    Это сознательное решение для безопасности: discretionary ('dlig') и
- *    contextual ('ccmp') ligatures могут давать визуально неожиданные
- *    результаты в обычном тексте — applying their automatically wrong.
- *    Liberation fonts, например, не имеют 'liga' (metric-compatible
- *    с MS Arial который тоже без него); это OK — пользователь получит
- *    текст без ligatures, но width-measurement точно совпадёт с Arial.
+ * Scope:
+ *  - lookup type 4 (Ligature Substitution) format 1 — the only format
+ *  - Only the 'liga' feature (basic Latin ligatures fi, fl, ffi, ffl, ff)
+ *  - If 'liga' is not found — empty LigatureSubstitutions (no fallback).
+ *    A deliberate safety choice: discretionary ('dlig') and contextual
+ *    ('ccmp') ligatures can produce visually unexpected results in plain
+ *    text — applying them automatically is wrong. Liberation fonts, for
+ *    example, lack 'liga' (metric-compatible with MS Arial which also
+ *    lacks it); that is OK — the user gets text without ligatures, but
+ *    width measurement matches Arial exactly.
  *
- * Не покрывает:
- *  - 'dlig' (discretionary ligatures — st, ct и т.п.); 'hlig' (historical);
- *    'rlig' (required для Arabic/Indic); 'clig' (contextual)
+ * Not covered:
+ *  - 'dlig' (discretionary ligatures — st, ct, etc.); 'hlig' (historical);
+ *    'rlig' (required for Arabic/Indic); 'clig' (contextual)
  *  - lookup types 1-3 (single/multiple/alternate substitution)
  *  - lookup types 5-8 (contextual, chaining contextual, extension, reverse)
- *  - Script/langSys filtering — мы grab'аем default langSys для default
+ *  - Script/langSys filtering — we grab the default langSys for the default
  *    script
  *
  * Reference: OpenType GSUB spec, https://docs.microsoft.com/typography/opentype/spec/gsub
@@ -44,8 +44,8 @@ final class GsubReader
     }
 
     /**
-     * Phase 143: read GSUB lookups for a specific feature tag, returning
-     * both ligature (Type 4) и single (Type 1) substitutions found.
+     * Read GSUB lookups for a specific feature tag, returning both
+     * ligature (Type 4) and single (Type 1) substitutions found.
      *
      * @param  array{offset: int, length: int}  $gsubTableInfo
      * @return array{liga: LigatureSubstitutions, single: SingleSubstitutions}
@@ -76,14 +76,14 @@ final class GsubReader
      *   uint16 featureCount
      *   FeatureRecord featureRecords[featureCount]:
      *     Tag (4 bytes ASCII) featureTag
-     *     Offset16 featureOffset (от FeatureList start)
+     *     Offset16 featureOffset (from FeatureList start)
      *
      * FeatureTable:
-     *   uint16 featureParamsOffset (мы не используем)
+     *   uint16 featureParamsOffset (we do not use)
      *   uint16 lookupIndexCount
      *   uint16 lookupListIndices[lookupIndexCount]
      *
-     * Возвращаем set lookup-indices для всех 'liga' features.
+     * Returns the set of lookup indices for all 'liga' features.
      *
      * @return array<int, true>
      */
@@ -93,7 +93,7 @@ final class GsubReader
     }
 
     /**
-     * Phase 143: generic feature-tag lookup finder.
+     * Generic feature-tag lookup finder.
      *
      * @return array<int, true>
      */
@@ -161,7 +161,7 @@ final class GsubReader
         $subTableCount = $reader->readUInt16();
 
         if ($lookupType !== 4 && $lookupType !== 1) {
-            return; // currently only Type 1 (Single) и Type 4 (Ligature) supported
+            return; // currently only Type 1 (Single) and Type 4 (Ligature) supported
         }
 
         for ($i = 0; $i < $subTableCount; $i++) {
@@ -178,7 +178,7 @@ final class GsubReader
     }
 
     /**
-     * Phase 143: GSUB Lookup Type 1 (Single Substitution).
+     * GSUB Lookup Type 1 (Single Substitution).
      *
      * Format 1:
      *   uint16 substFormat (= 1)
@@ -222,14 +222,14 @@ final class GsubReader
      *   uint16 ligatureSetCount
      *   Offset16 ligatureSetOffsets[ligatureSetCount]
      *
-     * LigatureSet (для одного «first» glyph'а — coverage[i]):
+     * LigatureSet (for one "first" glyph — coverage[i]):
      *   uint16 ligatureCount
      *   Offset16 ligatureOffsets[ligatureCount]
      *
      * Ligature:
      *   uint16 ligatureGlyph
      *   uint16 componentCount
-     *   uint16 componentGlyphIDs[componentCount - 1]   ← без first glyph'а
+     *   uint16 componentGlyphIDs[componentCount - 1]   ← without first glyph
      */
     private function readLigatureSubst(string $bytes, int $subOffset, LigatureSubstitutions $sub): void
     {
@@ -268,8 +268,8 @@ final class GsubReader
             $ligatureGlyph = $reader->readUInt16();
             $componentCount = $reader->readUInt16();
             $components = [];
-            // componentGlyphIDs — это components[1..componentCount-1].
-            // Component 0 = first glyph (известен из coverage).
+            // componentGlyphIDs are components[1..componentCount-1].
+            // Component 0 = first glyph (known from coverage).
             for ($c = 1; $c < $componentCount; $c++) {
                 $components[] = $reader->readUInt16();
             }

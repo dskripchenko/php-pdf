@@ -5,22 +5,19 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 104+127: DataMatrix ECC 200 encoder (ISO/IEC 16022).
- *
- * Algorithm ported from ZXing DefaultPlacement.java + ErrorCorrection.java
- * + SymbolInfo.java (Apache 2.0).
+ * DataMatrix ECC 200 encoder (ISO/IEC 16022).
  *
  * Supported:
- *  - All 24 square ECC 200 sizes (10×10 .. 132×132).
+ *  - All 24 square ECC 200 sizes (10×10 .. 144×144).
  *  - All 6 rectangular sizes (8×18 .. 16×48).
- *  - ASCII encoding mode с digit pair compression.
- *  - Multi-region symbols (32+ sizes) с regional finder/timing patterns.
- *  - Interleaved Reed-Solomon ECC для symbols ≥ 52×52.
+ *  - ASCII, C40, Text, X12, EDIFACT, Base 256 encoding modes.
+ *  - Digit pair compression in ASCII mode.
+ *  - Multi-region symbols (32+ sizes) with regional finder/timing patterns.
+ *  - Interleaved Reed-Solomon ECC for symbols ≥ 52×52.
+ *  - GS1 DataMatrix (FNC1) and ECI (extended channel interpretation).
+ *  - Macro 05/06 mode markers.
  *
- * Не реализовано:
- *  - 144×144 (special interleaved layout).
- *  - C40 / Text / X12 / EDIFACT / Base 256 encoding modes.
- *  - ECI (extended channel interpretation).
+ * Not implemented:
  *  - Structured Append.
  *
  * Output via modules() — 2D bool matrix; true = black module.
@@ -33,14 +30,13 @@ final class DataMatrixEncoder
      *    dataRegions, rsBlockData, rsBlockError]
      *
      * matrixWidth / matrixHeight — dimensions of a SINGLE data region
-     * (без finder/timing borders).
+     * (without finder/timing borders).
      * dataRegions — total regions (1, 2, 4, 16, 36).
-     * Source: ZXing SymbolInfo.PROD_SYMBOLS.
      */
     private const SYMBOLS = [
         // [rect, dataCap, eccCap, mW, mH, regions, rsBlockData, rsBlockEcc, blockCountOverride?]
-        // blockCountOverride defaults к intdiv(dataCap, rsBlockData); explicit
-        // value required when dataCap не divides cleanly (144×144 case).
+        // blockCountOverride defaults to intdiv(dataCap, rsBlockData); explicit
+        // value required when dataCap does not divide cleanly (144×144 case).
         [false, 3,    5,   8,  8,   1,  3,    5],   // 10×10
         [false, 5,    7,   10, 10,  1,  5,    7],   // 12×12
         [true,  5,    7,   16, 6,   1,  5,    7],   // 8×18 rect
@@ -70,15 +66,14 @@ final class DataMatrixEncoder
         [false, 816,  336, 24, 24,  16, 136,  56],  // 104×104
         [false, 1050, 408, 18, 18,  36, 175,  68],  // 120×120
         [false, 1304, 496, 20, 20,  36, 163,  62],  // 132×132
-        // Phase 237: 144×144 special — 10 blocks (8×156 + 2×155 distribution
-        // через round-robin interleaving), 620 ECC (10×62), 36 regions of
-        // 22×22 modules. ZXing-verified.
+        // 144×144 special — 10 blocks (8×156 + 2×155 distribution via
+        // round-robin interleaving), 620 ECC (10×62), 36 regions of
+        // 22×22 modules.
         [false, 1558, 620, 22, 22, 36, 156, 62, 10],  // 144×144
     ];
 
     /**
      * RS factor polynomials per error correction codeword count.
-     * Source: ZXing ErrorCorrection.FACTORS.
      */
     private const FACTOR_SETS = [5, 7, 10, 11, 12, 14, 18, 20, 24, 28, 36, 42, 48, 56, 62, 68];
 
@@ -105,7 +100,7 @@ final class DataMatrixEncoder
 
     public readonly int $symbolHeight;
 
-    /** Aliased для backward compatibility — = max(symbolWidth, symbolHeight). */
+    /** Aliased for backward compatibility — = max(symbolWidth, symbolHeight). */
     public readonly int $size;
 
     public readonly int $dataCw;
@@ -118,7 +113,7 @@ final class DataMatrixEncoder
     private array $modules;
 
     /**
-     * Phase 176-180: encoding mode constants.
+     * Encoding mode constants.
      */
     public const MODE_AUTO = 'auto';
 
@@ -135,24 +130,24 @@ final class DataMatrixEncoder
     public const MODE_BASE256 = 'base256';
 
     /**
-     * Phase 196: Macro 05/06 mode markers per ISO/IEC 16022 §5.2.4.6.
+     * Macro 05/06 mode markers per ISO/IEC 16022 §5.2.4.6.
      *   Macro 05 (CW 236) — header structure "[)>RS05GS" prepended conceptually
-     *   Macro 06 (CW 237) — same но "[)>RS06GS"
-     * Decoder reconstructs full string на decode. Used для compact transit
-     * applications: AIM TID и similar.
+     *   Macro 06 (CW 237) — same but "[)>RS06GS"
+     * Decoder reconstructs full string on decode. Used for compact transit
+     * applications: AIM TID and similar.
      */
     public const MACRO_05 = 236;
 
     public const MACRO_06 = 237;
 
     /**
-     * Phase 197: FNC1 (Function 1) codeword (232) — GS1 DataMatrix marker.
-     * Prepended к payload для GS1-compliant symbols. Per ISO/IEC 16022 §5.2.4.5.
+     * FNC1 (Function 1) codeword (232) — GS1 DataMatrix marker.
+     * Prepended to payload for GS1-compliant symbols. Per ISO/IEC 16022 §5.2.4.5.
      */
     public const FNC1 = 232;
 
     /**
-     * Phase 197: ECI (Extended Channel Interpretation) marker CW 241.
+     * ECI (Extended Channel Interpretation) marker CW 241.
      * Per ISO/IEC 16022 §5.2.4.4 — followed by 1-3 byte designator value.
      */
     public const ECI_CODEWORD = 241;
@@ -184,15 +179,15 @@ final class DataMatrixEncoder
             default => throw new \InvalidArgumentException("Unknown mode: $mode"),
         };
 
-        // Phase 196: Macro 05/06 prefix codeword (если задан).
+        // Macro 05/06 prefix codeword (if set).
         if ($macroMode !== null) {
             array_unshift($codewords, $macroMode);
         }
-        // Phase 197: GS1 DataMatrix — FNC1 (232) первым codeword.
+        // GS1 DataMatrix — FNC1 (232) as first codeword.
         if ($gs1) {
             array_unshift($codewords, self::FNC1);
         }
-        // Phase 197: ECI marker — codeword 241 + 1-3 byte designator.
+        // ECI marker — codeword 241 + 1-3 byte designator.
         if ($eciDesignator !== null) {
             if ($eciDesignator < 0 || $eciDesignator > 999999) {
                 throw new \InvalidArgumentException('DataMatrix ECI designator must be 0..999999');
@@ -239,7 +234,7 @@ final class DataMatrixEncoder
         $regions = $symbol[5];
         $rsData = $symbol[6];
         $rsEcc = $symbol[7];
-        // Phase 237: optional explicit block count (default = intdiv).
+        // Optional explicit block count (default = intdiv).
         $blockCountOverride = $symbol[8] ?? null;
         $hRegions = self::horizontalRegions($regions);
         $vRegions = self::verticalRegions($regions);
@@ -250,16 +245,16 @@ final class DataMatrixEncoder
         $this->eccCw = $eccCap;
         $this->rectangular = $rect;
 
-        // 3. Pad data к full capacity.
+        // 3. Pad data to full capacity.
         $codewords = self::padCodewords($codewords, $dataCap);
 
-        // 4. Compute ECC (interleaved для blockCount > 1).
+        // 4. Compute ECC (interleaved for blockCount > 1).
         $blockCount = $blockCountOverride ?? intdiv($dataCap, $rsData);
         $allCw = $blockCount === 1
             ? array_merge($codewords, self::createEccBlock($codewords, $eccCap))
             : self::interleavedEcc($codewords, $dataCap, $eccCap, $blockCount, $rsEcc);
 
-        // 5. Place codewords в data grid (ZXing DefaultPlacement).
+        // 5. Place codewords in data grid (DefaultPlacement algorithm).
         $dataWidth = $hRegions * $mW;
         $dataHeight = $vRegions * $mH;
         $grid = self::placeBits($allCw, $dataWidth, $dataHeight);
@@ -321,18 +316,18 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Phase 176: auto-mode encoder — pick best encoding per input characteristics.
-     *  - Pure digits → ASCII (digit-pair compression уже там, 2 chars / 1 CW)
+     * Auto-mode encoder — picks best encoding per input characteristics.
+     *  - Pure digits → ASCII (digit-pair compression built in, 2 chars / 1 CW)
      *  - High proportion uppercase+digits → C40 (3 chars / 2 CW)
      *  - High proportion lowercase → Text (3 chars / 2 CW)
      *  - Non-ASCII bytes (>127) → Base 256 (1 byte / 1 CW + randomization)
-     *  - Default → ASCII (safe для mixed content)
+     *  - Default → ASCII (safe for mixed content)
      *
      * @return list<int>
      */
     public static function encodeAuto(string $data): array
     {
-        // Non-ASCII presence → Base 256 (только mode handling binary).
+        // Non-ASCII presence → Base 256 (only mode handling binary).
         for ($i = 0; $i < strlen($data); $i++) {
             if (ord($data[$i]) > 127) {
                 return self::encodeBase256($data);
@@ -366,14 +361,14 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Phase 176: Base 256 encoding mode per ISO/IEC 16022 §5.2.4.7.
-     * Length-prefixed binary data с 255-state randomization.
+     * Base 256 encoding mode per ISO/IEC 16022 §5.2.4.7.
+     * Length-prefixed binary data with 255-state randomization.
      *
      * Codeword stream:
-     *  - 231 (switch к Base 256)
-     *  - Length: 1 byte (1..249) или 2 bytes (high = (L-249)/250 + 249, low = L%250)
+     *  - 231 (switch to Base 256)
+     *  - Length: 1 byte (1..249) or 2 bytes (high = (L-249)/250 + 249, low = L%250)
      *  - Data bytes randomized: (byte + (149*pos)%255 + 1) mod 256
-     *    Where pos = 1-based position of this codeword в total стрим.
+     *    Where pos = 1-based position of this codeword in total stream.
      *
      * @return list<int>
      */
@@ -381,7 +376,7 @@ final class DataMatrixEncoder
     {
         $cw = [231]; // switch to Base 256
         $len = strlen($data);
-        // Length field. ZXing-style 2-byte encoding для длинных payloads.
+        // Length field. 2-byte encoding for long payloads.
         if ($len <= 249) {
             $cw[] = $len;
         } elseif ($len <= 1555) {
@@ -393,7 +388,7 @@ final class DataMatrixEncoder
             ));
         }
         // Data bytes — 255-state randomization. pos = 1-based codeword position
-        // of THIS data byte в overall stream (после 231 + length bytes).
+        // of THIS data byte in overall stream (after 231 + length bytes).
         $headerLen = count($cw);
         for ($i = 0; $i < $len; $i++) {
             $pos = $headerLen + $i + 1; // 1-based position
@@ -401,9 +396,9 @@ final class DataMatrixEncoder
             $temp = ord($data[$i]) + $pseudoRandom;
             $cw[] = $temp <= 255 ? $temp : $temp - 256;
         }
-        // Phase 176: also randomize the length byte(s) themselves.
-        // Actually per ZXing reference, length bytes get same randomization
-        // treatment как data bytes (с pos = их позиция в codeword stream).
+        // Also randomize the length byte(s) themselves.
+        // Length bytes get same randomization treatment as data bytes
+        // (with pos = their position in codeword stream).
         // Re-randomize header.
         for ($i = 1; $i < $headerLen; $i++) {
             $pos = $i + 1; // 1-based
@@ -416,9 +411,9 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Phase 177: C40 encoding mode per ISO/IEC 16022 §5.2.5.
-     * 3 characters packed в 2 codewords (16 bits). Primary alphabet:
-     * uppercase + digits + space + shift tables для lowercase / punctuation.
+     * C40 encoding mode per ISO/IEC 16022 §5.2.5.
+     * 3 characters packed into 2 codewords (16 bits). Primary alphabet:
+     * uppercase + digits + space + shift tables for lowercase / punctuation.
      *
      * @return list<int>
      */
@@ -428,7 +423,7 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Phase 178: Text encoding mode — like C40 но primary alphabet lowercase.
+     * Text encoding mode — like C40 but primary alphabet lowercase.
      *
      * @return list<int>
      */
@@ -438,7 +433,7 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Phase 179: X12 encoding mode per ISO/IEC 16022 §5.2.7.
+     * X12 encoding mode per ISO/IEC 16022 §5.2.7.
      * Subset of C40 alphabet (uppercase + digits + space + < > * + - . / : =).
      * 3 chars → 2 codewords. Switch codeword 238.
      *
@@ -463,9 +458,9 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Phase 180: EDIFACT encoding mode per ISO/IEC 16022 §5.2.8.
-     * 4 chars (each 6-bit, ASCII 32..94 range) packed в 3 codewords.
-     * Switch codeword 240. Terminator 011111 (binary), unlatch к ASCII.
+     * EDIFACT encoding mode per ISO/IEC 16022 §5.2.8.
+     * 4 chars (each 6-bit, ASCII 32..94 range) packed into 3 codewords.
+     * Switch codeword 240. Terminator 011111 (binary), unlatch to ASCII.
      *
      * @return list<int>
      */
@@ -485,11 +480,11 @@ final class DataMatrixEncoder
             $val = $b & 0x3F;
             $bits .= str_pad(decbin($val), 6, '0', STR_PAD_LEFT);
         }
-        // Append unlatch terminator (6 bits "011111" = 0x1F) если есть data
-        // или space remaining. Per spec: if data ends на multiple-of-3-cw
-        // boundary, no unlatch needed. Else pad с zero bits после unlatch.
+        // Append unlatch terminator (6 bits "011111" = 0x1F) if data
+        // or space remaining. Per spec: if data ends on multiple-of-3-cw
+        // boundary, no unlatch needed. Else pad with zero bits after unlatch.
         $bits .= '011111';
-        // Pad к multiple of 8 bits (= multiple of 4 chars or 3 codewords).
+        // Pad to multiple of 8 bits (= multiple of 4 chars or 3 codewords).
         while (strlen($bits) % 8 !== 0) {
             $bits .= '0';
         }
@@ -539,8 +534,8 @@ final class DataMatrixEncoder
             $values = array_merge($values, self::c40CharValues($data[$i], $useTextSet));
         }
         $cw = array_merge($cw, self::packTriplets($values));
-        // Unlatch к ASCII (codeword 254) если data ended на incomplete triplet
-        // (codeword 254 also serves как end-of-mode signal).
+        // Unlatch to ASCII (codeword 254) if data ended on incomplete triplet
+        // (codeword 254 also serves as end-of-mode signal).
         if (count($values) % 3 !== 0) {
             $cw[] = 254;
         }
@@ -549,7 +544,7 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Pack 3-value triplets в 2 codewords each: V1*1600 + V2*40 + V3 + 1.
+     * Pack 3-value triplets into 2 codewords each: V1*1600 + V2*40 + V3 + 1.
      * Top byte = high, bottom byte = low.
      *
      * @param  list<int>  $values
@@ -557,8 +552,8 @@ final class DataMatrixEncoder
      */
     private static function packTriplets(array $values): array
     {
-        // Pad partial triplet с 0 (shift 1 в C40/Text — for SHIFT_1, value 0).
-        // For X12 spec uses different padding; для simplicity pad с 0.
+        // Pad partial triplet with 0 (shift 1 in C40/Text — for SHIFT_1, value 0).
+        // X12 spec uses different padding; for simplicity pad with 0.
         while (count($values) % 3 !== 0) {
             $values[] = 0;
         }
@@ -580,7 +575,7 @@ final class DataMatrixEncoder
     private static function c40CharValues(string $ch, bool $useTextSet): array
     {
         $b = ord($ch);
-        // Basic set: SHIFT 1/2/3 ChimeSet или direct value.
+        // Basic set: SHIFT 1/2/3 ChimeSet or direct value.
         if ($b === 32) {
             return [3]; // space
         }
@@ -606,7 +601,7 @@ final class DataMatrixEncoder
                 return [2, $b - 97 + 14];
             }
         }
-        // Punctuation / control: SHIFT 1 для 0..31 (value 0 + b), SHIFT 2 для 33..47/58..64/91..95 etc.
+        // Punctuation / control: SHIFT 1 for 0..31 (value 0 + b), SHIFT 2 for 33..47/58..64/91..95 etc.
         if ($b <= 31) {
             return [0, $b];
         }
@@ -623,7 +618,7 @@ final class DataMatrixEncoder
         if ($b >= 128) {
             return [1, 30, ...self::c40CharValues(chr($b - 128), $useTextSet)];
         }
-        throw new \InvalidArgumentException(sprintf('C40/Text не покрывает byte 0x%02X', $b));
+        throw new \InvalidArgumentException(sprintf('C40/Text does not cover byte 0x%02X', $b));
     }
 
     private static function x12CharValue(string $ch): int
@@ -644,9 +639,9 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Pad codewords к capacity per ISO/IEC 16022 §5.2.4.1:
+     * Pad codewords to capacity per ISO/IEC 16022 §5.2.4.1:
      *  - First pad = 129 (terminator).
-     *  - Subsequent pads: (149 * pos) % 253 + 1, added к 129, mod 254.
+     *  - Subsequent pads: (149 * pos) % 253 + 1, added to 129, mod 254.
      *
      * @param  list<int>  $cw
      * @return list<int>
@@ -695,7 +690,7 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Encode RS ECC block per ZXing ErrorCorrection.createECCBlock.
+     * Encode RS ECC block.
      * Output order: reversed (ECC[0] becomes ECC[n-1] etc).
      *
      * @param  list<int>  $cw
@@ -729,16 +724,16 @@ final class DataMatrixEncoder
     }
 
     /**
-     * Interleaved RS encoding для symbols с multiple RS blocks.
+     * Interleaved RS encoding for symbols with multiple RS blocks.
      *
-     * Per ZXing ErrorCorrection.encodeECC200:
+     * Per ISO/IEC 16022 ECC200:
      *  - Data codewords interleaved by blockCount: block 0 takes positions
      *    0, blockCount, 2*blockCount, ...; block 1 takes positions 1, 1+bc, ...
      *  - Each block's ECC computed separately, then interleaved similarly
      *    into the ECC tail.
      *
      * @param  list<int>  $data
-     * @return list<int>  данные + ECC, длина dataCap + eccCap
+     * @return list<int>  data + ECC, length dataCap + eccCap
      */
     public static function interleavedEcc(array $data, int $dataCap, int $eccCap, int $blockCount, int $rsBlockError): array
     {
@@ -758,10 +753,10 @@ final class DataMatrixEncoder
         return $result;
     }
 
-    // ─── DefaultPlacement (ZXing port) ────────────────────────────────────
+    // ─── DefaultPlacement ─────────────────────────────────────────────────
 
     /**
-     * Place codeword bits into data grid per ZXing DefaultPlacement.
+     * Place codeword bits into data grid per DefaultPlacement algorithm.
      *
      * @param  list<int>  $codewords  all data + ECC codewords
      * @return list<list<bool>>  grid[row][col]
@@ -919,7 +914,7 @@ final class DataMatrixEncoder
 
     /**
      * Assemble final symbol matrix from data grid by splitting into
-     * regions и adding finder/timing patterns per region.
+     * regions and adding finder/timing patterns per region.
      *
      * Each region tile (mW+2) × (mH+2) total:
      *  - Top edge: alternating timing pattern (B/W/B/W...)
@@ -939,7 +934,7 @@ final class DataMatrixEncoder
 
         for ($vr = 0; $vr < $vRegions; $vr++) {
             for ($hr = 0; $hr < $hRegions; $hr++) {
-                // Region origin в final symbol.
+                // Region origin in final symbol.
                 $rTop = $vr * ($mH + 2);
                 $rLeft = $hr * ($mW + 2);
                 // Source grid origin.
@@ -947,13 +942,13 @@ final class DataMatrixEncoder
                 $gLeft = $hr * $mW;
 
                 // 1. Timing FIRST (will be overridden at corners by L-finder).
-                // Top edge: B-W-B-W-... starting B at col 0 (так чтобы corner с
+                // Top edge: B-W-B-W-... starting B at col 0 (so corner with
                 // L-finder left = B).
                 for ($j = 0; $j < $mW + 2; $j++) {
                     $sym[$rTop][$rLeft + $j] = ($j % 2 === 0);
                 }
-                // Right edge: W-B-W-B-... starting W at row 0 (так чтобы
-                // corner с L-finder bottom = B на row mH+1).
+                // Right edge: W-B-W-B-... starting W at row 0 (so corner with
+                // L-finder bottom = B on row mH+1).
                 for ($i = 0; $i < $mH + 2; $i++) {
                     $sym[$rTop + $i][$rLeft + $mW + 1] = ($i % 2 === 1);
                 }

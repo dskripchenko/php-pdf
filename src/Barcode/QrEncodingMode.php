@@ -5,25 +5,24 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 38: QR Code encoding modes (ISO/IEC 18004 §7.4).
+ * QR Code encoding modes (ISO/IEC 18004 §7.4).
  *
- * Auto-detection picks most compact mode для input:
+ * Auto-detection picks most compact mode for input:
  *  - Numeric (0-9 only) — 10 bits per 3 chars.
  *  - Alphanumeric (0-9, A-Z, space, $%*+-./:) — 11 bits per 2 chars.
  *  - Byte (any 8-bit data) — 8 bits per char.
- *
- * Kanji mode → Phase 101. Structured Append → Phase 183. ECI → Phase 184.
+ *  - Kanji (Shift_JIS) — 13 bits per char.
  */
 enum QrEncodingMode: int
 {
     case Numeric = 0b0001;
     case Alphanumeric = 0b0010;
     case Byte = 0b0100;
-    /** Phase 101: Kanji (Shift_JIS) — 13 bits per char. */
+    /** Kanji (Shift_JIS) — 13 bits per char. */
     case Kanji = 0b1000;
 
     /**
-     * 4-bit mode indicator (по ISO/IEC 18004 Table 2).
+     * 4-bit mode indicator (per ISO/IEC 18004 Table 2).
      */
     public function indicatorBits(): int
     {
@@ -31,7 +30,7 @@ enum QrEncodingMode: int
     }
 
     /**
-     * Character count indicator width в bits, версия-зависимая.
+     * Character count indicator width in bits, version-dependent.
      */
     public function charCountIndicatorBits(int $version): int
     {
@@ -58,7 +57,7 @@ enum QrEncodingMode: int
     }
 
     /**
-     * Bits required для $charCount input symbols в этом mode.
+     * Bits required for $charCount input symbols in this mode.
      */
     public function dataBitsFor(int $charCount): int
     {
@@ -73,7 +72,7 @@ enum QrEncodingMode: int
     }
 
     /**
-     * Auto-detect best mode для input.
+     * Auto-detect best mode for input.
      */
     public static function detect(string $data): self
     {
@@ -88,7 +87,7 @@ enum QrEncodingMode: int
     }
 
     /**
-     * Alphanumeric character set order (для encoding lookup).
+     * Alphanumeric character set order (for encoding lookup).
      */
     public const ALPHANUMERIC_CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
 }

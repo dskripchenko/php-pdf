@@ -9,18 +9,17 @@ use Dskripchenko\PhpPdf\Pdf\Page;
 use Dskripchenko\PhpPdf\Style\PageSetup;
 
 /**
- * Mutable state, который Engine mutate'ит при walk'е AST.
+ * Mutable state that Engine mutates while walking the AST.
  *
- * Содержит:
- *  - currentPage — куда сейчас рендерим
- *  - cursorY — где «вершина» следующей строки (в PDF coords; растёт вверх)
+ * Contains:
+ *  - currentPage — where rendering currently targets
+ *  - cursorY — "top" of the next line (in PDF coords; grows upward)
  *  - leftX/contentWidth — content area bounds
- *  - topY/bottomY — vertical bounds (для overflow detection)
- *  - pdf — корневой Pdf\Document (нужен для addPage'а при overflow)
+ *  - topY/bottomY — vertical bounds (for overflow detection)
+ *  - pdf — root Pdf\Document (needed for addPage on overflow)
  *
- * Engine — единственный writer; LayoutContext предоставляет доступ
- * к этим полям публично потому что они часто читаются/обновляются
- * во время layout pass'а.
+ * Engine is the sole writer; LayoutContext exposes these fields publicly
+ * because they are frequently read/updated during the layout pass.
  */
 final class LayoutContext
 {
@@ -33,36 +32,37 @@ final class LayoutContext
         public float $bottomY,
         public float $topY,
         public PageSetup $pageSetup,
-        // Phase 39: multi-column state. columnCount == 1 → single-column
-        // (legacy behavior, no column flow). columnCount > 1 → forcePageBreak
+        // Multi-column state. columnCount == 1 → single-column
+        // (no column flow). columnCount > 1 → forcePageBreak
         // overflow → next column; last column → real page break.
         public int $columnCount = 1,
         public int $currentColumn = 0,
         public float $columnGapPt = 0,
         public float $columnOriginLeftX = 0,
         public float $columnOriginContentWidth = 0,
-        // Phase 40: collected footnotes/endnotes per section (rendered at
+        // Collected footnotes/endnotes per section (rendered at
         // end of section as endnotes block).
         /** @var list<string> */
         public array $footnotes = [],
-        // Phase 61: suppress paragraph BDC/EMC wrapping (used когда heading
-        // sets own H1-H6 tagging вокруг paragraph render).
+        // Suppress paragraph BDC/EMC wrapping (used when a heading
+        // sets its own H1-H6 tagging around paragraph render).
         public bool $skipParagraphTag = false,
-        // Phase 155: re-entrance guard для header/footer rendering. forcePageBreak
-        // вызывает renderHeaderFooter; если внутри header rendering сам block
-        // не fits и пытается forcePageBreak — infinite loop. Этот флаг
-        // суппрессирует header/footer на новой page если мы уже в header/footer
-        // render path; также суппрессирует sам forcePageBreak (overflow truncates).
+        // Re-entrance guard for header/footer rendering. forcePageBreak
+        // invokes renderHeaderFooter; if inside header rendering a block
+        // does not fit and tries forcePageBreak — infinite loop. This flag
+        // suppresses header/footer on the new page if we are already in the
+        // header/footer render path; also suppresses forcePageBreak itself
+        // (overflow truncates).
         public bool $inHeaderFooterRender = false,
         /**
-         * Phase 222: per-page footnote bottom reservation (in points). null =
-         * endnotes mode (current behavior — all footnotes at section's end).
+         * Per-page footnote bottom reservation (in points). null =
+         * endnotes mode (all footnotes at section's end).
          * > 0 = footnote zone reserved at each page bottom, footnotes for
          * current page rendered before page break.
          */
         public ?float $footnoteReserveBottomPt = null,
         /**
-         * Phase 222: footnote count в $footnotes[] до начала current page.
+         * Footnote count in $footnotes[] before the start of the current page.
          * Footnotes added since this index = "current page's footnotes",
          * rendered at page bottom on page break.
          */

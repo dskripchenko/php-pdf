@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 132: `HVAR` table — Horizontal Metric Variations.
+ * `HVAR` table — Horizontal Metric Variations.
  *
- * Provides per-glyph advance-width deltas для variable fonts. Optional
- * tables LSB/RSB не нужны для simple metric interpolation (PDF doesn't
- * use side bearings directly).
+ * Provides per-glyph advance-width deltas for variable fonts. The optional
+ * LSB/RSB tables are not needed for simple metric interpolation (PDF does
+ * not use side bearings directly).
  *
  * Format v1.0:
  *   uint16 majorVersion (=1)
@@ -22,7 +22,7 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  * DeltaSetIndexMap (used by all 3 mappings):
  *   uint16 entryFormat
  *     bits 0..3: innerIndexBitSize - 1
- *     bits 4..5: mapEntrySize - 1  (1, 2, 3, или 4 bytes)
+ *     bits 4..5: mapEntrySize - 1  (1, 2, 3, or 4 bytes)
  *   uint16 mapCount
  *   uint8[] mapData
  *
@@ -56,7 +56,8 @@ final class HvarReader
     }
 
     /**
-     * Compute interpolated advance width delta для glyph под normalized coords.
+     * Compute the interpolated advance width delta for a glyph under
+     * normalized coords.
      *
      * @param  array<int, float>  $normCoords
      */

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 132: `MVAR` table — Metric Variations.
+ * `MVAR` table — Metric Variations.
  *
- * Defines per-axis adjustments к font-wide metrics (ascender, descender,
+ * Defines per-axis adjustments to font-wide metrics (ascender, descender,
  * cap height, x-height, line gap, sub/super-script positions, strikeout,
  * underline, etc.).
  *
@@ -74,7 +74,7 @@ final class MvarReader
     }
 
     /**
-     * Compute delta для metric identified by 4-char tag.
+     * Compute delta for metric identified by 4-char tag.
      *
      * @param  array<int, float>  $normCoords
      */

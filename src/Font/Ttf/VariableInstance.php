@@ -5,23 +5,23 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 134: Apply gvar deltas + IUP к glyph outlines для chosen instance.
+ * Apply gvar deltas + IUP to glyph outlines for a chosen instance.
  *
  * Given user-space axis coordinates (e.g., ['wght' => 700]), produces
- * modified glyf table bytes с interpolated outlines.
+ * modified glyf table bytes with interpolated outlines.
  *
  * Algorithm per simple glyph:
  *  1. Parse simple glyph contours.
- *  2. Get gvar deltas для normalized coords.
- *  3. Apply IUP (Interpolation of Unreferenced Points): для each contour,
- *     points без explicit delta interpolate proportionally from neighbors
- *     с deltas.
+ *  2. Get gvar deltas for normalized coords.
+ *  3. Apply IUP (Interpolation of Unreferenced Points): for each contour,
+ *     points without an explicit delta interpolate proportionally from
+ *     neighbors with deltas.
  *  4. Re-serialize glyph bytes.
  *
  * Composite glyph behavior:
- *  - Component glyph outlines transformed individually (Phase 149).
+ *  - Component glyph outlines transformed individually.
  *  - Per-component (dx, dy) anchor offsets transformed via gvar deltas
- *    on composite glyph's point space (Phase 186). Point N = component N's
+ *    on the composite glyph's point space. Point N = component N's
  *    anchor. Plus 4 phantom points for advance metrics (handled separately).
  *  - Transform matrices (scale, x/y scale, 2x2) preserved as-is — variation
  *    affects only anchor positions, not scale factors.
@@ -42,8 +42,8 @@ final class VariableInstance
     }
 
     /**
-     * Apply variation deltas к raw glyph bytes (one glyph). Returns
-     * modified bytes — or original $glyphBytes если glyph is composite/
+     * Apply variation deltas to raw glyph bytes (one glyph). Returns
+     * modified bytes — or original $glyphBytes if glyph is composite/
      * empty/non-variable.
      */
     public function transformGlyph(int $glyphId, string $glyphBytes): string
@@ -51,14 +51,14 @@ final class VariableInstance
         if (! $this->isVariable() || $glyphBytes === '') {
             return $glyphBytes;
         }
-        // Phase 186: composite glyph — apply gvar deltas к component anchor offsets.
+        // Composite glyph — apply gvar deltas to component anchor offsets.
         $composite = CompositeGlyph::parse($glyphBytes);
         if ($composite !== null) {
             return $this->transformComposite($glyphId, $composite);
         }
         $glyph = SimpleGlyph::parse($glyphBytes);
         if ($glyph === null) {
-            return $glyphBytes; // unknown или empty — skip
+            return $glyphBytes; // unknown or empty — skip
         }
 
         $gvar = $this->ttf->gvar();
@@ -70,7 +70,7 @@ final class VariableInstance
             return $glyphBytes;
         }
 
-        // Apply explicit deltas + IUP для unreferenced points.
+        // Apply explicit deltas + IUP for unreferenced points.
         $newX = $glyph->xCoords;
         $newY = $glyph->yCoords;
         $hasDelta = [];
@@ -96,12 +96,12 @@ final class VariableInstance
     /**
      * IUP (Interpolation of Unreferenced Points) per OpenType spec §11.7.
      *
-     * For each contiguous range of unreferenced points между referenced
-     * points P_a и P_b на contour:
-     *   - Если P_a и P_b have same original coord: shift unreferenced
+     * For each contiguous range of unreferenced points between referenced
+     * points P_a and P_b on the contour:
+     *   - If P_a and P_b have same original coord: shift unreferenced
      *     points by same delta as P_a (= P_b).
-     *   - Если original coord of unreferenced point is между P_a и P_b:
-     *     linearly interpolate based on position ratio.
+     *   - If the original coord of an unreferenced point lies between
+     *     P_a and P_b: linearly interpolate based on position ratio.
      *   - Else: shift by closer referenced point's delta.
      *
      * @param  list<int>  $newCoords  modified coords (modified in-place)
@@ -109,9 +109,9 @@ final class VariableInstance
      * @param  array<int, bool>  $hasDelta  points that have explicit delta
      */
     /**
-     * Phase 186: apply gvar deltas к composite glyph component anchor offsets.
+     * Apply gvar deltas to composite glyph component anchor offsets.
      *
-     * For composite glyphs, gvar point indices map к component anchors:
+     * For composite glyphs, gvar point indices map to component anchors:
      * Point 0 = component 0's anchor (dx, dy)
      * Point 1 = component 1's anchor
      * ...
@@ -122,7 +122,7 @@ final class VariableInstance
         $gvar = $this->ttf->gvar();
         $norm = $this->ttf->normalizeCoordinates($this->userCoords);
         $componentCount = count($composite->components);
-        // Composite glyph has componentCount + 4 phantom points в gvar.
+        // Composite glyph has componentCount + 4 phantom points in gvar.
         $deltas = $gvar->glyphDeltas($glyphId, $norm, $componentCount + 4);
         if ($deltas === []) {
             return $composite->originalBytes;
@@ -154,7 +154,7 @@ final class VariableInstance
         if ($length === 0) {
             return;
         }
-        // Find all referenced points в contour.
+        // Find all referenced points in contour.
         $refs = [];
         for ($i = $start; $i <= $end; $i++) {
             if (isset($hasDelta[$i])) {
@@ -165,7 +165,7 @@ final class VariableInstance
             return; // No referenced points — leave contour untouched.
         }
 
-        // For each unreferenced point, find next ref forward и prev ref backward
+        // For each unreferenced point, find next ref forward and prev ref backward
         // (wrapping around contour boundary).
         $numRefs = count($refs);
         for ($i = 0; $i < $numRefs; $i++) {
@@ -177,7 +177,7 @@ final class VariableInstance
     }
 
     /**
-     * Interpolate points в range (r1, r2) exclusive endpoints. Range wraps
+     * Interpolate points in range (r1, r2) exclusive endpoints. Range wraps
      * within contour [$start, $end].
      *
      * @param  list<int>  $newCoords
@@ -194,7 +194,7 @@ final class VariableInstance
         $deltaA = $newCoords[$r1] - $oa;
         $deltaB = $newCoords[$r2] - $ob;
 
-        // Iterate through points между r1 и r2 (exclusive), wrapping around contour.
+        // Iterate through points between r1 and r2 (exclusive), wrapping around contour.
         $i = $r1 + 1;
         while (true) {
             if ($i > $end) {
@@ -209,7 +209,7 @@ final class VariableInstance
             if ($oi >= $oMin && $oi <= $oMax) {
                 // Linear interpolation.
                 if ($oa === $ob) {
-                    // Both refs equal — shift по deltaA (== deltaB likely).
+                    // Both refs equal — shift by deltaA (== deltaB likely).
                     $newCoords[$i] = (int) round($oi + ($deltaA + $deltaB) / 2);
                 } else {
                     $t = ($oi - $oa) / ($ob - $oa);

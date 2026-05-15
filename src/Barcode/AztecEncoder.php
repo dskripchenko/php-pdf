@@ -5,25 +5,23 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 125: Aztec Compact 2D barcode (ISO/IEC 24778:2008).
+ * Aztec 2D barcode (ISO/IEC 24778:2008).
  *
  * Implementation scope:
- *  - Compact Aztec only (sizes 15×15 .. 27×27, layers 1-4).
+ *  - Compact (sizes 15×15 .. 27×27, layers 1-4) and Full Aztec
+ *    (15×15..151×151, layers 5-32).
  *  - Full ASCII via 5 character modes (Upper/Lower/Mixed/Punct/Digit)
  *    with mode latches/shifts.
- *  - Binary mode (B/S) для bytes > 127 или non-encodable chars.
+ *  - Binary mode (B/S) for bytes > 127 or non-encodable chars.
  *  - Bit stuffing per ISO §6.4.4 (no all-zero/all-one codewords).
- *  - Reed-Solomon ECC over GF(16) для mode message, GF(64) для 1-2L
- *    data, GF(256) для 3-4L data.
- *  - Auto layer selection с ~23% ECC redundancy (per ISO рекомендация).
+ *  - Reed-Solomon ECC over GF(16) for mode message, GF(64) for 1-2L
+ *    data, GF(256) for 3-4L data.
+ *  - Auto layer selection with ~23% ECC redundancy (per ISO recommendation).
  *
- * Не реализовано:
+ * Not implemented:
  *  - Rune mode (single-character symbol) — v1.3 backlog.
  *  - Structured Append (multi-symbol concatenation) — v1.3 backlog.
  *  - ECI / FLG(n) extended channel interpretation — v1.3 backlog.
- *
- * Closed в later phases:
- *  - Full Aztec (15×15..151×151, layers 5-32) → Phase 125-126
  *
  * Output via {@see modules()} — 2D bool matrix; true = black module.
  */
@@ -64,9 +62,8 @@ final class AztecEncoder
     // ---------------- Size / GF info ----------------
 
     /**
-     * Word size (codeword bit width) по layer count (index 1..32).
-     * Index 0 reserved для mode message (always 4 bits, GF(16)).
-     * Source: ZXing Encoder.java WORD_SIZE.
+     * Word size (codeword bit width) by layer count (index 1..32).
+     * Index 0 reserved for mode message (always 4 bits, GF(16)).
      */
     private const WORD_SIZE = [
         4,
@@ -75,7 +72,7 @@ final class AztecEncoder
         12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     ];
 
-    /** Primitive polynomial для каждого word size, GF(2^n). */
+    /** Primitive polynomial for each word size, GF(2^n). */
     private const PRIM_POLY = [
         4 => 0x13,    // x^4 + x + 1 (Aztec param, GF(16))
         6 => 0x43,    // x^6 + x + 1 (GF(64))
@@ -90,7 +87,7 @@ final class AztecEncoder
 
     public readonly int $size;
 
-    /** Base matrix size до addition of alignment lines (Full mode). */
+    /** Base matrix size before addition of alignment lines (Full mode). */
     public readonly int $baseMatrixSize;
 
     public readonly int $dataCodewords;
@@ -101,19 +98,19 @@ final class AztecEncoder
     private array $matrix;
 
     /**
-     * Phase 238: Aztec ECI marker via FLG(n) escape (ISO 24778 §6.5).
+     * Aztec ECI marker via FLG(n) escape (ISO 24778 §6.5).
      *
-     * Inserts ECI escape at start of encoded data stream signaling к decoder
-     * что following content uses non-default character encoding (e.g.,
-     * ECI 26 = UTF-8, ECI 25 = UCS-2 Big-Endian).
+     * Inserts ECI escape at start of encoded data stream signaling to the
+     * decoder that following content uses non-default character encoding
+     * (e.g., ECI 26 = UTF-8, ECI 25 = UCS-2 Big-Endian).
      *
      * Bit sequence (from default Upper start mode):
      *  - U→M latch (5 bits = 11101)
      *  - M→P latch (5 bits = 11110)
-     *  - FLG codeword 0 в Punct (5 bits = 00000)
+     *  - FLG codeword 0 in Punct (5 bits = 00000)
      *  - 3-bit n value (length of decimal ECI value, 1-6)
      *  - n × 4-bit digit codewords (codes 2-11 for '0'-'9')
-     *  - P→U latch (5 bits = 11111) — return к Upper для data encoding
+     *  - P→U latch (5 bits = 11111) — return to Upper for data encoding
      *
      * @param  int  $eciValue  ECI value 0..999999 (max 6 decimal digits)
      */
@@ -143,33 +140,33 @@ final class AztecEncoder
         $bits .= str_pad(decbin(0), 5, '0', STR_PAD_LEFT);
         // 3-bit n value (length of ECI digits, 1-6).
         $bits .= str_pad(decbin($n), 3, '0', STR_PAD_LEFT);
-        // n × 4-bit digit codewords (digit '0'-'9' = code 2-11 в Digit mode).
+        // n × 4-bit digit codewords (digit '0'-'9' = code 2-11 in Digit mode).
         for ($i = 0; $i < $n; $i++) {
             $digit = (int) $eciStr[$i];
             $bits .= str_pad(decbin(2 + $digit), 4, '0', STR_PAD_LEFT);
         }
-        // P→U latch (Punct code 31 = 5 bits) — return к Upper for data encoding.
+        // P→U latch (Punct code 31 = 5 bits) — return to Upper for data encoding.
         $bits .= str_pad(decbin(31), 5, '0', STR_PAD_LEFT);
 
         return $bits;
     }
 
     /**
-     * Phase 221: Aztec Structured Append (ISO 24778 §8.4).
+     * Aztec Structured Append (ISO 24778 §8.4).
      *
-     * Builds multi-symbol concatenated set. Header prefixed к data:
+     * Builds multi-symbol concatenated set. Header prefixed to data:
      *   " {idx_letter}{cnt_letter}{data}"
      * or with fileID:
      *   "{fileID} {idx_letter}{cnt_letter}{data}"
      *
-     * Decoder concatenates data из all symbols in position order, recognizes
-     * structured append через leading-space-or-fileID-space prefix.
+     * Decoder concatenates data from all symbols in position order, recognizes
+     * structured append via leading-space-or-fileID-space prefix.
      *
-     * @param  string  $data  Data segment для this symbol.
-     * @param  int  $position  1-based position в set (1..26).
+     * @param  string  $data  Data segment for this symbol.
+     * @param  int  $position  1-based position in set (1..26).
      * @param  int  $total  Total symbols in set (1..26).
      * @param  string|null  $fileId  Optional alphanumeric ID (max 24 chars,
-     *                                shared across all symbols в set).
+     *                                shared across all symbols in set).
      */
     public static function structuredAppend(
         string $data,
@@ -205,7 +202,7 @@ final class AztecEncoder
     }
 
     /**
-     * Phase 238: ECI prefix bits emitted via FLG(n) escape (ISO 24778 §6.5).
+     * ECI prefix bits emitted via FLG(n) escape (ISO 24778 §6.5).
      * Null = no ECI. Set via `withEci()` static factory.
      */
     public readonly ?int $eciValue;
@@ -222,7 +219,7 @@ final class AztecEncoder
 
         // 1. High-level encode → bit string.
         $bits = self::encodeToBits($data);
-        // Phase 238: prepend FLG(n) ECI header если задан.
+        // Prepend FLG(n) ECI header if set.
         if ($eciValue !== null) {
             $bits = self::buildEciHeader($eciValue).$bits;
         }
@@ -253,7 +250,7 @@ final class AztecEncoder
                 $stuffedBits = self::stuffBits($bits, $ws);
             }
             $usable = $totalBitsInLayerForL - ($totalBitsInLayerForL % $ws);
-            // Compact limited к 64 message words.
+            // Compact limited to 64 message words.
             if ($compact && strlen($stuffedBits) > $ws * 64) {
                 continue;
             }
@@ -305,7 +302,7 @@ final class AztecEncoder
     // ---------------- Character encoding ----------------
 
     /**
-     * Convert string к Aztec bit stream switching modes optimally
+     * Convert string to Aztec bit stream switching modes optimally
      * (greedy heuristic, not optimal but correct).
      */
     public static function encodeToBits(string $text): string
@@ -340,7 +337,7 @@ final class AztecEncoder
                 }
             }
 
-            // Emit mode switch (latch or shift) если требуется.
+            // Emit mode switch (latch or shift) if required.
             $bits .= self::switchModeBits($mode, $bestMode);
             // Update mode (latches change persistent mode; shifts handled inline).
             if ($bestMode !== self::MODE_PUNCT || $mode === self::MODE_MIXED) {
@@ -349,7 +346,7 @@ final class AztecEncoder
                     $mode = $bestMode;
                 }
             } elseif ($mode === self::MODE_DIGIT && $bestMode === self::MODE_PUNCT) {
-                // From Digit, going to Punct uses upper-latch then punct-shift — mode resets к Upper.
+                // From Digit, going to Punct uses upper-latch then punct-shift — mode resets to Upper.
                 $mode = self::MODE_UPPER;
             }
             // Emit char code in best mode.
@@ -360,7 +357,7 @@ final class AztecEncoder
     }
 
     /**
-     * Cost of switching from $from to $to (number of bits для switch sequence).
+     * Cost of switching from $from to $to (number of bits for switch sequence).
      */
     private static function switchCost(int $from, int $to): int
     {
@@ -377,7 +374,7 @@ final class AztecEncoder
 
     private static function isLatchSwitch(int $from, int $to): bool
     {
-        // Punct from non-Mixed = shift (returns к prior mode).
+        // Punct from non-Mixed = shift (returns to prior mode).
         // From Mixed → Punct = latch.
         if ($to === self::MODE_PUNCT && $from !== self::MODE_MIXED) {
             return false;
@@ -387,7 +384,7 @@ final class AztecEncoder
     }
 
     /**
-     * Emit mode-switch bits between $from и $to. Returns "" if same mode.
+     * Emit mode-switch bits between $from and $to. Returns "" if same mode.
      */
     private static function switchModeBits(int $from, int $to): string
     {
@@ -396,13 +393,13 @@ final class AztecEncoder
         }
         $fromBits = self::MODE_BITS[$from];
 
-        // Punct from non-Mixed: P/S shift (code 0 в all modes 5-bit; code 0 в Digit 4-bit).
+        // Punct from non-Mixed: P/S shift (code 0 in all modes 5-bit; code 0 in Digit 4-bit).
         if ($to === self::MODE_PUNCT && $from !== self::MODE_MIXED) {
             return str_pad(decbin(0), $fromBits, '0', STR_PAD_LEFT);
         }
 
         // U/S from Lower (shift, one char only):
-        // (Not used в greedy impl currently; latches preferred.)
+        // (Not used in greedy impl currently; latches preferred.)
 
         // Latch codes:
         // From Upper:  L/L=28, M/L=29, D/L=30
@@ -449,10 +446,10 @@ final class AztecEncoder
     private static function emitBinaryShift(int $mode, array $bytes): string
     {
         $n = count($bytes);
-        $bsCode = $mode === self::MODE_DIGIT ? 15 : 31; // B/S = 31 in 5-bit modes; в Digit нет direct B/S → используем U/S
+        $bsCode = $mode === self::MODE_DIGIT ? 15 : 31; // B/S = 31 in 5-bit modes; in Digit no direct B/S — use U/S
         $modeBits = self::MODE_BITS[$mode];
         if ($mode === self::MODE_DIGIT) {
-            // From Digit: U/S (single upper shift) — но мы уходим в B/S через Upper latch.
+            // From Digit: U/S (single upper shift) — then enter B/S via Upper latch.
             $out = str_pad(decbin(14), 4, '0', STR_PAD_LEFT); // D→U latch.
             $modeBits = 5;
             $bsCode = 31;
@@ -461,7 +458,7 @@ final class AztecEncoder
             $out = str_pad(decbin($bsCode), $modeBits, '0', STR_PAD_LEFT);
         }
 
-        // Length: 5 bits если 1-31; else 0 (5 bits) + 11 bits для actual length.
+        // Length: 5 bits if 1-31; else 0 (5 bits) + 11 bits for actual length.
         if ($n <= 31) {
             $out .= str_pad(decbin($n), 5, '0', STR_PAD_LEFT);
         } else {
@@ -546,7 +543,7 @@ final class AztecEncoder
     // ---------------- Bit stuffing ----------------
 
     /**
-     * Bit stuffing per ISO/IEC 24778 §6.4.4, ported from ZXing Encoder.java.
+     * Bit stuffing per ISO/IEC 24778 §6.4.4.
      *
      * Iterates wordSize bits at a time. If first (wordSize-1) bits are all
      * same (1...1 or 0...0), modify the last bit of the codeword:
@@ -585,8 +582,7 @@ final class AztecEncoder
     }
 
     /**
-     * Generate check (ECC) words via Reed-Solomon ported from ZXing
-     * ReedSolomonEncoder.java + GenericGFPoly.
+     * Generate check (ECC) words via Reed-Solomon.
      *
      * Convention: generator polynomial stored MSB-first (leading coef
      * at index 0). Synthetic division aligns naturally.
@@ -765,13 +761,12 @@ final class AztecEncoder
     // ---------------- Matrix layout ----------------
 
     /**
-     * Build Aztec matrix (Compact или Full).
+     * Build Aztec matrix (Compact or Full).
      *
-     * Algorithm ported from ZXing Encoder.java:
      *  1. Build alignment map (identity for Compact, sparse for Full).
      *  2. Draw data spiral via alignmentMap.
      *  3. Draw mode message (28 bits compact / 40 bits full).
-     *  4. Draw bullseye (5-ring compact / 7-ring full) с orientation cells.
+     *  4. Draw bullseye (5-ring compact / 7-ring full) with orientation cells.
      *  5. Draw alignment grid lines (Full only).
      */
     private function buildMatrix(string $messageBits, string $modeBits): array
@@ -874,7 +869,7 @@ final class AztecEncoder
     }
 
     /**
-     * Compact: 28-bit mode message в 7-cell groups на 4 sides
+     * Compact: 28-bit mode message in 7-cell groups on 4 sides
      * (rows c-5, c+5; cols c-5, c+5; offsets c-3..c+3).
      */
     private function drawCompactModeMessage(array &$m, int $center, string $modeBits): void
@@ -897,9 +892,9 @@ final class AztecEncoder
     }
 
     /**
-     * Full: 40-bit mode message в 10-cell groups на 4 sides
+     * Full: 40-bit mode message in 10-cell groups on 4 sides
      * (rows c-7, c+7; cols c-7, c+7).
-     * Offset формула: c - 5 + i + i/5 (skips center alignment cell at i=5).
+     * Offset formula: c - 5 + i + i/5 (skips center alignment cell at i=5).
      */
     private function drawFullModeMessage(array &$m, int $center, string $modeBits): void
     {

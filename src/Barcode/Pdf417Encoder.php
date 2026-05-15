@@ -5,24 +5,22 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 124: PDF417 stacked linear 2D barcode (ISO/IEC 15438:2006).
+ * PDF417 stacked linear 2D barcode (ISO/IEC 15438:2006).
  *
  * Stacked rows of 17-module codewords with Reed-Solomon ECC over GF(929).
- * Каждая row: start pattern + left row indicator + N data codewords +
+ * Each row: start pattern + left row indicator + N data codewords +
  * right row indicator + stop pattern.
  *
  * Supported:
  *  - Byte compaction mode (codeword 901): handles arbitrary ASCII + binary.
  *    Each input byte → 1 PDF417 codeword.
  *  - Multi-byte compaction (codeword 924): groups of 6 bytes → 5 codewords
- *    (применяется когда длина данных кратна 6).
+ *    (used when data length is a multiple of 6).
+ *  - Text compaction (codeword 900): denser for alphanumeric.
+ *  - Numeric compaction (codeword 902): denser for digit-only.
  *  - All ECC levels 0..8 (2 to 512 ECC codewords).
  *  - Auto-dimension: chooses rows × cols based on aspect ratio target.
- *
- * Не реализовано в этой версии:
- *  - Text compaction (codeword 900): denser для alphanumeric.
- *  - Numeric compaction (codeword 902): denser для digit-only.
- *  - Macro PDF417 (multi-symbol concatenation).
+ *  - Macro PDF417 (multi-symbol concatenation), GS1 FNC1, ECI.
  *
  * Output via {@see modules()} — 2D bool matrix.
  */
@@ -37,7 +35,7 @@ final class Pdf417Encoder
     /** Pad codeword (Text mode latch — used here for padding). */
     private const PADDING_CODEWORD = 900;
 
-    // Phase 181-182: compaction mode constants.
+    // Compaction mode constants.
     public const MODE_AUTO = 'auto';
 
     public const MODE_BYTE = 'byte';
@@ -52,14 +50,14 @@ final class Pdf417Encoder
     /** Numeric compaction mode latch. */
     private const MODE_LATCH_NUMERIC = 902;
 
-    // Phase 185: Macro PDF417 control codewords (ISO/IEC 15438 §5.5).
+    // Macro PDF417 control codewords (ISO/IEC 15438 §5.5).
     private const MACRO_INDICATOR = 928;
 
     private const MACRO_TERMINATOR = 922;
 
     private const MACRO_FIELD_MARK = 923;
 
-    // Phase 198: ECI + FNC1 indicator codewords (ISO/IEC 15438 §5.4.1.5).
+    // ECI + FNC1 indicator codewords (ISO/IEC 15438 §5.4.1.5).
     /** ECI Character Set — followed by designator (1-3 codewords). */
     public const ECI_CHARSET = 927;
 
@@ -108,12 +106,12 @@ final class Pdf417Encoder
             default => throw new \InvalidArgumentException("Unknown PDF417 mode: $mode"),
         };
 
-        // Phase 185: prepend Macro control block (если macroSegment задан).
+        // Prepend Macro control block (if macroSegment is set).
         if ($macroSegment !== null) {
             $macroHeader = [self::MACRO_INDICATOR];
             // Segment index — encoded as 5-digit numeric via numericCompaction inline.
             $segStr = str_pad((string) $macroSegment['index'], 5, '0', STR_PAD_LEFT);
-            // Append digits в numeric mode (без mode latch — already в macro context).
+            // Append digits in numeric mode (no mode latch — already in macro context).
             $segNumeric = self::convertBaseBigInt('1'.$segStr, 10, 900);
             foreach ($segNumeric as $v) {
                 $macroHeader[] = $v;
@@ -139,11 +137,11 @@ final class Pdf417Encoder
             }
             $codewords = array_merge($macroHeader, $codewords);
         }
-        // Phase 198: GS1 FNC1 marker (CW 920) prepended.
+        // GS1 FNC1 marker (CW 920) prepended.
         if ($gs1) {
             array_unshift($codewords, self::FNC1);
         }
-        // Phase 198: ECI marker (CW 927) + designator codewords prepended.
+        // ECI marker (CW 927) + designator codewords prepended.
         if ($eciDesignator !== null) {
             if ($eciDesignator < 0 || $eciDesignator > 811799) {
                 throw new \InvalidArgumentException('PDF417 ECI designator must be 0..811799');
@@ -151,7 +149,7 @@ final class Pdf417Encoder
             // ECI encoding per ISO 15438 §5.4.1.5:
             //  0..899: 1 codeword 927 + designator
             //  900..810899: 2 codewords 927 + (designator / 900) + designator % 900
-            //  810900..811799: 3 codewords (not used широко).
+            //  810900..811799: 3 codewords (rarely used).
             $eciCw = [self::ECI_CHARSET];
             if ($eciDesignator <= 899) {
                 $eciCw[] = $eciDesignator;
@@ -163,7 +161,7 @@ final class Pdf417Encoder
         }
         $numDataCw = count($codewords);
 
-        // 2. Select ECC level (auto): scale с data size per ISO §5.3.6.
+        // 2. Select ECC level (auto): scale with data size per ISO §5.3.6.
         if ($eccLevel === null) {
             $eccLevel = self::autoEccLevel($numDataCw);
         }
@@ -197,7 +195,7 @@ final class Pdf417Encoder
         }
         $size = $rows * $cols;
 
-        // 4. Pad с 900 (text mode latch is the canonical padding codeword).
+        // 4. Pad with 900 (text mode latch is the canonical padding codeword).
         $pad = $size - $nce;
         if ($pad > 0) {
             $codewords = array_merge($codewords, array_fill(0, $pad, self::PADDING_CODEWORD));
@@ -207,7 +205,7 @@ final class Pdf417Encoder
         $sld = $size - $eccSize;
         array_unshift($codewords, $sld);
 
-        // 6. Compute Reed-Solomon ECC поверх GF(929).
+        // 6. Compute Reed-Solomon ECC over GF(929).
         $ecw = self::reedSolomonEncode($codewords, $eccLevel);
         $codewords = array_merge($codewords, $ecw);
 
@@ -240,14 +238,14 @@ final class Pdf417Encoder
     /**
      * PDF417 byte compaction per ISO/IEC 15438 §5.4.2.4.
      *
-     * Latch codeword 924 (used when len % 6 == 0): every 6 bytes pack как
+     * Latch codeword 924 (used when len % 6 == 0): every 6 bytes pack as
      * base-900 → 5 codewords.
      *
      * Latch codeword 901 (used when len % 6 != 0): same 6-byte groups +
-     * tail bytes (1-5) encoded как 1 codeword per byte (raw value 0-255).
+     * tail bytes (1-5) encoded as 1 codeword per byte (raw value 0-255).
      *
      * The 1-byte-per-codeword tail mode is what makes 901 distinct from
-     * 924 — both use base-900 packing для full groups.
+     * 924 — both use base-900 packing for full groups.
      *
      * @return list<int>
      */
@@ -261,7 +259,7 @@ final class Pdf417Encoder
         for ($g = 0; $g < $fullGroups; $g++) {
             $cw = array_merge($cw, self::packSixBytes(substr($data, $g * 6, 6)));
         }
-        // Tail bytes (1-5) emitted as raw byte codewords (после full groups).
+        // Tail bytes (1-5) emitted as raw byte codewords (after full groups).
         for ($i = $fullGroups * 6; $i < $len; $i++) {
             $cw[] = ord($data[$i]);
         }
@@ -320,15 +318,15 @@ final class Pdf417Encoder
     }
 
     /**
-     * Phase 185: Macro PDF417 segment factory.
+     * Macro PDF417 segment factory.
      *
-     * Per ISO/IEC 15438 §5.5 — used когда data exceeds single-symbol capacity
-     * (~ 925 codewords). Каждый segment encodes как separate Pdf417Encoder
-     * с Macro control block prepended.
+     * Per ISO/IEC 15438 §5.5 — used when data exceeds single-symbol capacity
+     * (~ 925 codewords). Each segment encodes as a separate Pdf417Encoder
+     * with a Macro control block prepended.
      *
      * Macro control structure:
      *   928 (indicator) + segment_index_5_digits_numeric + file_id_numeric +
-     *   [optional fields] + user data + [922 terminator на last segment]
+     *   [optional fields] + user data + [922 terminator on last segment]
      *
      * Simple API: caller splits data, creates one segment per call.
      *
@@ -336,7 +334,7 @@ final class Pdf417Encoder
      * @param  int     $segmentIndex  0-based segment number (0..99998)
      * @param  int     $totalSegments  total segments (used to determine last)
      * @param  int     $fileId  numeric file identifier (0..899)
-     * @param  string  $mode    compaction mode для user data
+     * @param  string  $mode    compaction mode for user data
      * @param  ?int    $eccLevel
      */
     public static function macroSegment(
@@ -355,7 +353,7 @@ final class Pdf417Encoder
         }
         if ($segmentIndex >= $totalSegments) {
             throw new \InvalidArgumentException(sprintf(
-                'segment index %d не в range 0..%d', $segmentIndex, $totalSegments - 1
+                'segment index %d not in range 0..%d', $segmentIndex, $totalSegments - 1
             ));
         }
         if ($fileId < 0 || $fileId > 899) {
@@ -376,7 +374,7 @@ final class Pdf417Encoder
     }
 
     /**
-     * Phase 181: Text compaction per ISO/IEC 15438 §5.4.2.
+     * Text compaction per ISO/IEC 15438 §5.4.2.
      *
      * 2 chars / 1 codeword (each char 5 bits, packed 30*ch1 + ch2).
      * Sub-modes: Alpha (uppercase), Lower (lowercase), Mixed (digits +
@@ -396,11 +394,11 @@ final class Pdf417Encoder
     {
         $cw = [self::MODE_LATCH_TEXT];
         $values = []; // 5-bit values
-        $currentSub = 'alpha'; // start в alpha sub-mode
+        $currentSub = 'alpha'; // start in alpha sub-mode
 
         $emitShift = function (string $shiftTo) use (&$values, $currentSub): string {
             if ($shiftTo === 'lower') {
-                $values[] = ($currentSub === 'alpha') ? 27 : 27; // LL or AS=27 в Mixed → keep LL latch
+                $values[] = ($currentSub === 'alpha') ? 27 : 27; // LL or AS=27 in Mixed → keep LL latch
             } elseif ($shiftTo === 'mixed') {
                 $values[] = ($currentSub === 'alpha' || $currentSub === 'lower') ? 28 : 28;
             } elseif ($shiftTo === 'alpha') {
@@ -423,14 +421,14 @@ final class Pdf417Encoder
             } elseif ($b >= 48 && $b <= 57) { // 0-9
                 $target = 'mixed';
                 $v = $b - 48;
-            } elseif ($b === 32) { // space — universal в all sub-modes
+            } elseif ($b === 32) { // space — universal in all sub-modes
                 $target = $currentSub;
                 $v = 26; // SP value
             } else {
                 // Punctuation — extremely simplified: encode as Mixed sub-mode value
                 // for & (10), \r (11), \t (12), , (13), : (14), # (15), -(16), . (17),
                 // $ (18), / (19), + (20), % (21), * (22), = (23), ^ (24).
-                // Bytes outside common punct — skip (fallback к byte mode не impl).
+                // Bytes outside common punct — skip (fallback to byte mode not implemented).
                 $mixedPunct = [38 => 10, 13 => 11, 9 => 12, 44 => 13, 58 => 14, 35 => 15,
                     45 => 16, 46 => 17, 36 => 18, 47 => 19, 43 => 20, 37 => 21, 42 => 22,
                     61 => 23, 94 => 24];
@@ -439,7 +437,7 @@ final class Pdf417Encoder
                     $v = $mixedPunct[$b];
                 } else {
                     throw new \InvalidArgumentException(sprintf(
-                        'PDF417 Text mode не поддерживает byte 0x%02X', $b
+                        'PDF417 Text mode does not support byte 0x%02X', $b
                     ));
                 }
             }
@@ -451,7 +449,7 @@ final class Pdf417Encoder
                     $values[] = 28; // ML
                 } elseif ($currentSub === 'lower' && $target === 'alpha') {
                     $values[] = 28; // ML, then AL
-                    $values[] = 28; // AL (28 в Mixed = к Alpha)
+                    $values[] = 28; // AL (28 in Mixed = to Alpha)
                 } elseif ($currentSub === 'lower' && $target === 'mixed') {
                     $values[] = 28; // ML
                 } elseif ($currentSub === 'mixed' && $target === 'alpha') {
@@ -463,7 +461,7 @@ final class Pdf417Encoder
             }
             $values[] = $v;
         }
-        // Pad к even count с 29 (Pad in Alpha) или равноценно.
+        // Pad to even count with 29 (Pad in Alpha) or equivalent.
         if (count($values) % 2 !== 0) {
             $values[] = 29;
         }
@@ -476,7 +474,7 @@ final class Pdf417Encoder
     }
 
     /**
-     * Phase 182: Numeric compaction per ISO/IEC 15438 §5.4.3.
+     * Numeric compaction per ISO/IEC 15438 §5.4.3.
      *
      * Groups of ≤44 digits: prepend "1" → base 900 conversion → output codewords.
      * 44 digits → 15 codewords (avg ~2.93 digits/CW vs byte 1.2 digits/CW).
@@ -494,7 +492,7 @@ final class Pdf417Encoder
         $n = strlen($data);
         for ($offset = 0; $offset < $n; $offset += 44) {
             $chunk = substr($data, $offset, 44);
-            // Prepend "1" к chunk, convert big number к base 900.
+            // Prepend "1" to chunk, convert big number to base 900.
             $bigNum = '1'.$chunk;
             $base900 = self::convertBaseBigInt($bigNum, 10, 900);
             foreach ($base900 as $v) {
@@ -506,14 +504,14 @@ final class Pdf417Encoder
     }
 
     /**
-     * Convert big-int string from base $fromBase к base $toBase.
-     * Returns list<int> в MSB-first order.
+     * Convert big-int string from base $fromBase to base $toBase.
+     * Returns list<int> in MSB-first order.
      *
      * @return list<int>
      */
     private static function convertBaseBigInt(string $num, int $fromBase, int $toBase): array
     {
-        // Convert string of digits (base $fromBase) к array of ints в base $toBase.
+        // Convert string of digits (base $fromBase) to array of ints in base $toBase.
         // Simple long division algorithm.
         $digits = array_map('intval', str_split($num));
         $result = [];
@@ -525,7 +523,7 @@ final class Pdf417Encoder
                 $newDigits[] = intdiv($val, $toBase);
                 $remainder = $val % $toBase;
             }
-            // Strip leading zeros в newDigits.
+            // Strip leading zeros in newDigits.
             while (count($newDigits) > 0 && $newDigits[0] === 0) {
                 array_shift($newDigits);
             }
@@ -537,7 +535,7 @@ final class Pdf417Encoder
     }
 
     /**
-     * Phase: auto-pick best compaction mode per input content.
+     * Auto-pick best compaction mode per input content.
      *
      * @return list<int>
      */
@@ -561,7 +559,7 @@ final class Pdf417Encoder
             try {
                 return self::textCompaction($data);
             } catch (\InvalidArgumentException) {
-                // Fall through к byte.
+                // Fall through to byte.
             }
         }
 
@@ -569,7 +567,7 @@ final class Pdf417Encoder
     }
 
     /**
-     * Auto-select ECC level per ISO/IEC 15438 §5.3.6 Table 8 рекомендация.
+     * Auto-select ECC level per ISO/IEC 15438 §5.3.6 Table 8 recommendation.
      */
     private static function autoEccLevel(int $numDataCw): int
     {
@@ -617,7 +615,7 @@ final class Pdf417Encoder
             $R = $this->rightRowIndicator($r, $cid, $rows, $cols, $ecl);
             self::appendPattern($rowBits, Pdf417Patterns::PATTERNS[$cid][$R], 17);
 
-            // Stop pattern (18 bits, ends с extra trailing bar).
+            // Stop pattern (18 bits, ends with extra trailing bar).
             self::appendPattern($rowBits, Pdf417Patterns::STOP_PATTERN, 18);
 
             // Each row repeats vertically rowHeight times — typically 3 modules

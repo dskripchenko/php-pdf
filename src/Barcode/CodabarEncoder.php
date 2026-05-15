@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 204: Codabar (NW-7 / USS Codabar) barcode encoder.
+ * Codabar (NW-7 / USS Codabar) barcode encoder.
  *
  * Used by libraries, blood banks, FedEx ground tracking, photo finishing
  * labs. Numeric + 6 punctuation + 4 start/stop characters (A/B/C/D).
@@ -13,7 +13,7 @@ namespace Dskripchenko\PhpPdf\Barcode;
  * Encoding:
  *  - Data set: 0-9, `-`, `$`, `:`, `/`, `.`, `+` (16 chars)
  *  - Start/stop: A, B, C, D (4 options — typically A/A used)
- *  - Each character = 7 elements (4 bars + 3 spaces), 2 или 3 wide
+ *  - Each character = 7 elements (4 bars + 3 spaces), 2 or 3 wide
  *  - Wide:narrow ratio = 2:1 (standard)
  *  - 1-narrow inter-character gap
  *

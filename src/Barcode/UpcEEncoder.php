@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 201: UPC-E barcode encoder.
+ * UPC-E barcode encoder.
  *
  * UPC-E — zero-suppressed UPC-A variant, ISO/IEC 15420. 8 digits total:
  *   [NumberSystem 0|1] [6 data digits — compressed from UPC-A] [check digit]
@@ -13,28 +13,28 @@ namespace Dskripchenko\PhpPdf\Barcode;
  * Structure:
  *   [LeftQuiet 9 modules]
  *   [Start guard 101 — 3 mod]
- *   [6 data digits — L or G coded по parity pattern — 42 mod]
+ *   [6 data digits — L or G coded by parity pattern — 42 mod]
  *   [End guard 010101 — 6 mod]
  *   [RightQuiet 7 modules]
  *
  * Total = 51 modules + 16 quiet = 67.
  *
- * Параметр $digits accepts:
+ * The $digits parameter accepts:
  *  - 6 digits — body only; NSD=$numberSystem prepended, check computed
  *  - 7 digits — NSD + 6 body; check computed
- *  - 8 digits — full UPC-E с check digit; check validated
+ *  - 8 digits — full UPC-E with check digit; check validated
  *
- * Check digit derived от expanded UPC-A (mod 10 weighted).
+ * Check digit derived from expanded UPC-A (mod 10 weighted).
  */
 final class UpcEEncoder
 {
-    /** L-code (odd parity) — identical к EAN-13. */
+    /** L-code (odd parity) — identical to EAN-13. */
     private const L = [
         '0001101', '0011001', '0010011', '0111101', '0100011',
         '0110001', '0101111', '0111011', '0110111', '0001011',
     ];
 
-    /** G-code (even parity) — identical к EAN-13. */
+    /** G-code (even parity) — identical to EAN-13. */
     private const G = [
         '0100111', '0110011', '0011011', '0100001', '0011101',
         '0111001', '0000101', '0010001', '0001001', '0010111',
@@ -45,9 +45,9 @@ final class UpcEEncoder
     private const END_GUARD = '010101';
 
     /**
-     * Parity pattern для number system 0 — indexed by check digit.
+     * Parity pattern for number system 0 — indexed by check digit.
      * 'E' = Even (G-code), 'O' = Odd (L-code).
-     * Для NSD=1 паттерн инвертируется (E↔O).
+     * For NSD=1 the pattern is inverted (E↔O).
      */
     private const NSD_0_PARITY = [
         'EEEOOO', 'EEOEOO', 'EEOOEO', 'EEOOOE', 'EOEEOO',
@@ -75,7 +75,7 @@ final class UpcEEncoder
             throw new \InvalidArgumentException('UPC-E number system must be 0 or 1');
         }
 
-        // Normalize к 8-digit canonical.
+        // Normalize to 8-digit canonical.
         if (strlen($digits) === 6) {
             $nsd = $numberSystem;
             $body = $digits;
@@ -149,7 +149,7 @@ final class UpcEEncoder
     }
 
     /**
-     * Expand UPC-E body (6 digits) + NSD к full UPC-A (12 digits without check).
+     * Expand UPC-E body (6 digits) + NSD to full UPC-A (12 digits without check).
      *
      * Per ISO/IEC 15420 §B.2.1:
      * D1 D2 D3 D4 D5 D6 — body digits.
@@ -203,7 +203,7 @@ final class UpcEEncoder
     }
 
     /**
-     * Compute UPC-E check digit для 6-digit body + NSD.
+     * Compute UPC-E check digit for 6-digit body + NSD.
      */
     public static function computeCheckDigit(string $body, int $numberSystem = 0): int
     {
@@ -223,7 +223,7 @@ final class UpcEEncoder
         $check = (int) $this->canonical[7];
         $pattern = self::NSD_0_PARITY[$check];
 
-        // Для NSD=1 invert pattern (swap E↔O).
+        // For NSD=1 invert pattern (swap E↔O).
         if ($this->numberSystem === 1) {
             $pattern = strtr($pattern, ['E' => 'O', 'O' => 'E']);
         }

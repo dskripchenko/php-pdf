@@ -91,7 +91,7 @@ final class HtmlParser
     }
 
     /**
-     * Convenience: parse HTML, wrap в default Section, return Document.
+     * Convenience: parse HTML, wrap in default Section, return Document.
      */
     public static function fromHtml(string $html): \Dskripchenko\PhpPdf\Document
     {
@@ -109,9 +109,9 @@ final class HtmlParser
         // libxml errors swallowed (HTML imperfect — non-strict parse).
         $prevErrors = libxml_use_internal_errors(true);
         try {
-            // Wrap input в synthetic root так что top-level traversal
-            // consistently walks через childNodes даже когда input —
-            // single element или bare text.
+            // Wrap input in a synthetic root so that top-level traversal
+            // consistently walks through childNodes even when the input is
+            // a single element or bare text.
             // UTF-8 BOM prefix helps libxml detect encoding.
             $dom->loadHTML(
                 "\xEF\xBB\xBF<div id=\"_phppdf_root\">$html</div>",
@@ -139,10 +139,10 @@ final class HtmlParser
                     $blocks[] = new Paragraph($pendingInlines);
                     $pendingInlines = [];
                 }
-                // Phase 229: semantic containers (header/footer/nav/aside/main/
+                // Semantic containers (header/footer/nav/aside/main/
                 // figure/figcaption/article/section).
-                // Если contains block-level children → flatten through.
-                // Если only inline content → treat as Paragraph.
+                // If contains block-level children → flatten through.
+                // If only inline content → treat as Paragraph.
                 $tag = strtolower($node->nodeName);
                 if (in_array($tag, ['header', 'footer', 'nav', 'aside', 'main',
                     'figure', 'figcaption', 'article', 'section'], true)) {
@@ -151,7 +151,7 @@ final class HtmlParser
                             $blocks[] = $b;
                         }
                     } else {
-                        // Inline-only — wrap в Paragraph.
+                        // Inline-only — wrap in Paragraph.
                         $blocks[] = $this->parseParagraph($node);
                     }
 
@@ -164,8 +164,8 @@ final class HtmlParser
 
                     continue;
                 }
-                // Phase 233: <table> caption — extract first child <caption>
-                // и prepend as separate centered/bold paragraph.
+                // <table> caption — extract first child <caption>
+                // and prepend as separate centered/bold paragraph.
                 if ($tag === 'table') {
                     $captionBlock = $this->extractTableCaption($node);
                     if ($captionBlock !== null) {
@@ -175,7 +175,7 @@ final class HtmlParser
 
                     continue;
                 }
-                // Phase 235: <details><summary> — summary as bold heading,
+                // <details><summary> — summary as bold heading,
                 // content as indented block sequence.
                 if ($tag === 'details') {
                     foreach ($this->parseDetails($node) as $b) {
@@ -190,8 +190,8 @@ final class HtmlParser
                     $blocks[] = $block;
                 }
             } elseif ($this->isBlockImage($node)) {
-                // <img> или <svg> с явным block-context. Wrap pending inlines +
-                // emit как block.
+                // <img> or <svg> with explicit block-context. Wrap pending inlines +
+                // emit as block.
                 if ($pendingInlines !== []) {
                     $blocks[] = new Paragraph($pendingInlines);
                     $pendingInlines = [];
@@ -222,8 +222,8 @@ final class HtmlParser
     }
 
     /**
-     * Phase 229: detect if container has any block-level child.
-     * Used for transparent-flatten decision на semantic containers.
+     * Detect if container has any block-level child.
+     * Used for the transparent-flatten decision on semantic containers.
      */
     private function hasBlockChild(\DOMNode $node): bool
     {
@@ -248,12 +248,12 @@ final class HtmlParser
             'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
             'hr', 'ul', 'ol', 'dl', 'table',
             'blockquote', 'pre',
-            // Phase 229: HTML5 semantic block groupings.
+            // HTML5 semantic block groupings.
             'header', 'footer', 'nav', 'aside', 'main',
             'figure', 'figcaption',
-            // Phase 230: legacy block.
+            // Legacy block.
             'center',
-            // Phase 235: address (semantic block), details (collapsible).
+            // address (semantic block), details (collapsible).
             'address', 'details',
         ], true);
     }
@@ -275,18 +275,18 @@ final class HtmlParser
             'ul' => $this->parseList($node, ordered: false),
             'ol' => $this->parseList($node, ordered: true),
             'table' => $this->parseTable($node),
-            // Phase 230: legacy <center> — convert к Paragraph с Alignment::Center.
+            // Legacy <center> — convert to Paragraph with Alignment::Center.
             'center' => $this->parseCenterBlock($node),
-            // Phase 235: <address> — italic paragraph (HTML5 spec semantics).
+            // <address> — italic paragraph (HTML5 spec semantics).
             'address' => $this->parseAddressBlock($node),
-            // 'dl', 'details', semantic containers handled inline в walkBlocks
+            // 'dl', 'details', semantic containers handled inline in walkBlocks
             // (multi-block flatten).
             default => null,
         };
     }
 
     /**
-     * Phase 235: <address> — italic paragraph для contact info.
+     * <address> — italic paragraph for contact info.
      */
     private function parseAddressBlock(\DOMElement $node): Paragraph
     {
@@ -305,11 +305,11 @@ final class HtmlParser
     }
 
     /**
-     * Phase 235: <details> с optional <summary> — render summary as bold
+     * <details> with optional <summary> — render summary as bold
      * paragraph, then content as indented block sequence.
      *
-     * Note: collapsibility не reproducible в static PDF — output always
-     * shows полностью expanded content.
+     * Note: collapsibility is not reproducible in static PDF — output always
+     * shows fully expanded content.
      *
      * @return list<BlockElement>
      */
@@ -343,8 +343,8 @@ final class HtmlParser
                     $blocks[] = $this->indentBlock($childBlock, 16.0);
                 }
             }
-            // Inline text children of details — collected пока пропускаем
-            // (details обычно содержит block content).
+            // Inline text children of details — skipped for now
+            // (details usually contains block content).
         }
         if (! $summaryFound) {
             // Fallback "Details" prefix.
@@ -358,7 +358,7 @@ final class HtmlParser
     }
 
     /**
-     * Add left indent к existing paragraph block (для details content).
+     * Add left indent to an existing paragraph block (for details content).
      */
     private function indentBlock(BlockElement $block, float $indentPt): BlockElement
     {
@@ -373,7 +373,7 @@ final class HtmlParser
     }
 
     /**
-     * Phase 230: <center> legacy element — emit как centered Paragraph.
+     * <center> legacy element — emit as centered Paragraph.
      */
     private function parseCenterBlock(\DOMElement $node): Paragraph
     {
@@ -388,9 +388,9 @@ final class HtmlParser
     }
 
     /**
-     * Phase 229: definition list — DT (term) bold paragraphs, DD (definition)
-     * indented paragraphs. Returns flattened sequence для inclusion в
-     * parent's block list.
+     * Definition list — DT (term) bold paragraphs, DD (definition)
+     * indented paragraphs. Returns a flattened sequence for inclusion in
+     * the parent's block list.
      *
      * @return list<BlockElement>
      */
@@ -433,7 +433,7 @@ final class HtmlParser
 
     private function parseParagraph(\DOMElement $node): Paragraph
     {
-        // Phase 234: block-level text-transform via push к stack.
+        // Block-level text-transform via push to stack.
         $blockTransform = $this->cssTextTransform($node);
         if ($blockTransform !== null) {
             $this->textTransformStack[] = $blockTransform;
@@ -456,7 +456,7 @@ final class HtmlParser
 
     private function parseHeading(\DOMElement $node, int $level): Heading
     {
-        // Phase 234: same block-level transform support.
+        // Same block-level transform support.
         $blockTransform = $this->cssTextTransform($node);
         if ($blockTransform !== null) {
             $this->textTransformStack[] = $blockTransform;
@@ -474,16 +474,16 @@ final class HtmlParser
 
         $style = $this->parseBlockCssStyle($node);
 
-        // Phase 231: heading anchor from id attribute если задан
-        // (для linkability через <a href="#anchor-id">).
+        // Heading anchor from id attribute if set
+        // (for linkability via <a href="#anchor-id">).
         $anchor = $node->getAttribute('id') !== '' ? $node->getAttribute('id') : null;
 
         return new Heading($level, $inlines, $style, $anchor);
     }
 
     /**
-     * Phase 224: parse block-level CSS attributes (text-align, margin,
-     * padding, background-color, line-height) → ParagraphStyle.
+     * Parse block-level CSS attributes (text-align, margin, padding,
+     * background-color, line-height) → ParagraphStyle.
      */
     private function parseBlockCssStyle(\DOMElement $node): \Dskripchenko\PhpPdf\Style\ParagraphStyle
     {
@@ -523,7 +523,7 @@ final class HtmlParser
             }
         }
 
-        // Phase 232: text-indent (first-line indentation).
+        // text-indent (first-line indentation).
         $indentFirstLine = $defaults->indentFirstLinePt;
         if (isset($decl['text-indent'])) {
             $parsed = $this->parseLengthOrNull($decl['text-indent']);
@@ -532,7 +532,7 @@ final class HtmlParser
             }
         }
 
-        // Phase 232: border shorthand / individual sides.
+        // border shorthand / individual sides.
         $borders = $defaults->borders;
         $borderParsed = $this->parseBorderShorthand($decl);
         if ($borderParsed !== null) {
@@ -571,8 +571,8 @@ final class HtmlParser
     }
 
     /**
-     * Phase 232: parse `border: <width> <style> <color>` shorthand или
-     * individual `border-top`/`border-right`/etc. Returns BorderSet или null.
+     * Parse `border: <width> <style> <color>` shorthand or
+     * individual `border-top`/`border-right`/etc. Returns BorderSet or null.
      *
      * @param  array<string, string>  $decl
      */
@@ -654,7 +654,7 @@ final class HtmlParser
     /**
      * Parse CSS box shorthand (margin/padding) — 1/2/3/4 value semantics.
      *
-     * @return array{0: ?float, 1: ?float, 2: ?float, 3: ?float}  [top, right, bottom, left] or null если не задано
+     * @return array{0: ?float, 1: ?float, 2: ?float, 3: ?float}  [top, right, bottom, left] or null if not set
      */
     private function parseBoxShorthand(?string $value): array
     {
@@ -755,16 +755,16 @@ final class HtmlParser
                     }
                 }
             }
-            // <caption> и <colgroup> skipped — caption extracted separately
-            // (Phase 233 в walkBlocks); colgroup not yet supported.
+            // <caption> and <colgroup> skipped — caption extracted separately
+            // (in walkBlocks); colgroup not yet supported.
         }
 
         return new Table($rows);
     }
 
     /**
-     * Phase 233: extract `<caption>` from `<table>` если present, render as
-     * centered bold paragraph (rendered before table). Returns null если
+     * Extract `<caption>` from `<table>` if present, render as
+     * centered bold paragraph (rendered before table). Returns null if
      * no caption.
      */
     private function extractTableCaption(\DOMElement $tableNode): ?Paragraph
@@ -836,7 +836,7 @@ final class HtmlParser
             if ($text === '') {
                 return [];
             }
-            // Phase 234: apply current text-transform.
+            // Apply current text-transform.
             $text = $this->applyTextTransform($text);
 
             return [new Run($text, $this->currentStyle())];
@@ -852,7 +852,7 @@ final class HtmlParser
         if ($tag === 'br') {
             return [new LineBreak];
         }
-        // Phase 235: <wbr> — word break opportunity (soft hyphen-like marker).
+        // <wbr> — word break opportunity (soft hyphen-like marker).
         // Render as U+00AD soft hyphen char.
         if ($tag === 'wbr') {
             return [new Run("\u{00AD}", $this->currentStyle())];
@@ -862,15 +862,15 @@ final class HtmlParser
 
             return $img !== null ? [$img] : [];
         }
-        // Phase 235: <picture> — emit first descendant <img> as fallback.
+        // <picture> — emit first descendant <img> as fallback.
         // libxml may nest <img> inside <source> (since <source> isn't
-        // void-closed без </source>), so search recursively.
+        // void-closed without </source>), so search recursively.
         if ($tag === 'picture') {
             $img = $this->findFirstImg($node);
 
             return $img !== null ? [$img] : [];
         }
-        // Phase 236: inline <svg> — extract outerHTML и wrap в SvgElement.
+        // Inline <svg> — extract outerHTML and wrap in SvgElement.
         if ($tag === 'svg') {
             $svg = $this->parseInlineSvg($node);
 
@@ -882,7 +882,7 @@ final class HtmlParser
             return $this->parseInlineAnchor($node);
         }
 
-        // Phase 230: <font> legacy tag — color/face/size attributes.
+        // <font> legacy tag — color/face/size attributes.
         if ($tag === 'font') {
             return $this->parseFontTag($node);
         }
@@ -891,7 +891,7 @@ final class HtmlParser
         $newStyle = $this->styleForTag($this->currentStyle(), $tag);
         $newStyle = $this->applyInlineCssStyle($newStyle, $node);
 
-        // Phase 234: text-transform per-tag pushed к stack.
+        // text-transform per-tag pushed to stack.
         $newTransform = $this->cssTextTransform($node) ?? $this->currentTransform();
 
         $this->styleStack[] = $newStyle;
@@ -910,8 +910,8 @@ final class HtmlParser
     }
 
     /**
-     * Phase 234: detect text-transform CSS на element. Returns 'uppercase'/
-     * 'lowercase'/'capitalize'/'none' или null если не задан.
+     * Detect text-transform CSS on element. Returns 'uppercase'/
+     * 'lowercase'/'capitalize'/'none' or null if not set.
      */
     private function cssTextTransform(\DOMElement $node): ?string
     {
@@ -949,9 +949,9 @@ final class HtmlParser
     }
 
     /**
-     * Phase 230: legacy <font color="..." face="..." size="..."> tag.
+     * Legacy <font color="..." face="..." size="..."> tag.
      *
-     * HTML `size` attribute is 1-7 mapping к relative sizes; we map к
+     * HTML `size` attribute is 1-7 mapping to relative sizes; we map to
      * absolute pt sizes:
      *   1 → 8pt, 2 → 10pt, 3 → 12pt (default), 4 → 14pt,
      *   5 → 18pt, 6 → 24pt, 7 → 36pt.
@@ -1030,7 +1030,7 @@ final class HtmlParser
             return $result;
         }
 
-        // Build inner inlines с link-styled default (blue + underline).
+        // Build inner inlines with link-styled default (blue + underline).
         $linkStyle = new RunStyle(
             color: $this->currentStyle()->color ?? '0000ee',
             underline: true,
@@ -1060,8 +1060,8 @@ final class HtmlParser
     }
 
     /**
-     * Phase 236: parse inline <svg> element — extract outerHTML via DOM
-     * serialization, wrap в SvgElement.
+     * Parse inline <svg> element — extract outerHTML via DOM
+     * serialization, wrap in SvgElement.
      */
     private function parseInlineSvg(\DOMElement $node): ?\Dskripchenko\PhpPdf\Element\SvgElement
     {
@@ -1070,7 +1070,7 @@ final class HtmlParser
             return null;
         }
         // Width/height from attributes. Per SVG-in-HTML spec, unitless
-        // values treated as px (we convert к pt: 1px = 0.75pt @ 96 DPI).
+        // values treated as px (we convert to pt: 1px = 0.75pt @ 96 DPI).
         $widthPt = $this->parseSvgDimension($node->getAttribute('width')) ?? 100.0;
         $heightPt = $this->parseSvgDimension($node->getAttribute('height')) ?? 100.0;
 
@@ -1086,7 +1086,7 @@ final class HtmlParser
     }
 
     /**
-     * Phase 236: parse SVG dimension attribute. Unitless = px (per SVG spec
+     * Parse SVG dimension attribute. Unitless = px (per SVG spec
      * in HTML context), explicit units honored via parseLengthOrNull.
      */
     private function parseSvgDimension(string $value): ?float
@@ -1103,7 +1103,7 @@ final class HtmlParser
     }
 
     /**
-     * Phase 235: recursive search для first <img> descendant.
+     * Recursive search for the first <img> descendant.
      */
     private function findFirstImg(\DOMNode $node): ?Image
     {
@@ -1173,14 +1173,14 @@ final class HtmlParser
     private function styleForTag(RunStyle $current, string $tag): RunStyle
     {
         return match ($tag) {
-            // Phase 219: basic semantic styling.
+            // Basic semantic styling.
             'b', 'strong' => $current->withBold(),
             'i', 'em' => $current->withItalic(),
             'u' => $current->withUnderline(),
             's', 'strike', 'del' => $current->withStrikethrough(),
             'sup' => $current->withSuperscript(),
             'sub' => $current->withSubscript(),
-            // Phase 228: extended semantic inline tags.
+            // Extended semantic inline tags.
             'code', 'kbd', 'samp', 'tt', 'var' => new RunStyle(
                 sizePt: $current->sizePt,
                 color: $current->color,
@@ -1208,7 +1208,7 @@ final class HtmlParser
                 letterSpacingPt: $current->letterSpacingPt,
             ),
             'small' => new RunStyle(
-                sizePt: ($current->sizePt ?? 12.0) * 0.83, // ~10pt от 12pt base
+                sizePt: ($current->sizePt ?? 12.0) * 0.83, // ~10pt from 12pt base
                 color: $current->color,
                 backgroundColor: $current->backgroundColor,
                 fontFamily: $current->fontFamily,
@@ -1221,7 +1221,7 @@ final class HtmlParser
                 letterSpacingPt: $current->letterSpacingPt,
             ),
             'big' => new RunStyle(
-                sizePt: ($current->sizePt ?? 12.0) * 1.2, // ~14.4pt от 12pt base
+                sizePt: ($current->sizePt ?? 12.0) * 1.2, // ~14.4pt from 12pt base
                 color: $current->color,
                 backgroundColor: $current->backgroundColor,
                 fontFamily: $current->fontFamily,
@@ -1403,7 +1403,7 @@ final class HtmlParser
             return (float) $m[1] * 72.0;
         }
         if (preg_match('/^([\d.]+)$/', $css, $m)) {
-            return (float) $m[1]; // unit-less default к pt
+            return (float) $m[1]; // unit-less default to pt
         }
 
         return null;
@@ -1411,7 +1411,7 @@ final class HtmlParser
 
     private function normalizeWhitespace(string $text): string
     {
-        // Collapse runs of whitespace в single space, preserve leading/trailing
+        // Collapse runs of whitespace to single space, preserve leading/trailing
         // significant whitespace (HTML spec — content whitespace).
         $text = (string) preg_replace('/\s+/u', ' ', $text);
 

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 200: EAN-8 barcode encoder.
+ * EAN-8 barcode encoder.
  *
  * EAN-8: 8 digit input (7 data + 1 check) per ISO/IEC 15420.
  *
@@ -20,18 +20,18 @@ namespace Dskripchenko\PhpPdf\Barcode;
  *
  * Total = 67 modules + 14 quiet = 81.
  *
- * Unlike EAN-13, EAN-8 does NOT использовать L/G parity-shifting —
- * все левые digits всегда L-coded.
+ * Unlike EAN-13, EAN-8 does NOT use L/G parity-shifting —
+ * all left digits are always L-coded.
  */
 final class Ean8Encoder
 {
-    /** L-code patterns (left half) — identical к EAN-13 L. */
+    /** L-code patterns (left half) — identical to EAN-13 L. */
     private const L = [
         '0001101', '0011001', '0010011', '0111101', '0100011',
         '0110001', '0101111', '0111011', '0110111', '0001011',
     ];
 
-    /** R-code patterns (right half) — identical к EAN-13 R. */
+    /** R-code patterns (right half) — identical to EAN-13 R. */
     private const R = [
         '1110010', '1100110', '1101100', '1000010', '1011100',
         '1001110', '1010000', '1000100', '1001000', '1110100',
@@ -47,13 +47,13 @@ final class Ean8Encoder
     private array $modules = [];
 
     /**
-     * Full canonical 8-digit string (с computed checksum).
+     * Full canonical 8-digit string (with computed checksum).
      */
     public readonly string $canonical;
 
     /**
-     * @param  string  $digits  7 or 8 digits. Если 7 — checksum вычисляется
-     *                          автоматически. Если 8 — checksum проверяется.
+     * @param  string  $digits  7 or 8 digits. If 7 — checksum is computed
+     *                          automatically. If 8 — checksum is validated.
      */
     public function __construct(string $digits)
     {
@@ -103,9 +103,9 @@ final class Ean8Encoder
     }
 
     /**
-     * Mod 10 weighted checksum для 7 input digits.
+     * Mod 10 weighted checksum for 7 input digits.
      *
-     * EAN-8 (в отличие от EAN-13) даёт weight 3 первой digit:
+     * EAN-8 (unlike EAN-13) gives weight 3 to the first digit:
      *   sum = d[0]*3 + d[1]*1 + d[2]*3 + d[3]*1 + d[4]*3 + d[5]*1 + d[6]*3
      *   check = (10 - sum % 10) % 10
      */

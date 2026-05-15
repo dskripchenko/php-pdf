@@ -5,28 +5,22 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 32: Code 128 linear barcode encoder.
+ * Code 128 linear barcode encoder.
  *
- * ISO/IEC 15417. Implements Code 128 Set B (printable ASCII 32..126),
- * который покрывает alphanumeric + punctuation — типичный use case для
- * бизнес-документов (SKU, invoice numbers, tracking IDs).
+ * ISO/IEC 15417. Implements Code 128 Sets A, B, and C with auto-mode
+ * switching and GS1-128 (Application Identifiers) support.
+ *  - Set A: control chars 00..31, FNC functions.
+ *  - Set B: printable ASCII 32..126 (alphanumeric + punctuation).
+ *  - Set C: numeric pairs (2× compression for digit-only).
  *
  * Code 128 structure:
  *
  *   [Start B] [data chars...] [checksum] [Stop]
  *
- * Каждый character = 11 modules (3 bars + 3 spaces). Bars alternate
- * starting with black. Stop pattern имеет 13 modules.
+ * Each character = 11 modules (3 bars + 3 spaces). Bars alternate
+ * starting with black. Stop pattern has 13 modules.
  *
- * Не реализовано:
- *  - Auto-mode switching между A/B/C для оптимальной длины — v1.3 backlog.
- *  - GS1-128 (Application Identifiers) — v1.3 backlog.
- *
- * Closed в later phases:
- *  - Code A (control chars 00..31, FNC functions) → Phase 78
- *  - Code C (numeric pairs, 2× compression для digit-only) → Phase 57
- *
- * Использование:
+ * Usage:
  *   $enc = new Code128Encoder('ABC-123');
  *   $modules = $enc->modules();      // list of bool: true = black
  *   $width = $enc->moduleCount();    // total module width
@@ -69,27 +63,27 @@ final class Code128Encoder
 
     private const STOP = 106;
 
-    // Phase 164: code-switch / shift codewords. Different code values per set.
-    private const CODE_SHIFT_BA = 98;   // в Set A: shift к Set B (one char)
+    // Code-switch / shift codewords. Different code values per set.
+    private const CODE_SHIFT_BA = 98;   // in Set A: shift to Set B (one char)
 
-    private const CODE_SHIFT_AB = 98;   // в Set B: shift к Set A (one char)
+    private const CODE_SHIFT_AB = 98;   // in Set B: shift to Set A (one char)
 
-    private const CODE_C_FROM_A = 99;   // в Set A: CODE_C permanent switch
+    private const CODE_C_FROM_A = 99;   // in Set A: CODE_C permanent switch
 
-    private const CODE_C_FROM_B = 99;   // в Set B: CODE_C permanent switch
+    private const CODE_C_FROM_B = 99;   // in Set B: CODE_C permanent switch
 
-    private const CODE_B_FROM_A = 100;  // в Set A: CODE_B
+    private const CODE_B_FROM_A = 100;  // in Set A: CODE_B
 
-    private const CODE_B_FROM_C = 100;  // в Set C: CODE_B
+    private const CODE_B_FROM_C = 100;  // in Set C: CODE_B
 
-    private const CODE_A_FROM_B = 101;  // в Set B: CODE_A
+    private const CODE_A_FROM_B = 101;  // in Set B: CODE_A
 
-    private const CODE_A_FROM_C = 101;  // в Set C: CODE_A
+    private const CODE_A_FROM_C = 101;  // in Set C: CODE_A
 
     private const FNC1 = 102;           // Function 1 (GS1-128 separator, all sets)
 
     /**
-     * Phase 165: AI lengths для GS1-128. Variable-length AIs need FNC1 after.
+     * AI lengths for GS1-128. Variable-length AIs need FNC1 after.
      * Key = AI code (2-4 digits), value = data length (null = variable).
      *
      * @var array<string, ?int>
@@ -106,7 +100,7 @@ final class Code128Encoder
         '340' => 7, '341' => 7, '342' => 7, '343' => 7, '344' => 7, '345' => 7,
         '350' => 7, '351' => 7, '352' => 7, '353' => 7, '354' => 7, '355' => 7,
         '360' => 7, '361' => 7, '362' => 7, '363' => 7, '364' => 7, '365' => 7,
-        // All other AIs default к variable (null lookup).
+        // All other AIs default to variable (null lookup).
     ];
 
     private bool $gs1Mode = false;
@@ -119,11 +113,11 @@ final class Code128Encoder
     private array $modules = [];
 
     /**
-     * Phase 165: GS1-128 factory — parses "(NN)data(MM)data" syntax,
-     * inserts FNC1 codewords per GS1-128 spec.
+     * GS1-128 factory — parses "(NN)data(MM)data" syntax, inserts FNC1
+     * codewords per GS1-128 spec.
      *
      * Variable-length AIs require FNC1 separator after data (except last AI).
-     * Fixed-length AIs (per GS1 General Specifications table) — нет separator.
+     * Fixed-length AIs (per GS1 General Specifications table) have no separator.
      *
      * Common AIs supported (fixed-length subset):
      *  - 00: SSCC (18 digits)
@@ -133,7 +127,7 @@ final class Code128Encoder
      *  - 20: Variant (2 digits)
      *  - 31xx..36xx: Measurement (6 digits + length indicator)
      *
-     * All other AIs treated как variable-length → FNC1 separator emitted.
+     * All other AIs treated as variable-length → FNC1 separator emitted.
      */
     public static function gs1(string $aiData): self
     {
@@ -156,17 +150,17 @@ final class Code128Encoder
 
             return;
         }
-        // Phase 164: auto-mode switching — пытаемся optimal encoding с CODE_X
-        // переключениями между sets чтобы минимизировать total codewords.
+        // Auto-mode switching — attempts optimal encoding with CODE_X
+        // switches between sets to minimize total codewords.
         if ($autoMode) {
             $codes = $this->encodeAuto($data);
             $this->finalize($codes);
 
             return;
         }
-        // Legacy mode (для backward compat / explicit set selection):
-        // Phase 78: Set A used когда input contains control chars И NO lowercase.
-        // Phase 57: digit-only ≥4 even → Set C.
+        // Legacy mode (for backward compat / explicit set selection):
+        // Set A used when input contains control chars AND no lowercase.
+        // Digit-only ≥4 even → Set C.
         // Else → Set B (default).
         $hasControlChars = false;
         $hasLowercase = false;
@@ -188,11 +182,11 @@ final class Code128Encoder
     }
 
     /**
-     * Phase 165: GS1-128 encoding с FNC1 separators.
+     * GS1-128 encoding with FNC1 separators.
      *
      * Input format: "(01)09506000134352(10)ABC123(17)260930"
      * Parser strips parens, accumulates AI + data segments, inserts FNC1
-     * codeword (102) после variable-length AI'ев (per GS1 spec).
+     * codeword (102) after variable-length AIs (per GS1 spec).
      *
      * Output codewords:
      *   START + FNC1 (GS1-128 indicator) + AI1+data1 + [FNC1] + AI2+data2 + ...
@@ -208,13 +202,13 @@ final class Code128Encoder
         if ($segments === []) {
             throw new \InvalidArgumentException('GS1-128 input must contain at least one (AI)data segment');
         }
-        // Build flat plaintext с FNC1 sentinel \x1D между variable-length AI boundaries.
+        // Build flat plaintext with FNC1 sentinel \x1D between variable-length AI boundaries.
         // \x1D = ASCII GS (Group Separator) — convenient internal marker.
         $flat = '';
-        $fnc1Positions = []; // byte-positions в $flat (после flat construction)
+        $fnc1Positions = []; // byte-positions in $flat (after flat construction)
         foreach ($segments as $i => $seg) {
             $combined = $seg['ai'].$seg['data'];
-            // Validate AI length если known.
+            // Validate AI length if known.
             $expectedDataLen = self::GS1_AI_LENGTHS[$seg['ai']] ?? null;
             if ($expectedDataLen !== null && strlen($seg['data']) !== $expectedDataLen) {
                 throw new \InvalidArgumentException(sprintf(
@@ -226,7 +220,7 @@ final class Code128Encoder
             $isVariable = $expectedDataLen === null;
             $isLast = $i === count($segments) - 1;
             if ($isVariable && ! $isLast) {
-                $fnc1Positions[strlen($flat)] = true; // FNC1 inserted ПЕРЕД next AI
+                $fnc1Positions[strlen($flat)] = true; // FNC1 inserted BEFORE next AI
             }
         }
         // Now build codewords. Start with appropriate set + FNC1 indicator.
@@ -246,7 +240,7 @@ final class Code128Encoder
             if (isset($fnc1Positions[$i])) {
                 $codes[] = self::FNC1;
             }
-            // Greedy: if we're в C и есть 2 digits → encode pair.
+            // Greedy: if we're in C and have 2 digits → encode pair.
             if ($currentSet === 'C' && $i + 1 < $n && ctype_digit($flat[$i]) && ctype_digit($flat[$i + 1])) {
                 // Avoid pair if next byte is FNC1 sentinel position (would split pair).
                 if (! isset($fnc1Positions[$i + 1])) {
@@ -301,7 +295,7 @@ final class Code128Encoder
         $n = strlen($s);
         while ($i + $count < $n && ctype_digit($s[$i + $count])) {
             if ($count > 0 && isset($fnc1Positions[$i + $count])) {
-                break; // FNC1 inserted перед этим byte
+                break; // FNC1 inserted before this byte
             }
             $count++;
         }
@@ -327,7 +321,7 @@ final class Code128Encoder
             }
             $close = strpos($input, ')', $offset);
             if ($close === false) {
-                throw new \InvalidArgumentException('GS1-128 unmatched "(" в input');
+                throw new \InvalidArgumentException('GS1-128 unmatched "(" in input');
             }
             $ai = substr($input, $offset + 1, $close - $offset - 1);
             if (! preg_match('@^\d{2,4}$@', $ai)) {
@@ -348,16 +342,16 @@ final class Code128Encoder
     }
 
     /**
-     * Phase 164: heuristic auto-mode encoder. Returns list<int> data codewords
-     * (включая START codeword первым). Caller добавляет checksum + STOP в finalize.
+     * Heuristic auto-mode encoder. Returns list<int> data codewords
+     * (including START codeword first). Caller adds checksum + STOP in finalize.
      *
      * Algorithm:
-     *  1. Scan input charwise, классифицируем: DIGIT/CTRL/PRINT (32..95 минус
-     *     digits/lower)/LOWER.
+     *  1. Scan input charwise, classify: DIGIT / CTRL / PRINT (32..95 minus
+     *     digits/lower) / LOWER.
      *  2. Greedy run detection: contiguous digit runs ≥4 (even length) → Set C.
      *  3. Ctrl run + no lowercase context → Set A.
      *  4. Default → Set B.
-     *  5. Между runs emit explicit CODE_X switch (A/B/C codewords 99/100/101).
+     *  5. Between runs emit explicit CODE_X switch (A/B/C codewords 99/100/101).
      *  6. Start codeword = best initial set based on first run.
      *
      * @return list<int>
@@ -394,7 +388,7 @@ final class Code128Encoder
                     'AC', 'BC' => self::CODE_C_FROM_A, // 99
                 };
             }
-            // Encode segment в chosen set.
+            // Encode segment in chosen set.
             if ($targetSet === 'C') {
                 for ($i = 0; $i < strlen($segment); $i += 2) {
                     $codes[] = (int) substr($segment, $i, 2);
@@ -418,19 +412,19 @@ final class Code128Encoder
 
     /**
      * Split input into mode runs. Greedy heuristic:
-     *  - Digit run длиной ≥4 (даже length) — Set C
-     *  - Run с control chars (ASCII 0..31) — Set A (если можно)
-     *  - Иначе — Set B
+     *  - Digit run of length ≥4 (even length) — Set C
+     *  - Run with control chars (ASCII 0..31) — Set A (if possible)
+     *  - Otherwise — Set B
      *
-     * For trailing odd digits в C-run last digit спихиваем в next B run.
+     * For trailing odd digits in C-run, the last digit is deferred to the next B run.
      *
      * @return list<array{set: string, text: string}>
      */
     private static function splitRunsForMode(string $data): array
     {
         $n = strlen($data);
-        // Fast path: если string содержит control chars и НЕТ lowercase —
-        // целиком Set A (избегаем B→A switch overhead).
+        // Fast path: if string contains control chars and NO lowercase —
+        // entirely Set A (avoids B→A switch overhead).
         $hasControl = false;
         $hasLowercase = false;
         $hasDigitRunGE4 = false;
@@ -462,7 +456,7 @@ final class Code128Encoder
                 }
                 $digitLen = $j - $i;
                 if ($digitLen >= 4) {
-                    // Even length для Set C; if odd, leave last digit к next run.
+                    // Even length for Set C; if odd, leave last digit to next run.
                     $cLen = $digitLen - ($digitLen % 2);
                     $runs[] = ['set' => 'C', 'text' => substr($data, $i, $cLen)];
                     $i += $cLen;
@@ -470,7 +464,7 @@ final class Code128Encoder
                     continue;
                 }
             }
-            // Try Set A: control chars (0..31) — но only если no lowercase в текущем run.
+            // Try Set A: control chars (0..31) — but only if no lowercase in current run.
             $byte = ord($data[$i]);
             if ($byte < 32) {
                 $j = $i;
@@ -492,7 +486,7 @@ final class Code128Encoder
                 }
             }
             // Set B: take chars until either digit-run start ≥4 OR control char
-            // forcing switch к A/C.
+            // forcing switch to A/C.
             $j = $i;
             while ($j < $n) {
                 $b = ord($data[$j]);
@@ -525,8 +519,7 @@ final class Code128Encoder
     }
 
     /**
-     * Phase 78: Code 128 Set A — supports ASCII 0..95 (including control
-     * chars).
+     * Code 128 Set A — supports ASCII 0..95 (including control chars).
      *
      * Encoding:
      *  - ASCII 32..95 (' '..'_') → Set A values 0..63 (byte - 32).
@@ -568,8 +561,8 @@ final class Code128Encoder
     }
 
     /**
-     * Quiet zone — 10 modules рекомендованной spec; minimum для readability.
-     * Returns модули с pre/post-padded white space.
+     * Quiet zone — 10 modules recommended by spec; minimum for readability.
+     * Returns modules with pre/post-padded white space.
      *
      * @return list<bool>
      */
@@ -601,7 +594,7 @@ final class Code128Encoder
     }
 
     /**
-     * Phase 57: Code 128 Set C — encodes 2 digits per codeword. Requires
+     * Code 128 Set C — encodes 2 digits per codeword. Requires
      * even-length digit-only input (caller validates).
      */
     private function encodeSetC(string $data): void
@@ -620,7 +613,7 @@ final class Code128Encoder
     private function finalize(array $codes): void
     {
         // Checksum: (start + Σ(value × position)) mod 103. Position 1-based
-        // для data; start counts as position 0 (т.е. multiplier 1).
+        // for data; start counts as position 0 (multiplier 1).
         $sum = $codes[0];
         $position = 1;
         for ($i = 1; $i < count($codes); $i++) {
@@ -631,10 +624,10 @@ final class Code128Encoder
         $codes[] = $checksum;
         $codes[] = self::STOP;
 
-        // Render каждый code value в modules.
+        // Render each code value into modules.
         foreach ($codes as $code) {
             $pattern = self::PATTERNS[$code];
-            $bar = true; // Каждый pattern starts with black bar.
+            $bar = true; // Each pattern starts with black bar.
             foreach (str_split($pattern) as $widthStr) {
                 $width = (int) $widthStr;
                 for ($j = 0; $j < $width; $j++) {

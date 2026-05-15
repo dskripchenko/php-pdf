@@ -5,56 +5,56 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Text;
 
 /**
- * Phase 137: Indic script basic shaping — pre-base matra reordering.
+ * Indic script basic shaping — pre-base matra reordering.
  *
  * In Indic scripts (Devanagari, Bengali, Tamil, Telugu, Kannada,
- * Malayalam, Gujarati, Gurmukhi, Oriya, Sinhala), некоторые vowel signs
+ * Malayalam, Gujarati, Gurmukhi, Oriya, Sinhala), certain vowel signs
  * (matras) appear visually BEFORE the base consonant despite being
- * stored AFTER the consonant в logical order.
+ * stored AFTER the consonant in logical order.
  *
  * Example (Devanagari):
  *   "कि" = क (U+0915) + ि (U+093F SHORT_I matra)
  *   Logical order: क, ि
- *   Visual order:  ि, क  (matra displayed на left of consonant)
+ *   Visual order:  ि, क  (matra displayed to the left of the consonant)
  *
- * Без reordering, "किताब" (kitab, book) renders as "क ि त ा ब" —
- * matra после base instead of before.
+ * Without reordering, "किताब" (kitab, book) renders as "क ि त ा ब" —
+ * matra after base instead of before.
  *
  * Per OpenType USE (Universal Shaping Engine), reordering rules:
  *  1. Identify syllable boundary
  *  2. Find pre-base matra in syllable
- *  3. Move it к position immediately before the syllable's base consonant
+ *  3. Move it to position immediately before the syllable's base consonant
  *     (skipping any preceding RA+Halant or virama-stacked components)
  *
- * Phase 137-139 scope:
+ * Scope:
  *  - Single-character pre-base matras (most common)
  *  - Two-part matras decomposition (Bengali ো → ে + া, Tamil ொ, Malayalam
  *    ൊ, Oriya ୋ, Kannada ೋ, Sinhala ො — 18 entries across 6 scripts)
- *  - Reph reordering: if syllable starts с RA + Halant + Consonant, move
- *    RA + Halant к end of syllable (USE intermediate output). Visual reph
- *    glyph substitution и mark positioning still need font GSUB+GPOS.
+ *  - Reph reordering: if syllable starts with RA + Halant + Consonant, move
+ *    RA + Halant to end of syllable (USE intermediate output). Visual reph
+ *    glyph substitution and mark positioning still need font GSUB+GPOS.
  *  - 11 Indic scripts: Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
  *    Tamil, Telugu, Kannada, Malayalam, Sinhala
  *
- * Не реализовано:
+ * Not implemented:
  *  - GSUB 'rphf' application: trailing RA+halant → single reph mark glyph
- *    (needs Type 1 / Type 6 substitution support в GsubReader)
+ *    (needs Type 1 / Type 6 substitution support in GsubReader)
  *  - GPOS mark-to-base positioning for reph
  *  - Conjunct ligatures (need GSUB ccmp / akhn / blwf features)
  *  - Above/below-base matra positioning (mostly handled by font itself)
  *
- * Phase 169 — Sinhala U+0DDA, U+0DDD clarification:
- *  Их NFD decomposition включает virama (U+0DCA), который в middle of
- *  matra sequence сломал бы syllable-end detection в reph reorder. Поэтому
- *  они НЕ добавлены в TWO_PART_MATRAS — рендерятся как single-codepoint
- *  pre-base matras (already в PRE_BASE_MATRAS). Большинство Sinhala fonts
- *  поддерживают U+0DDA/U+0DDD напрямую как один glyph; для fonts без support
- *  caller должен сам decompose до передачи (rare case).
+ * Sinhala U+0DDA, U+0DDD clarification:
+ *  Their NFD decomposition includes virama (U+0DCA), which in the middle of
+ *  a matra sequence would break syllable-end detection in reph reorder.
+ *  Therefore they are NOT added to TWO_PART_MATRAS — they render as
+ *  single-codepoint pre-base matras (already in PRE_BASE_MATRAS). Most
+ *  Sinhala fonts support U+0DDA/U+0DDD directly as a single glyph; for
+ *  fonts without support, the caller must decompose before passing (rare).
  */
 final class IndicShaper
 {
     /**
-     * Pre-base matras для каждого Indic script.
+     * Pre-base matras for each Indic script.
      * Single-codepoint matras only (no two-part decomposition).
      */
     private const PRE_BASE_MATRAS = [
@@ -91,7 +91,7 @@ final class IndicShaper
     ];
 
     /**
-     * Consonant ranges per script — used to find base consonant в syllable
+     * Consonant ranges per script — used to find base consonant in syllable
      * walk-back from pre-base matra.
      * Per Unicode Indic blocks (rough approximation).
      */
@@ -119,7 +119,7 @@ final class IndicShaper
 
     /**
      * RA characters per script — first element of reph cluster (RA + Halant).
-     * When syllable starts с RA + virama + consonant, RA+virama becomes reph.
+     * When syllable starts with RA + virama + consonant, RA+virama becomes reph.
      */
     private const REPH_RA = [
         0x0930 => true,  // Devanagari र
@@ -138,7 +138,7 @@ final class IndicShaper
     /**
      * Syllable mark ranges — combining marks that extend a syllable past its
      * base consonant. Includes matras (vowel signs), anusvara, visarga, nukta,
-     * stress marks, и length marks. Used by reph reorder to find syllable end.
+     * stress marks, and length marks. Used by reph reorder to find syllable end.
      */
     private const SYLLABLE_MARK_RANGES = [
         [0x0900, 0x0903],   // Devanagari signs (inverted candrabindu, candrabindu, anusvara, visarga)
@@ -179,7 +179,7 @@ final class IndicShaper
     ];
 
     /**
-     * Phase 139: Two-part matras — single codepoints that canonically
+     * Two-part matras — single codepoints that canonically
      * decompose into a sequence of constituent matras. Per OpenType USE,
      * decomposition must run BEFORE reordering, so that pre-base components
      * can be moved independently from post-base parts.
@@ -187,7 +187,7 @@ final class IndicShaper
      * Example (Bengali):
      *   ো U+09CB BENGALI VOWEL SIGN O = U+09C7 (pre-base e) + U+09BE (post-base aa)
      *
-     * Decomposition table matches Unicode canonical (NFD) decompositions для
+     * Decomposition table matches Unicode canonical (NFD) decompositions for
      * Indic two/three-part vowel signs.
      *
      * @var array<int, list<int>>
@@ -214,8 +214,8 @@ final class IndicShaper
         0x0CC8 => [0x0CC6, 0x0CD6],  // ೈ = ೆ + ೖ
         0x0CCA => [0x0CC6, 0x0CC2],  // ೊ = ೆ + ು
         0x0CCB => [0x0CC6, 0x0CC2, 0x0CD5],  // ೋ = ೆ + ು + ೕ
-        // Sinhala — only entries без virama component (others would break
-        // syllable-end detection since virama acts как conjunct marker).
+        // Sinhala — only entries without a virama component (others would break
+        // syllable-end detection since virama acts as a conjunct marker).
         0x0DDC => [0x0DD9, 0x0DCF],  // ො = ෙ + ා
         0x0DDE => [0x0DD9, 0x0DDF],  // ෞ = ෙ + ෟ
     ];
@@ -239,7 +239,7 @@ final class IndicShaper
     /**
      * Apply Indic shaping to codepoint list. Pipeline:
      *  1. Decompose two-part matras (Bengali ো → ে + া, etc.) per Unicode NFD.
-     *  2. Reph reorder: RA + Halant at syllable start → moved к end of
+     *  2. Reph reorder: RA + Halant at syllable start → moved to end of
      *     syllable (after base + matras + conjunct halant-cons pairs).
      *  3. Pre-base matra reorder: pre-base matras moved before base consonant.
      *
@@ -252,7 +252,7 @@ final class IndicShaper
     }
 
     /**
-     * Phase 139: Decompose two/three-part matras into their constituent
+     * Decompose two/three-part matras into their constituent
      * components. After this step, pre-base components can be moved
      * independently from post-base components by the matra reorder pass.
      *
@@ -286,21 +286,21 @@ final class IndicShaper
     }
 
     /**
-     * Phase 138: Reph reorder.
+     * Reph reorder.
      *
-     * If syllable starts с RA + virama + consonant, the RA+virama pair is
-     * treated как "reph" candidate. Per OpenType USE, reph is logically moved
-     * к end of syllable (the GSUB 'rphf' feature then substitutes it с reph
-     * mark glyph, и GPOS positions the mark above base).
+     * If syllable starts with RA + virama + consonant, the RA+virama pair is
+     * treated as "reph" candidate. Per OpenType USE, reph is logically moved
+     * to end of syllable (the GSUB 'rphf' feature then substitutes it with
+     * reph mark glyph, and GPOS positions the mark above base).
      *
      * Without GSUB+GPOS we cannot render visual reph as a mark above the base,
-     * но reordering matches the canonical USE intermediate state и is
+     * but reordering matches the canonical USE intermediate state and is
      * necessary for fonts that DO apply rphf.
      *
-     * Syllable extent: base consonant + следующие halant-consonant pairs +
+     * Syllable extent: base consonant + following halant-consonant pairs +
      * syllable marks (matras, nukta, anusvara, visarga). Terminates at next
      * non-mark codepoint (whitespace, punctuation, ASCII, independent vowel,
-     * another base consonant без halant).
+     * another base consonant without halant).
      *
      * @param  list<int>  $cps
      * @return list<int>
@@ -381,9 +381,9 @@ final class IndicShaper
                 && self::isConsonant($out[$start - 2])) {
                 $start -= 2;
             }
-            // Move matra from $i к position $start.
+            // Move matra from $i to position $start.
             if ($start === $i - 1) {
-                // Simple case: swap matra с immediately preceding consonant.
+                // Simple case: swap matra with immediately preceding consonant.
                 [$out[$start], $out[$i]] = [$out[$i], $out[$start]];
             } else {
                 // Multi-step: remove matra from $i, insert at $start.
@@ -391,7 +391,7 @@ final class IndicShaper
                 array_splice($out, $i, 1);
                 array_splice($out, $start, 0, [$matra]);
             }
-            $i++; // matra now at $start; advance past где it was
+            $i++; // matra now at $start; advance past where it was
         }
 
         return $out;

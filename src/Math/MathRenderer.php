@@ -9,13 +9,13 @@ use Dskripchenko\PhpPdf\Pdf\PdfFont;
 use Dskripchenko\PhpPdf\Pdf\StandardFont;
 
 /**
- * Phase 69: TeX-like math expression → PDF render.
+ * TeX-like math expression → PDF render.
  *
  * Two-pass:
  *  1. measureWidth() — compute total horizontal extent.
  *  2. render() — emit text + drawing operators at given (x, y) baseline.
  *
- * Symbol substitutions через self::GREEK + self::OPERATORS tables.
+ * Symbol substitutions via self::GREEK + self::OPERATORS tables.
  */
 final class MathRenderer
 {
@@ -62,25 +62,19 @@ final class MathRenderer
         $pos = 0;
         $tokens = self::parseGroup($tex, $pos, false);
 
-        // Phase 80: combine big operators (\sum, \int, \prod, \lim,
-        // \bigcup, \bigcap) с following sub/sup → 'bigop' token.
+        // Combine big operators (\sum, \int, \prod, \lim,
+        // \bigcup, \bigcap) with following sub/sup → 'bigop' token.
         return self::combineBigOperators($tokens);
     }
 
     /**
-     * Phase 96: Parse multi-line tex (rows separated by `\\\\`) → list of
-     * token rows. Each row independently parsed.
-     *
-     * @return list<list<array<string, mixed>>>
-     */
-    /**
-     * Phase 174: convert LaTeX \begin{env}...\end{env} к internal syntax.
+     * Convert LaTeX \begin{env}...\end{env} to internal syntax.
      *
      * Supported environments:
      *  - align, align*, aligned, gather, gather*, eqnarray — multi-line:
-     *    content kept as-is (\\ separator уже handled parseLines split)
-     *  - cases — converted к \matrix{ ... } для grid layout
-     *  - matrix, pmatrix, bmatrix, vmatrix — converted к equivalent \matrix command
+     *    content kept as-is (\\ separator already handled by parseLines split)
+     *  - cases — converted to \matrix{ ... } for grid layout
+     *  - matrix, pmatrix, bmatrix, vmatrix — converted to equivalent \matrix command
      */
     private static function preprocessEnvironments(string $tex): string
     {
@@ -104,14 +98,14 @@ final class MathRenderer
 
     public static function parseLines(string $tex): array
     {
-        // Phase 174: pre-process LaTeX environments \begin{name}...\end{name}.
+        // Pre-process LaTeX environments \begin{name}...\end{name}.
         // Supported environments:
         //   align, align*, aligned, gather, gather* — multi-line (\\ separates)
-        //   cases — caseswise function (rendered как rows; brace prepended)
-        //   matrix, pmatrix, bmatrix, vmatrix — passed к matrix command
+        //   cases — caseswise function (rendered as rows; brace prepended)
+        //   matrix, pmatrix, bmatrix, vmatrix — passed to matrix command
         $tex = self::preprocessEnvironments($tex);
 
-        // Brace-aware split на `\\\\` (2 backslashes) at depth 0 only —
+        // Brace-aware split on `\\\\` (2 backslashes) at depth 0 only —
         // preserves \\\\ inside \matrix{...}.
         $rowStrs = [];
         $current = '';
@@ -149,7 +143,7 @@ final class MathRenderer
     }
 
     /**
-     * Phase 80: walk tokens, merge sequences (text=∑/∏/∫, sub, sup?) или
+     * Walk tokens, merge sequences (text=∑/∏/∫, sub, sup?) or
      * (text, sup, sub?) → bigop token.
      *
      * @param  list<array<string, mixed>>  $tokens
@@ -158,7 +152,7 @@ final class MathRenderer
     private static function combineBigOperators(array $tokens): array
     {
         $bigOpChars = ['∑', '∏', '∫', "\u{22C3}", "\u{22C2}", "\u{2295}", "\u{2297}"]; // sum, prod, int, bigcup, bigcap, oplus, otimes
-        $bigOpNames = ['lim']; // \lim — emitted как 'lim' text by unknown-command fallback.
+        $bigOpNames = ['lim']; // \lim — emitted as 'lim' text by unknown-command fallback.
         $out = [];
         $i = 0;
         $n = count($tokens);
@@ -268,7 +262,7 @@ final class MathRenderer
     }
 
     /**
-     * Parse single argument: either `{...}` group или single character.
+     * Parse single argument: either `{...}` group or single character.
      *
      * @return list<array<string, mixed>>
      */
@@ -322,21 +316,21 @@ final class MathRenderer
             return [['type' => 'sqrt', 'value' => $val]];
         }
         if ($cmd === 'matrix' || $cmd === 'pmatrix' || $cmd === 'bmatrix' || $cmd === 'vmatrix') {
-            // Phase 75: matrix syntax — \\matrix{1 & 2 \\\\ 3 & 4}.
-            // Capture raw content between balanced braces для preserving '&'
-            // и '\\\\' separators (parser нормально жрёт `\\` как 2 empty
+            // Matrix syntax — \\matrix{1 & 2 \\\\ 3 & 4}.
+            // Capture raw content between balanced braces to preserve '&'
+            // and '\\\\' separators (parser normally consumes `\\` as 2 empty
             // commands).
             $raw = self::readRawBracedContent($tex, $pos);
             $rows = self::splitMatrixRaw($raw);
 
             return [['type' => 'matrix', 'rows' => $rows, 'variant' => $cmd]];
         }
-        // Unknown command — fallback к literal text.
+        // Unknown command — fallback to literal text.
         return [['type' => 'text', 'value' => $cmd]];
     }
 
     /**
-     * Phase 75: read balanced {...} content as raw string (preserves `\\`).
+     * Read balanced {...} content as raw string (preserves `\\`).
      */
     private static function readRawBracedContent(string $tex, int &$pos): string
     {
@@ -366,8 +360,8 @@ final class MathRenderer
     }
 
     /**
-     * Phase 75: split raw matrix content `1 & 2 \\\\ 3 & 4` → rows of cells.
-     * Each cell parsed через parseGroup для inner LaTeX support (nested
+     * Split raw matrix content `1 & 2 \\\\ 3 & 4` → rows of cells.
+     * Each cell parsed via parseGroup for inner LaTeX support (nested
      * fractions, sup, etc.).
      *
      * @return list<list<list<array<string, mixed>>>>
@@ -409,11 +403,11 @@ final class MathRenderer
         $currentCell = [];
         foreach ($tokens as $tok) {
             if ($tok['type'] === 'text') {
-                // Process text — may contain '&' и '\\\\' separators.
+                // Process text — may contain '&' and '\\\\' separators.
                 $remaining = $tok['value'];
                 while ($remaining !== '') {
                     $pos1 = strpos($remaining, '&');
-                    $pos2 = strpos($remaining, "\\\\"); // '\\' в input encoded как single backslash here.
+                    $pos2 = strpos($remaining, "\\\\"); // '\\' in input encoded as single backslash here.
                     $cuts = array_filter([$pos1, $pos2], fn ($p) => $p !== false);
                     if ($cuts === []) {
                         if ($remaining !== '') {
@@ -602,7 +596,7 @@ final class MathRenderer
                 return self::renderMatrix($tok['rows'], $tok['variant'], $page, $x, $baselineY, $fontSize, $font);
 
             case 'bigop':
-                // Phase 80: big operator с centered limits above/below.
+                // Big operator with centered limits above/below.
                 $sym = $tok['symbol'];
                 $symW = mb_strlen($sym, 'UTF-8') * $fontSize * 0.55;
                 $supSize = $fontSize * 0.7;
@@ -633,8 +627,8 @@ final class MathRenderer
     }
 
     /**
-     * Phase 75: render matrix — grid of cells aligned по rows + columns,
-     * с optional brackets/parentheses вокруг.
+     * Render matrix — grid of cells aligned by rows + columns,
+     * with optional brackets/parentheses around.
      *
      * @param  list<list<list<array<string, mixed>>>>  $rows
      */

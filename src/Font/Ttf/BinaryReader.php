@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Big-endian binary reader для разбора TrueType / OpenType binary tables.
+ * Big-endian binary reader for parsing TrueType / OpenType binary tables.
  *
- * TTF использует big-endian для всех multi-byte значений (ISO/IEC 14496-22
- * §4.1). PHP `unpack` поддерживает big-endian через формат-кодеки
- * `n` (uint16) / `N` (uint32) / `J` (uint64).
+ * TTF uses big-endian for all multi-byte values (ISO/IEC 14496-22 §4.1).
+ * PHP `unpack` supports big-endian via format codes `n` (uint16) /
+ * `N` (uint32) / `J` (uint64).
  *
- * Знаковые значения (int16/int32) парсятся отдельно через bit-twiddling,
- * т.к. unpack возвращает unsigned.
+ * Signed values (int16/int32) are parsed separately via bit twiddling
+ * because unpack returns unsigned.
  *
- * Класс stateful: хранит позицию-курсор, методы автоматически продвигают
- * её. seek/tell позволяют jump'ать к любому offset'у.
+ * The class is stateful: it stores a cursor position and methods advance
+ * it automatically. seek/tell allow jumping to any offset.
  */
 final class BinaryReader
 {
@@ -75,7 +75,7 @@ final class BinaryReader
     public function readInt16(): int
     {
         $u = $this->readUInt16();
-        // Sign extend если top bit установлен.
+        // Sign-extend if the top bit is set.
         return $u >= 0x8000 ? $u - 0x10000 : $u;
     }
 
@@ -87,8 +87,8 @@ final class BinaryReader
     }
 
     /**
-     * Tag — четыре ASCII-байта (например, "cmap", "head"). Используется
-     * как ключ в table directory.
+     * Tag — four ASCII bytes (e.g., "cmap", "head"). Used as a key in the
+     * table directory.
      */
     public function readTag(): string
     {
@@ -99,7 +99,7 @@ final class BinaryReader
     }
 
     /**
-     * Read N raw bytes (для embedding'а subtables в свой output).
+     * Read N raw bytes (for embedding subtables into your own output).
      */
     public function readBytes(int $n): string
     {
@@ -110,7 +110,7 @@ final class BinaryReader
     }
 
     /**
-     * Random-access read без изменения курсора.
+     * Random-access read without changing the cursor.
      */
     public function peekUInt16(int $offset): int
     {

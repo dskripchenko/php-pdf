@@ -10,7 +10,7 @@ use Dskripchenko\PhpPdf\Element\ListNode;
 use Dskripchenko\PhpPdf\Style\ListFormat;
 
 /**
- * Fluent builder для ListNode (bullet / ordered).
+ * Fluent builder for ListNode (bullet / ordered).
  *
  * Pattern:
  *   ListBuilder::bullet()
@@ -77,10 +77,10 @@ final class ListBuilder
     /**
      * Adds item. $content:
      *  - string         — single-paragraph item
-     *  - Closure        — ListItemBuilder для configurability
-     *  - ListItem       — готовый AST-node
+     *  - Closure        — ListItemBuilder for configurability
+     *  - ListItem       — a ready AST node
      *
-     * Optional $nest closure — convenience для nested list'а.
+     * Optional $nest closure — convenience for a nested list.
      */
     public function item(string|Closure|ListItem $content, ?Closure $nest = null): self
     {

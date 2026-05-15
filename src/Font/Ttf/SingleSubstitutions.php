@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 143: GSUB Lookup Type 1 (Single Substitution).
+ * GSUB Lookup Type 1 (Single Substitution).
  *
- * Single Substitution заменяет один glyph другим — основа для taghs
+ * Single Substitution replaces one glyph with another — the basis for tags
  * 'rphf' (reph), 'half' (half-forms), 'pref' (pre-base forms), 'fina',
  * 'medi', 'init', 'isol' (Arabic/Devanagari positional forms).
  *
- * Формат subtable:
+ * Subtable formats:
  *   Format 1: coverage + deltaGlyphID → output = input + delta
  *   Format 2: coverage + array of substitute glyph IDs (explicit)
  *
- * Структура хранения: gid_in → gid_out (простой map).
+ * Storage structure: gid_in → gid_out (simple map).
  */
 final class SingleSubstitutions
 {

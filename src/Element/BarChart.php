@@ -17,7 +17,7 @@ final readonly class BarChart implements BlockElement
 {
     /**
      * @param  list<array{label: string, value: float, color?: string}>  $bars
-     *   Each entry — bar с label, value (height), optional hex color.
+     *   Each entry is a bar with label, value (height), optional hex color.
      */
     public function __construct(
         public array $bars,
@@ -29,7 +29,7 @@ final readonly class BarChart implements BlockElement
         public float $titleSizePt = 12.0,
         public string $defaultBarColor = '4287f5',
         public bool $showGridLines = false,
-        // Phase 68: optional fixed y-axis range. null = auto (max value).
+        // Optional fixed y-axis range. null = auto (max value).
         public ?float $yMin = null,
         public ?float $yMax = null,
         public ?string $xAxisTitle = null,
@@ -38,7 +38,7 @@ final readonly class BarChart implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
-        // Phase 140: x-axis label rotation в degrees. Positive = CCW.
+        // X-axis label rotation in degrees. Positive = CCW.
         // Common values: 45 (matplotlib default), -45 (Excel-style), 90.
         // End-anchor convention: label's natural right-edge lands at tick position.
         public float $xLabelRotationDeg = 0.0,

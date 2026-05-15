@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 205: Code 93 barcode encoder.
+ * Code 93 barcode encoder.
  *
  * Code 93 (USS Code 93) — alphanumeric variable-length barcode, denser
- * successor к Code 39 с mandatory dual Mod-47 check digits (C, K).
+ * successor to Code 39 with mandatory dual Mod-47 check digits (C, K).
  *
  * Encoding:
  *  - 47 character set: 0-9, A-Z (uppercase only), `-`, `.`, ` `, `$`, `/`,
  *    `+`, `%`
  *  - Implicit `*` start/stop wrapper + 1-module termination bar
- *  - Continuous encoding (NO inter-character gaps — каждый char ровно
+ *  - Continuous encoding (NO inter-character gaps — each char exactly
  *    9 modules: 3 bars + 3 spaces, alternating)
  *  - Two automatic check digits C (weight 1..20 cycling) and K (weight
- *    1..15 cycling), oба Mod-47
+ *    1..15 cycling), both Mod-47
  *
  * Module count formula: (N + 4) × 9 + 1 = 9N + 37
  * (N data chars + start + stop + 2 check digits, plus termination bar)
@@ -26,7 +26,7 @@ final class Code93Encoder
 {
     /**
      * Pattern table: char → 9-bit module sequence. Continuous encoding —
-     * каждый char ровно 9 modules. Position 0 = first bar.
+     * each char exactly 9 modules. Position 0 = first bar.
      */
     private const PATTERNS = [
         '0' => '100010100',
@@ -72,9 +72,9 @@ final class Code93Encoder
         '/' => '101101110',
         '+' => '101110110',
         '%' => '110101110',
-        // Phase 205: shift characters для Full ASCII Code 93 — placeholders
-        // chr(0xC1..0xC4). Не accepted в user input, но check digits могут
-        // hash в их value positions (43-46).
+        // Shift characters for Full ASCII Code 93 — placeholders
+        // chr(0xC1..0xC4). Not accepted in user input, but check digits may
+        // hash into their value positions (43-46).
         "\xC1" => '100100110', // ($) shift
         "\xC2" => '111011010', // (%) shift
         "\xC3" => '111010110', // (/) shift
@@ -83,14 +83,14 @@ final class Code93Encoder
     ];
 
     /**
-     * Value table для Mod-47 check digit computation.
+     * Value table for Mod-47 check digit computation.
      * 47 chars at positions 0..46 — 43 standard + 4 shift placeholders.
      */
     private const VALUES = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. \$/+%\xC1\xC2\xC3\xC4";
 
     /**
-     * User-allowed character set (43 chars — без shift placeholders).
-     * Используется для validation; shifts добавляются только через check digits.
+     * User-allowed character set (43 chars — without shift placeholders).
+     * Used for validation; shifts are only added via check digits.
      */
     private const STANDARD_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%';
 
@@ -100,7 +100,7 @@ final class Code93Encoder
     /** @var list<bool> */
     private array $modules = [];
 
-    /** User-facing data (без auto-appended check digits и delimiters). */
+    /** User-facing data (without auto-appended check digits and delimiters). */
     public readonly string $canonical;
 
     /** First check digit character (computed). */
@@ -165,7 +165,7 @@ final class Code93Encoder
 
     /**
      * Mod-47 weighted check digit computation.
-     * Weights cycle 1..maxWeight from right к left.
+     * Weights cycle 1..maxWeight from right to left.
      */
     public static function computeCheckDigit(string $value, int $maxWeight): int
     {
@@ -177,7 +177,7 @@ final class Code93Encoder
             $idx = strpos(self::VALUES, $value[$len - 1 - $i]);
             if ($idx === false) {
                 throw new \InvalidArgumentException(
-                    "Code 93 cannot compute check digit для '{$value[$len - 1 - $i]}'",
+                    "Code 93 cannot compute check digit for '{$value[$len - 1 - $i]}'",
                 );
             }
             $sum += $idx * $weight;

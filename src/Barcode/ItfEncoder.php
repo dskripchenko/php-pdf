@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 203: Interleaved 2 of 5 (ITF) barcode encoder.
+ * Interleaved 2 of 5 (ITF) barcode encoder.
  *
  * ITF (ISO/IEC 16390) — numeric variable-length barcode. Common profile:
- * ITF-14 (14-digit GTIN-14) для shipping container labeling.
+ * ITF-14 (14-digit GTIN-14) for shipping container labeling.
  *
  * Encoding:
  *  - Digits 0-9 only, even number of digits (interleaved pairs)
@@ -49,7 +49,7 @@ final class ItfEncoder
     public readonly string $canonical;
 
     /**
-     * @param  string  $digits  Numeric input, even length после optional check digit.
+     * @param  string  $digits  Numeric input, even length after optional check digit.
      * @param  bool  $withCheckDigit  Append Mod-10 GTIN-style check digit.
      */
     public function __construct(string $digits, bool $withCheckDigit = false)
@@ -105,7 +105,7 @@ final class ItfEncoder
      * GTIN-style Mod-10 weighted check digit. Right-to-left weights 3,1,3,1...
      * (i.e. rightmost data digit weight 3).
      *
-     * Works для любой data length: GTIN-8, GTIN-12, GTIN-13, GTIN-14.
+     * Works for any data length: GTIN-8, GTIN-12, GTIN-13, GTIN-14.
      */
     public static function computeCheckDigit(string $digits): int
     {

@@ -25,10 +25,10 @@ use Dskripchenko\PhpPdf\Style\PageSetup;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Fluent builder для Document'а.
+ * Fluent builder for Document.
  *
- * Mirror'ит php-docx DocumentBuilder для API-симметрии — единый API
- * между Word- и PDF-генерацией позволяет переключать backend в одну строку.
+ * Mirrors php-docx DocumentBuilder for API symmetry — a unified API
+ * between Word and PDF generation allows switching the backend in one line.
  *
  * Pattern:
  *   DocumentBuilder::new()
@@ -38,9 +38,6 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  *       ->paragraph(fn($p) => $p->text('Mix ')->bold('here'))
  *       ->pageBreak()
  *       ->toBytes();
- *
- * Tables (Phase 5), bullet/ordered lists (Phase 6), hyperlinks/bookmarks
- * (Phase 7), headers/footers (Phase 8) пока не покрыты.
  */
 final class DocumentBuilder
 {
@@ -109,8 +106,8 @@ final class DocumentBuilder
     }
 
     /**
-     * Watermark — диагональный текст на каждой странице (под body content).
-     * Передай пустую строку или null чтобы отключить.
+     * Watermark — diagonal text on every page (under body content).
+     * Pass an empty string or null to disable.
      */
     public function watermark(?string $text): self
     {
@@ -120,9 +117,9 @@ final class DocumentBuilder
     }
 
     /**
-     * Phase 30: Image watermark — рисуется по центру каждой страницы.
-     * $widthPt null → 50% page width; aspect ratio сохраняется.
-     * Передай null чтобы отключить.
+     * Image watermark — drawn at the center of every page.
+     * $widthPt null → 50% page width; aspect ratio is preserved.
+     * Pass null to disable.
      */
     public function watermarkImage(?PdfImage $image, ?float $widthPt = null): self
     {
@@ -133,7 +130,7 @@ final class DocumentBuilder
     }
 
     /**
-     * Phase 31: Opacity для image watermark. 0..1 (1=opaque, 0=invisible).
+     * Opacity for image watermark. 0..1 (1=opaque, 0=invisible).
      * null = full opacity (default).
      */
     public function watermarkImageOpacity(?float $opacity): self
@@ -151,8 +148,8 @@ final class DocumentBuilder
     }
 
     /**
-     * First-page header — override обычного header'а на странице 1.
-     * Передай empty Closure для пустого header'а на первой page.
+     * First-page header — overrides the regular header on page 1.
+     * Pass an empty Closure for an empty header on the first page.
      */
     public function firstPageHeader(Closure $build): self
     {
@@ -173,7 +170,7 @@ final class DocumentBuilder
     }
 
     /**
-     * Convenience — отключить header/footer на first page (cover).
+     * Convenience — disable header/footer on the first page (cover).
      */
     public function noHeaderFooterOnFirstPage(): self
     {
@@ -186,10 +183,10 @@ final class DocumentBuilder
     // ── Block content ─────────────────────────────────────────────
 
     /**
-     * Добавляет параграф. $content может быть:
-     *  - string — простой single-run text
-     *  - Closure(ParagraphBuilder) — для сложного inline-content/стиля
-     *  - Paragraph — готовый AST-node
+     * Adds a paragraph. $content can be:
+     *  - string — plain single-run text
+     *  - Closure(ParagraphBuilder) — for complex inline content/style
+     *  - Paragraph — a ready AST node
      */
     public function paragraph(string|Closure|Paragraph $content): self
     {
@@ -212,7 +209,7 @@ final class DocumentBuilder
     }
 
     /**
-     * Heading paragraph уровня 1..6. $content — string или Closure(ParagraphBuilder).
+     * Heading paragraph of level 1..6. $content — string or Closure(ParagraphBuilder).
      */
     public function heading(int $level, string|Closure $content): self
     {
@@ -247,7 +244,7 @@ final class DocumentBuilder
     }
 
     /**
-     * Пустая строка — empty paragraph (полезно для visual spacing).
+     * Empty line — empty paragraph (useful for visual spacing).
      */
     public function emptyLine(): self
     {
@@ -257,8 +254,8 @@ final class DocumentBuilder
     }
 
     /**
-     * Прямое добавление BlockElement'а в AST. Escape-hatch для типов
-     * не покрытых fluent-методами.
+     * Directly adds a BlockElement to the AST. Escape hatch for types
+     * not covered by fluent methods.
      */
     public function block(BlockElement $element): self
     {
@@ -268,8 +265,8 @@ final class DocumentBuilder
     }
 
     /**
-     * Block-level image. $source — file path (string), готовый PdfImage,
-     * или AST Image. Sizing/alignment через keyword arguments.
+     * Block-level image. $source — file path (string), a ready PdfImage,
+     * or an AST Image. Sizing/alignment via keyword arguments.
      *
      * Examples:
      *   ->image('/path/to/logo.png')
@@ -277,7 +274,7 @@ final class DocumentBuilder
      *   ->image($pdfImage, widthPt: 300, heightPt: 200)
      */
     /**
-     * Bullet list. $build — Closure(ListBuilder) или готовый ListNode.
+     * Bullet list. $build — Closure(ListBuilder) or a ready ListNode.
      */
     public function bulletList(Closure|ListNode $build): self
     {
@@ -308,7 +305,7 @@ final class DocumentBuilder
     }
 
     /**
-     * Block-level table. $content — Closure(TableBuilder) или готовый Table.
+     * Block-level table. $content — Closure(TableBuilder) or a ready Table.
      */
     public function table(Closure|Table $content): self
     {
@@ -325,10 +322,10 @@ final class DocumentBuilder
     }
 
     /**
-     * Phase 32: Add Code 128 barcode (или другой supported format).
+     * Add a Code 128 barcode (or another supported format).
      *
-     * \$widthPt null → auto: 1pt × moduleCount. Typical SKU barcode
-     * (~10 chars) при 1pt-per-module = 150-200pt wide.
+     * \$widthPt null → auto: 1pt × moduleCount. A typical SKU barcode
+     * (~10 chars) at 1pt-per-module = 150-200pt wide.
      */
     public function barcode(
         string $value,

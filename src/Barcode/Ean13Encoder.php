@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 35: EAN-13 / UPC-A barcode encoder.
+ * EAN-13 / UPC-A barcode encoder.
  *
  * EAN-13: 12 digit input + computed checksum (13th digit).
- * UPC-A: 11 digit input + computed checksum (12th digit); рендерится
- * как EAN-13 с leading zero ("0" + UPC-A = valid EAN-13).
+ * UPC-A: 11 digit input + computed checksum (12th digit); rendered
+ * as EAN-13 with leading zero ("0" + UPC-A = valid EAN-13).
  *
  * Structure (EAN-13):
  *   [LeftQuiet 9 modules]
  *   [Start guard 101]
- *   [6 left digits — 7 modules each, encoded L or G по first-digit pattern]
+ *   [6 left digits — 7 modules each, encoded L or G by first-digit pattern]
  *   [Center guard 01010]
  *   [6 right digits — 7 modules each, R encoding]
  *   [End guard 101]
@@ -93,12 +93,11 @@ final class Ean13Encoder
     public readonly ?string $addOn;
 
     /**
-     * @param  string  $digits  12 or 13 digits для EAN-13, или 11/12 для UPC-A.
-     * @param  bool  $upcA  если true, input = 11/12 digits UPC-A → конвертируется
-     *                       в EAN-13 prepending '0'.
-     * @param  string|null  $addOn  EAN-2 (2 digits) or EAN-5 (5 digits) supplement
-     *                       (Phase 199). Common usage: ISBN price (EAN-5) or
-     *                       periodical issue (EAN-2).
+     * @param  string  $digits  12 or 13 digits for EAN-13, or 11/12 for UPC-A.
+     * @param  bool  $upcA  if true, input = 11/12 digits UPC-A → converted
+     *                       to EAN-13 prepending '0'.
+     * @param  string|null  $addOn  EAN-2 (2 digits) or EAN-5 (5 digits) supplement.
+     *                       Common usage: ISBN price (EAN-5) or periodical issue (EAN-2).
      */
     public function __construct(string $digits, bool $upcA = false, ?string $addOn = null)
     {
@@ -117,7 +116,7 @@ final class Ean13Encoder
         if (strlen($digits) !== 13) {
             throw new \InvalidArgumentException('EAN-13 input must be 12 or 13 digits');
         }
-        // Validate checksum если 13-digit input.
+        // Validate checksum if 13-digit input.
         $expected = self::computeCheckDigit(substr($digits, 0, 12));
         if ((int) $digits[12] !== $expected) {
             throw new \InvalidArgumentException(sprintf(
@@ -265,7 +264,7 @@ final class Ean13Encoder
      * Compute 5-digit add-on parity check digit.
      *
      * Formula: (3 × sum_odd_positions + 9 × sum_even_positions) % 10,
-     * где odd = positions 0,2,4 и even = positions 1,3.
+     * where odd = positions 0,2,4 and even = positions 1,3.
      */
     public static function computeAddOn5CheckDigit(string $addOn): int
     {

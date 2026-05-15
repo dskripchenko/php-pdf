@@ -54,10 +54,10 @@ use Dskripchenko\PhpPdf\Style\Alignment;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Layout Engine — walks Document AST + emits Pdf\Document с
+ * Layout Engine — walks the Document AST and emits a Pdf\Document with
  * absolute-positioned content.
  *
- * Phase 3 scope:
+ * Core capabilities:
  *  - Paragraph: greedy line-breaking + line-by-line rendering
  *  - Multi-run paragraphs (mixed styles per line)
  *  - PageBreak (forced new page)
@@ -65,38 +65,32 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  *  - LineBreak inside paragraphs
  *  - Heading levels 1..6 — auto bold + bigger size
  *  - Page overflow → automatic new page
- *  - Alignment: Start/Center/End на line level
+ *  - Alignment: Start/Center/End at line level
+ *  - Headers/footers/watermarks
+ *  - Tables, Lists
+ *  - Hyperlinks, bookmarks/named destinations
+ *  - Field resolution (PAGE/NUMPAGES)
+ *  - Inline images, justified text
+ *  - Hyphenation + soft-hyphen
+ *  - Bold/italic font switching via FontProvider
  *
- * Phase 3 не покрывал — closed в later phases:
- *  - Headers/footers/watermarks → Phase 8
- *  - Tables → Phase 5
- *  - Lists → Phase 6
- *  - Hyperlinks active rendering → Phase 7
- *  - Bookmarks named destinations → Phase 7
- *  - Fields PAGE/NUMPAGES resolution → Phase 8
- *  - Image positioning внутри текста → Phase 16 (inline images)
- *  - Justified text → Phase 15
- *  - Hyphenation + soft-hyphen → Phase 33
- *  - Auto-bold/italic font switching → Phase 4 (FontProvider)
- *
- * Font resolution (Phase 3 simple):
- *  - $defaultFont (PdfFont) если задан — все text rendered им
- *  - Иначе fallback на $fallbackStandard (PDF base-14)
- *  - Run.style.fontFamily игнорируется (Phase 4 это исправит через
- *    FontProvider matching)
- *  - Run.style.bold/italic визуально не меняют шрифт — нужны bold/
- *    italic варианты font (Phase 4)
+ * Font resolution:
+ *  - If $defaultFont (PdfFont) is set, all text is rendered with it.
+ *  - Otherwise fall back to $fallbackStandard (PDF base-14).
+ *  - Run.style.fontFamily is resolved via FontProvider when configured.
+ *  - Run.style.bold/italic select boldFont/italicFont/boldItalicFont
+ *    variants when supplied.
  */
 final class Engine
 {
     /**
-     * Total pages для NUMPAGES field resolution. Populated после first
+     * Total pages for NUMPAGES field resolution. Populated after the first
      * pass; null = inside first pass (use placeholder).
      */
     private ?int $totalPagesHint = null;
 
     /**
-     * Текущая Section во время render'а — нужна для header/footer access.
+     * Current Section during render — needed for header/footer access.
      */
     private ?Section $currentSection = null;
 
@@ -108,42 +102,42 @@ final class Engine
         public readonly float $defaultFontSizePt = 11,
         public readonly float $defaultLineHeightMult = 1.2,
         /**
-         * Optional font-variants. Если заданы, используются для Run.style.
-         * bold/italic вместо $defaultFont (Phase 10c font matcher). Если
-         * не заданы, defaultFont применяется ко всем стилям.
+         * Optional font-variants. If set, used for Run.style.bold/italic
+         * instead of $defaultFont. If not set, defaultFont applies to all
+         * styles.
          */
         public readonly ?PdfFont $boldFont = null,
         public readonly ?PdfFont $italicFont = null,
         public readonly ?PdfFont $boldItalicFont = null,
         /**
-         * Optional FontProvider — Engine consultит по Run.style.fontFamily
-         * прежде чем падать на bold/italic/default chain. Phase 13.
+         * Optional FontProvider — Engine consults it by Run.style.fontFamily
+         * before falling back to the bold/italic/default chain.
          */
         public readonly ?FontProvider $fontProvider = null,
         /**
-         * FlateDecode content streams в output PDF (~3-5× smaller для
-         * text-heavy). Default true. Set false для debug inspection
-         * (raw operators видны в bytes).
+         * FlateDecode content streams in output PDF (~3-5× smaller for
+         * text-heavy). Default true. Set false for debug inspection
+         * (raw operators visible in bytes).
          */
         public readonly bool $compressStreams = true,
         /**
-         * Phase 76: Font fallback chain — если main font (defaultFont или
-         * resolved variant) lacks glyph для some char в Run text, try
-         * next font в chain. All-or-nothing per Run (no per-char
-         * font switching — deferred).
+         * Font fallback chain — if the main font (defaultFont or resolved
+         * variant) lacks a glyph for some char in Run text, try the next
+         * font in the chain. All-or-nothing per Run (no per-char font
+         * switching).
          *
          * @var list<PdfFont>
          */
         public readonly array $fallbackFonts = [],
         /**
-         * Phase 188: tab stop interval (pt). When \t encountered в Run text,
-         * x advances к next multiple of this value from line start. Default
-         * 36pt = 0.5 inch.
+         * Tab stop interval (pt). When \t is encountered in Run text,
+         * x advances to the next multiple of this value from line start.
+         * Default 36pt = 0.5 inch.
          */
         public readonly float $tabStopPt = 36.0,
         /**
-         * Phase 189: enable hanging punctuation (trailing period/comma/etc
-         * на line end extend past right margin для visual flush).
+         * Enable hanging punctuation (trailing period/comma/etc at line
+         * end extends past right margin for visual flush).
          */
         public readonly bool $hangingPunctuation = false,
     ) {
@@ -153,13 +147,13 @@ final class Engine
     }
 
     /**
-     * Resolves embedded font для given RunStyle.
+     * Resolves embedded font for the given RunStyle.
      *
      * Priority:
-     *  1. Если RunStyle.fontFamily задан И fontProvider есть → resolver
-     *     (variant chain bold/italic с fallback)
-     *  2. Иначе bold/italic ctor-фолбэк chain → defaultFont
-     *  3. Иначе null (caller использует fallbackStandard base-14)
+     *  1. If RunStyle.fontFamily is set and fontProvider exists → resolver
+     *     (variant chain bold/italic with fallback)
+     *  2. Otherwise bold/italic ctor fallback chain → defaultFont
+     *  3. Otherwise null (caller uses fallbackStandard base-14)
      */
     private function resolveEmbeddedFont(RunStyle $style, ?string $text = null): ?PdfFont
     {
@@ -185,9 +179,9 @@ final class Engine
     }
 
     /**
-     * Phase 76: Если primary font lacks glyph для some char в $text,
-     * try fallbackFonts chain. Returns first font supporting all chars,
-     * или primary (graceful degradation если ни один не подходит).
+     * If the primary font lacks a glyph for some char in $text, try the
+     * fallbackFonts chain. Returns the first font supporting all chars,
+     * or primary (graceful degradation if none qualifies).
      */
     private function applyFallbackChain(?PdfFont $primary, ?string $text): ?PdfFont
     {
@@ -208,12 +202,11 @@ final class Engine
 
     public function render(AstDocument $document): PdfDocument
     {
-        // Two-pass для NUMPAGES resolution:
-        //  - Pass 1: рендер с totalPagesHint=null, считаем pages
-        //  - Pass 2: рендер с known totalPagesHint, NUMPAGES → actual count
-        // Если в документе нет NUMPAGES (или нет вообще Field'ов) — двойной
-        // pass всё равно делается, но это дешёво (~2× memory peak короткое
-        // время). Optimization для skipping pass 1 — Phase L.
+        // Two-pass for NUMPAGES resolution:
+        //  - Pass 1: render with totalPagesHint=null, count pages
+        //  - Pass 2: render with known totalPagesHint, NUMPAGES → actual count
+        // If the document has no NUMPAGES (or no Fields at all), the double
+        // pass still runs, but it is cheap (~2× memory peak for a short time).
         $this->totalPagesHint = null;
         $firstPass = $this->renderOnce($document);
         $this->totalPagesHint = $firstPass->pageCount();
@@ -226,8 +219,8 @@ final class Engine
 
     private function renderOnce(AstDocument $document): PdfDocument
     {
-        // Phase 34: iterate через все sections. First section initializes
-        // PDF document; subsequent sections — force new page с её PageSetup.
+        // Iterate through all sections. First section initializes the
+        // PDF document; subsequent sections — force new page with their PageSetup.
         $sections = $document->sections();
         $primary = $sections[0];
         $primarySetup = $primary->pageSetup;
@@ -238,15 +231,15 @@ final class Engine
             $primarySetup->customDimensionsPt,
             $this->compressStreams,
         );
-        // Phase 48: forward tagged flag из AST.
-        // Phase 217: PDF/A-1a implies tagged — auto-enable for consistent
+        // Forward tagged flag from AST.
+        // PDF/A-1a implies tagged — auto-enable for consistent
         // struct element collection during rendering.
         $taggedRequired = $document->tagged
             || ($document->pdfA?->conformance === \Dskripchenko\PhpPdf\Pdf\PdfAConfig::CONFORMANCE_A);
         if ($taggedRequired) {
             $pdf->enableTagged();
         }
-        // Phase 89: forward language hint.
+        // Forward language hint.
         if ($document->lang !== null) {
             $pdf->setLang($document->lang);
         }
@@ -263,14 +256,14 @@ final class Engine
             pageSetup: $primarySetup,
         );
 
-        // Phase 157: track page ranges per section для watermark post-pass.
+        // Track page ranges per section for the watermark post-pass.
         // sectionPageRanges[i] = [startPageIdx, endPageIdx] — inclusive
-        // indices в $pdf->pages() array.
+        // indices in $pdf->pages() array.
         $sectionPageRanges = [];
         foreach ($sections as $idx => $section) {
             $this->currentSection = $section;
             if ($idx > 0) {
-                // Section break — force new page с new PageSetup.
+                // Section break — force new page with new PageSetup.
                 $context->pageSetup = $section->pageSetup;
                 $newPage = $pdf->addPage(
                     $section->pageSetup->paperSize,
@@ -282,8 +275,8 @@ final class Engine
                 $context->cursorY = $context->topY;
             }
 
-            // Phase 222: footnote per-page bottom mode. Reduce bottomY чтобы
-            // body content shrink upward, leaving zone для footnotes.
+            // Footnote per-page bottom mode. Reduce bottomY so that
+            // body content shrinks upward, leaving a zone for footnotes.
             $context->footnoteReserveBottomPt = $section->footnoteBottomReservedPt;
             $context->pageFootnoteStart = count($context->footnotes);
             if ($section->footnoteBottomReservedPt !== null) {
@@ -291,7 +284,7 @@ final class Engine
             }
 
             $sectionStartIdx = count($pdf->pages()) - 1;
-            // Render header/footer на новой first page section'а.
+            // Render header/footer on the section's new first page.
             $this->renderHeaderFooter($context);
 
             foreach ($section->body as $block) {
@@ -299,22 +292,22 @@ final class Engine
             }
 
             if ($section->footnoteBottomReservedPt !== null) {
-                // Phase 222: flush last page's footnotes at its bottom.
+                // Flush last page's footnotes at its bottom.
                 $this->renderPageBottomFootnotes($context);
                 $context->footnotes = [];
-                // Restore bottomY (next section может не иметь reservation).
+                // Restore bottomY (next section may not have a reservation).
                 $context->bottomY -= $section->footnoteBottomReservedPt;
             } elseif ($context->footnotes !== []) {
-                // Phase 40: emit collected endnotes per section (если есть).
+                // Emit collected endnotes per section (if any).
                 $this->renderEndnotes($context);
                 $context->footnotes = [];
             }
             $sectionPageRanges[$idx] = [$sectionStartIdx, count($pdf->pages()) - 1];
         }
 
-        // Phase 157: watermark post-pass — draw watermarks ON TOP of body
-        // content на каждой странице section'а. PDF z-order: позже = выше,
-        // так что watermark appended после body commands appears OVER body.
+        // Watermark post-pass — draw watermarks ON TOP of body
+        // content on every page of the section. PDF z-order: later = above,
+        // so a watermark appended after body commands appears OVER the body.
         $allPages = $pdf->pages();
         foreach ($sections as $idx => $section) {
             if (! $section->hasWatermark()) {
@@ -363,15 +356,15 @@ final class Engine
     }
 
     /**
-     * Phase 69: Math expression block.
+     * Math expression block.
      */
     private function renderMathExpression(MathExpression $math, LayoutContext $ctx): void
     {
         $ctx->cursorY -= $math->spaceBeforePt;
 
-        // Phase 96: parse как multi-line — split on \\\\.
+        // Parse as multi-line — split on \\\\.
         $rows = \Dskripchenko\PhpPdf\Math\MathRenderer::parseLines($math->tex);
-        // Phase 173: custom font family if specified.
+        // Custom font family if specified.
         $font = $this->defaultFont ?? $this->fallbackStandard;
         if ($math->fontFamily !== null && $this->resolver !== null) {
             $resolved = $this->resolver->resolve($math->fontFamily);
@@ -399,8 +392,8 @@ final class Engine
     }
 
     /**
-     * Phase 61: Heading — paragraph с auto-styled bold/larger font;
-     * в tagged PDF mode emits как /H1.../H6 struct element.
+     * Heading — paragraph with auto-styled bold/larger font;
+     * in tagged PDF mode emits as /H1.../H6 struct element.
      */
     private function renderHeading(Heading $h, LayoutContext $ctx): void
     {
@@ -411,7 +404,7 @@ final class Engine
             $ctx->currentPage->beginMarkedContent('H'.$h->level, $mcid);
         }
 
-        // Phase 231: register named destination if heading has anchor.
+        // Register named destination if heading has an anchor.
         // Position = current cursor (top of heading line).
         if ($h->anchor !== null && $h->anchor !== '') {
             $ctx->pdf->registerDestination(
@@ -429,7 +422,7 @@ final class Engine
                 spaceAfterPt: 6.0,
             );
 
-        // Wrap children с bold + size.
+        // Wrap children with bold + size.
         $boldedChildren = [];
         foreach ($h->children as $child) {
             if ($child instanceof Run) {
@@ -450,24 +443,24 @@ final class Engine
     }
 
     /**
-     * Phase 61: Internal helper — render Paragraph БЕЗ wrapping в tagged
-     * BDC/EMC (используется renderHeading что управляет tagging сам).
+     * Internal helper — render Paragraph WITHOUT wrapping in tagged
+     * BDC/EMC (used by renderHeading which manages tagging itself).
      */
     private function renderParagraphNoTag(Paragraph $p, LayoutContext $ctx): void
     {
         $wasTagged = $ctx->pdf->isTagged();
-        // Temporarily mask tagged mode чтобы renderParagraph не emit'нул /P.
-        // Self-tracked через property doesn't exist; use reflection-free
-        // approach: swap pdf'а field? Это инвазивно. Simpler: emit raw
+        // Temporarily mask tagged mode so renderParagraph does not emit /P.
+        // Self-tracked through a property doesn't exist; use a reflection-free
+        // approach: swap pdf's field? That would be invasive. Simpler: emit raw
         // operators directly.
-        // Workaround — flag через context (mark current paragraph as already-tagged).
+        // Workaround — flag via context (mark current paragraph as already-tagged).
         $ctx->skipParagraphTag = true;
         $this->renderParagraph($p, $ctx);
         $ctx->skipParagraphTag = false;
     }
 
     /**
-     * Phase 55: Donut chart — pie с inner hole.
+     * Donut chart — pie with inner hole.
      */
     private function renderDonutChart(DonutChart $dc, LayoutContext $ctx): void
     {
@@ -550,7 +543,7 @@ final class Engine
     }
 
     /**
-     * Phase 60: Area chart — line с filled regions. Stacked mode сcrolls
+     * Area chart — line with filled regions. Stacked mode accumulates
      * values from previous series.
      */
     private function renderAreaChart(AreaChart $ac, LayoutContext $ctx): void
@@ -617,7 +610,7 @@ final class Engine
         if ($maxValue <= 0) {
             $maxValue = 1.0;
         }
-        // Phase 68: yMax override.
+        // yMax override.
         if ($ac->yMax !== null) {
             $maxValue = $ac->yMax;
         }
@@ -640,7 +633,7 @@ final class Engine
             }
         }
 
-        // Phase 64: grid lines.
+        // Grid lines.
         if ($ac->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -674,7 +667,7 @@ final class Engine
             }
         }
 
-        // Build series y-tops; для stacked — cumulative bottoms.
+        // Build series y-tops; for stacked — cumulative bottoms.
         $cumulativeBottoms = array_fill(0, $n, $plotBottom);
         foreach ($ac->series as $idx => $s) {
             $color = $s['color'] ?? $defaultColors[$idx % count($defaultColors)];
@@ -700,7 +693,7 @@ final class Engine
             }
             $ctx->currentPage->fillPolygon($poly, $r, $g, $b);
 
-            // Stroke the top line чтобы reinforce border.
+            // Stroke the top line to reinforce border.
             $ctx->currentPage->strokePolyline($topPoints, 1.0, $r * 0.7, $g * 0.7, $b * 0.7);
 
             if ($ac->stacked) {
@@ -720,7 +713,7 @@ final class Engine
     }
 
     /**
-     * Phase 55: Scatter chart — discrete points, no connecting lines.
+     * Scatter chart — discrete points, no connecting lines.
      */
     private function renderScatterChart(ScatterChart $sc, LayoutContext $ctx): void
     {
@@ -790,7 +783,7 @@ final class Engine
             }
         }
 
-        // Phase 71: grid lines.
+        // Grid lines.
         if ($sc->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -799,7 +792,7 @@ final class Engine
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotLeft, $plotTop, 0.5, 0.4, 0.4, 0.4);
         $ctx->currentPage->strokeLine($plotLeft, $plotBottom, $plotRight, $plotBottom, 0.5, 0.4, 0.4, 0.4);
 
-        // Axis labels (min + max для X, max для Y).
+        // Axis labels (min + max for X, max for Y).
         $this->chartText($ctx->currentPage, $this->formatChartNumber($xMin),
             $plotLeft, $plotBottom - $sc->axisLabelSizePt - 2, $sc->axisLabelSizePt);
         $xMaxLabel = $this->formatChartNumber($xMax);
@@ -838,7 +831,7 @@ final class Engine
     }
 
     /**
-     * Phase 52: SVG block — delegates SvgRenderer для translation
+     * SVG block — delegates SvgRenderer for translating
      * SVG primitives → PDF native paths.
      */
     private function renderSvgElement(SvgElement $svg, LayoutContext $ctx): void
@@ -862,7 +855,7 @@ final class Engine
     }
 
     /**
-     * Phase 51: Grouped bar chart — N bars per label, side-by-side.
+     * Grouped bar chart — N bars per label, side-by-side.
      */
     private function renderGroupedBarChart(GroupedBarChart $gbc, LayoutContext $ctx): void
     {
@@ -934,7 +927,7 @@ final class Engine
             $maxValue = 1.0;
         }
 
-        // Phase 71: grid lines.
+        // Grid lines.
         if ($gbc->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -953,7 +946,7 @@ final class Engine
         $nLabels = count($gbc->bars);
         $nSeries = count($gbc->seriesNames);
         $slotW = $plotW / max($nLabels, 1);
-        $groupPadding = 0.2; // 20% horizontal gap между groups.
+        $groupPadding = 0.2; // 20% horizontal gap between groups.
         $groupW = $slotW * (1 - $groupPadding);
         $barW = $groupW / $nSeries;
 
@@ -993,7 +986,7 @@ final class Engine
     }
 
     /**
-     * Phase 54: Stacked bar chart — segments stacked vertically per category.
+     * Stacked bar chart — segments stacked vertically per category.
      */
     private function renderStackedBarChart(StackedBarChart $sbc, LayoutContext $ctx): void
     {
@@ -1052,7 +1045,7 @@ final class Engine
             }
         }
 
-        // Compute max stacked total per category для scale.
+        // Compute max stacked total per category for scale.
         $maxTotal = 0.0;
         foreach ($sbc->bars as $bar) {
             $sum = 0.0;
@@ -1067,7 +1060,7 @@ final class Engine
             $maxTotal = 1.0;
         }
 
-        // Phase 71: grid lines.
+        // Grid lines.
         if ($sbc->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -1082,7 +1075,7 @@ final class Engine
             : mb_strlen($maxLabel, 'UTF-8') * $sbc->axisLabelSizePt * 0.5;
         $this->chartText($ctx->currentPage, $maxLabel, $plotLeft - $maxLabelW - 2, $plotTop - $sbc->axisLabelSizePt * 0.5, $sbc->axisLabelSizePt);
 
-        // Bars — каждый category = stacked segments.
+        // Bars — each category = stacked segments.
         $nLabels = count($sbc->bars);
         $slotW = $plotW / max($nLabels, 1);
         $gapRatio = 0.3;
@@ -1126,7 +1119,7 @@ final class Engine
     }
 
     /**
-     * Phase 51: Multi-series line chart.
+     * Multi-series line chart.
      */
     private function renderMultiLineChart(MultiLineChart $mlc, LayoutContext $ctx): void
     {
@@ -1196,7 +1189,7 @@ final class Engine
             }
         }
 
-        // Phase 71: grid lines.
+        // Grid lines.
         if ($mlc->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -1258,7 +1251,7 @@ final class Engine
     }
 
     /**
-     * Phase 45: Line chart — strokePolyline через data points + axes.
+     * Line chart — strokePolyline through data points + axes.
      */
     private function renderLineChart(LineChart $lc, LayoutContext $ctx): void
     {
@@ -1304,12 +1297,12 @@ final class Engine
         if ($maxValue <= 0) {
             $maxValue = 1.0;
         }
-        // Phase 68: yMax override.
+        // yMax override.
         if ($lc->yMax !== null) {
             $maxValue = $lc->yMax;
         }
 
-        // Phase 64: grid lines.
+        // Grid lines.
         if ($lc->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -1337,7 +1330,7 @@ final class Engine
             $y = $plotBottom + ($p['value'] / $maxValue) * $plotH;
             $coords[] = [$x, $y];
 
-            // Label под x-axis.
+            // Label below x-axis.
             $label = $p['label'];
             $labelW = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $lc->axisLabelSizePt))->widthPt($label)
@@ -1350,7 +1343,7 @@ final class Engine
             }
         }
 
-        // Phase 98: smoothed (Catmull-Rom → cubic Bezier) или straight polyline.
+        // Smoothed (Catmull-Rom → cubic Bezier) or straight polyline.
         if ($lc->smoothed && count($coords) >= 2) {
             $commands = self::catmullRomToBezierPath($coords);
             $ctx->currentPage->emitPath(
@@ -1363,7 +1356,7 @@ final class Engine
             $ctx->currentPage->strokePolyline($coords, 1.5, $lr, $lg, $lb);
         }
 
-        // Markers (filled small rects по точкам — fast вместо circles).
+        // Markers (filled small rects at points — fast instead of circles).
         if ($lc->showMarkers) {
             foreach ($coords as $c) {
                 $ctx->currentPage->fillRect($c[0] - 1.5, $c[1] - 1.5, 3, 3, $lr, $lg, $lb);
@@ -1380,8 +1373,7 @@ final class Engine
     }
 
     /**
-     * Phase 45: Pie chart — slices через polygon approximation (60 segments
-     * per full circle scaled to slice angle).
+     * Pie chart — slices via Bezier arcs (with polygon fallback historically).
      */
     private function renderPieChart(PieChart $pc, LayoutContext $ctx): void
     {
@@ -1389,7 +1381,7 @@ final class Engine
         $totalW = min($pc->sizePt, $ctx->contentWidth);
         $totalH = $totalW;
 
-        // Legend takes extra horizontal space к right if shown.
+        // Legend takes extra horizontal space to the right if shown.
         $legendW = $pc->showLegend ? 80.0 : 0;
         $legendW = min($legendW, max(0, $ctx->contentWidth - $totalW));
         $blockW = $totalW + $legendW;
@@ -1426,12 +1418,12 @@ final class Engine
         $colorWheel = ['4287f5', 'f56242', '42f55a', 'f5e042', 'b042f5', '42f5e0', 'f542a7', '8c8c8c'];
         $angle = -M_PI / 2; // start at top.
 
-        // Phase 166: cubic Bezier arc rendering вместо polygon approximation.
-        // Each slice как PDF path: M center → L arc-start → C ... (Bezier arcs)
+        // Cubic Bezier arc rendering instead of polygon approximation.
+        // Each slice as a PDF path: M center → L arc-start → C ... (Bezier arcs)
         // → close → fill. Sub-arc cap 90° for accuracy. k = 4/3*tan(θ/4)*r.
         foreach ($pc->slices as $idx => $slice) {
             $sliceAngle = ($slice['value'] / $total) * 2 * M_PI;
-            // Phase 167: explode offset — sliceCx/Cy shifted radially при slice.explode set.
+            // Explode offset — sliceCx/Cy shifted radially when slice.explode is set.
             $explode = $slice['explode'] ?? false;
             $offsetFraction = is_float($explode) ? $explode : ($explode === true ? 0.08 : 0.0);
             $sliceCx = $cx;
@@ -1448,7 +1440,7 @@ final class Engine
                 ['M', $sliceCx, $sliceCy],
                 ['L', $arcStartX, $arcStartY],
             ];
-            // Subdivide slice angle на chunks ≤ 90°.
+            // Subdivide slice angle into chunks ≤ 90°.
             $subArcs = max(1, (int) ceil($sliceAngle / (M_PI / 2)));
             $perArc = $sliceAngle / $subArcs;
             $a0 = $angle;
@@ -1490,8 +1482,8 @@ final class Engine
             }
         }
 
-        // Phase 168: perimeter labels с leader lines. Для each slice большего
-        // чем minLabelAngleDeg, draw line из arc midpoint → outside + label.
+        // Perimeter labels with leader lines. For each slice larger
+        // than minLabelAngleDeg, draw a line from arc midpoint → outside + label.
         if ($pc->showPerimeterLabels) {
             $minAngleRad = deg2rad($pc->minLabelAngleDeg);
             $a2 = -M_PI / 2;
@@ -1509,7 +1501,7 @@ final class Engine
                 $x2 = $cx + cos($midAngle) * ($radius + 8);
                 $y2 = $cy + sin($midAngle) * ($radius + 8);
                 $ctx->currentPage->strokeLine($x1, $y1, $x2, $y2, 0.5, 0.4, 0.4, 0.4);
-                // Label position: extends к right side если cos>0, левее если <0.
+                // Label position: extends to the right side if cos>0, to the left if <0.
                 $labelText = (string) $slice['label'];
                 $labelW = $this->defaultFont !== null
                     ? (new TextMeasurer($this->defaultFont, $pc->perimeterLabelSizePt))->widthPt($labelText)
@@ -1526,8 +1518,8 @@ final class Engine
     }
 
     /**
-     * Phase 44: Bar chart rendering — fillRect для bars, line operators
-     * для axes, showText для labels + title.
+     * Bar chart rendering — fillRect for bars, line operators
+     * for axes, showText for labels + title.
      *
      * Layout (vertical bars):
      *  - Title at top (if set)
@@ -1554,7 +1546,7 @@ final class Engine
         // Reserve title strip at top, label strip at bottom.
         $titleStripH = $bc->title !== null ? $bc->titleSizePt + 4.0 : 0;
         $labelStripH = $bc->axisLabelSizePt + 4.0;
-        $axisLabelPaddingLeft = 32.0; // Reserve space для y-axis values.
+        $axisLabelPaddingLeft = 32.0; // Reserve space for y-axis values.
 
         $plotTop = $topY - $titleStripH;
         $plotBottom = $bottomY + $labelStripH;
@@ -1577,7 +1569,7 @@ final class Engine
             }
         }
 
-        // Compute max value для scaling.
+        // Compute max value for scaling.
         $maxValue = 0.0;
         foreach ($bc->bars as $bar) {
             if ($bar['value'] > $maxValue) {
@@ -1587,13 +1579,13 @@ final class Engine
         if ($maxValue <= 0) {
             $maxValue = 1.0;
         }
-        // Phase 68: optional explicit y-axis range overrides auto-max.
+        // Optional explicit y-axis range overrides auto-max.
         if ($bc->yMax !== null) {
             $maxValue = $bc->yMax;
         }
 
-        // Phase 64: grid lines (если enabled) drawn перед bars/lines чтобы
-        // не перекрывать data marks.
+        // Grid lines (if enabled) drawn before bars/lines so they do
+        // not overlap data marks.
         if ($bc->showGridLines) {
             $this->drawChartGridLines($ctx->currentPage, $plotLeft, $plotRight, $plotBottom, $plotTop);
         }
@@ -1642,7 +1634,7 @@ final class Engine
             }
         }
 
-        // Phase 70: axis titles.
+        // Axis titles.
         $this->drawChartAxisTitles(
             $ctx->currentPage, $bc->xAxisTitle, $bc->yAxisTitle, $bc->axisTitleSizePt,
             $plotLeft, $plotRight, $plotBottom, $plotTop,
@@ -1653,7 +1645,7 @@ final class Engine
     }
 
     /**
-     * Phase 70: draw axis titles. xTitle centered below x-axis labels;
+     * Draw axis titles. xTitle centered below x-axis labels;
      * yTitle rotated 90° counter-clockwise centered left of y-axis labels.
      */
     private function drawChartAxisTitles(
@@ -1682,8 +1674,8 @@ final class Engine
     }
 
     /**
-     * Phase 64: draw horizontal grid lines at 25/50/75% между plotBottom
-     * и plotTop. Light-gray semi-transparent — visual reference.
+     * Draw horizontal grid lines at 25/50/75% between plotBottom
+     * and plotTop. Light-gray semi-transparent — visual reference.
      */
     private function drawChartGridLines(\Dskripchenko\PhpPdf\Pdf\Page $page, float $plotLeft, float $plotRight, float $plotBottom, float $plotTop): void
     {
@@ -1695,7 +1687,7 @@ final class Engine
     }
 
     /**
-     * Phase 98: Convert Catmull-Rom spline через points → cubic Bezier
+     * Convert a Catmull-Rom spline through points to cubic Bezier
      * path commands. Endpoints virtually duplicated.
      *
      * Per pair (P_i, P_{i+1}), control points:
@@ -1737,7 +1729,7 @@ final class Engine
     }
 
     /**
-     * Phase 140: Draw chart label rotated by $angleRad. End-anchor convention:
+     * Draw chart label rotated by $angleRad. End-anchor convention:
      * label's natural right-end (in unrotated frame) lands at ($anchorX, $anchorY).
      * Caller computes label width up-front.
      */
@@ -1767,9 +1759,9 @@ final class Engine
     }
 
     /**
-     * Phase 43+46: AcroForm field widget. Reserves space на странице,
-     * рисует visual border (или circles для radio buttons), регистрирует
-     * field annotation(s) на page.
+     * AcroForm field widget. Reserves space on the page,
+     * draws a visual border (or circles for radio buttons), registers
+     * field annotation(s) on the page.
      */
     private function renderFormField(FormField $field, LayoutContext $ctx): void
     {
@@ -1788,8 +1780,8 @@ final class Engine
         $x = $ctx->leftX;
         $y = $ctx->cursorY - $h;
 
-        // Visual hint: thin border (большинство readers оverride'ит это
-        // нативным widget rendering, но fallback border важен для print).
+        // Visual hint: thin border (most readers override this with
+        // native widget rendering, but the fallback border matters for print).
         $ctx->currentPage->strokeRect($x, $y, $w, $h, 0.5, 0.6, 0.6, 0.6);
 
         $ctx->currentPage->addFormField(
@@ -1818,8 +1810,8 @@ final class Engine
     }
 
     /**
-     * Phase 46: Radio button group. Каждый option получает свой widget
-     * (small circle outline), но все widgets share group's /T name.
+     * Radio button group. Each option gets its own widget
+     * (small circle outline), but all widgets share the group's /T name.
      * Layout: vertical stack, ~16pt each row.
      */
     private function renderRadioGroup(FormField $field, LayoutContext $ctx): void
@@ -1835,8 +1827,8 @@ final class Engine
             $rowY -= $rowHeight;
             $bx = $ctx->leftX;
             $by = $rowY + ($rowHeight - $widgetSize) / 2;
-            // Visual: circle outline (approx через square — many readers
-            // render radio как proper circle).
+            // Visual: circle outline (approx via square — many readers
+            // render radio as a proper circle).
             $ctx->currentPage->strokeRect($bx, $by, $widgetSize, $widgetSize, 0.5, 0.4, 0.4, 0.4);
             // If checked, fill inner.
             if ($optionLabel === $field->defaultValue) {
@@ -1874,24 +1866,25 @@ final class Engine
 
     private function forcePageBreak(LayoutContext $ctx): void
     {
-        // Phase 155: re-entrance guard. Если уже рендерим header/footer и
-        // оттуда block try'нул forcePageBreak — это overflow в header zone.
-        // Don't recurse — truncate header content вместо infinite loop.
+        // Re-entrance guard. If we are already rendering header/footer and
+        // a block from there tries forcePageBreak — that is overflow in the
+        // header zone. Don't recurse — truncate header content instead of
+        // an infinite loop.
         if ($ctx->inHeaderFooterRender) {
             $ctx->cursorY = $ctx->bottomY;
 
             return;
         }
 
-        // Phase 222: per-page footnote bottom — flush current page's
-        // footnotes до switching pages.
+        // Per-page footnote bottom — flush current page's
+        // footnotes before switching pages.
         if ($ctx->footnoteReserveBottomPt !== null) {
             $this->renderPageBottomFootnotes($ctx);
             $ctx->pageFootnoteStart = count($ctx->footnotes);
         }
 
-        // Phase 39: внутри ColumnSet overflow → next column, не page break,
-        // пока не исчерпаны columns.
+        // Inside ColumnSet, overflow → next column, not page break,
+        // until columns are exhausted.
         if ($ctx->columnCount > 1 && $ctx->currentColumn + 1 < $ctx->columnCount) {
             $ctx->currentColumn++;
             $this->applyColumnGeometry($ctx);
@@ -1900,9 +1893,9 @@ final class Engine
             return;
         }
 
-        // Phase 34: новая page внутри section должна сохранить её
-        // PageSetup (paper, orientation, customDimensions), даже если
-        // у document есть другая default orientation.
+        // A new page inside a section must preserve its PageSetup
+        // (paper, orientation, customDimensions) even if the document has
+        // a different default orientation.
         $setup = $ctx->pageSetup;
         $ctx->currentPage = $ctx->pdf->addPage(
             $setup->paperSize,
@@ -1913,8 +1906,8 @@ final class Engine
         $ctx->cursorY = $ctx->topY;
         $this->renderHeaderFooter($ctx);
 
-        // Phase 39: после page break внутри ColumnSet — reset column 0
-        // и применить column geometry на новой page.
+        // After page break inside ColumnSet — reset to column 0
+        // and apply column geometry on the new page.
         if ($ctx->columnCount > 1) {
             $ctx->currentColumn = 0;
             $this->applyColumnGeometry($ctx);
@@ -1922,8 +1915,8 @@ final class Engine
     }
 
     /**
-     * Phase 39: устанавливает leftX/contentWidth для текущей column
-     * (на основе columnOrigin + columnCount + columnGap + currentColumn).
+     * Sets leftX/contentWidth for the current column
+     * (based on columnOrigin + columnCount + columnGap + currentColumn).
      */
     private function applyColumnGeometry(LayoutContext $ctx): void
     {
@@ -1938,13 +1931,13 @@ final class Engine
     }
 
     /**
-     * Phase 39: ColumnSet block — рендер body в N columns.
+     * ColumnSet block — render body in N columns.
      */
     private function renderColumnSet(ColumnSet $cs, LayoutContext $ctx): void
     {
         $ctx->cursorY -= $cs->spaceBeforePt;
         if ($cs->columnCount <= 1) {
-            // Degenerate: 1 column — просто render body inline.
+            // Degenerate: 1 column — simply render body inline.
             foreach ($cs->body as $block) {
                 $this->renderBlock($block, $ctx);
             }
@@ -1974,9 +1967,9 @@ final class Engine
             $this->renderBlock($block, $ctx);
         }
 
-        // Restore outer state. cursorY = bottom most позиция (для simplicity
-        // используем bottom of column 0 — рассматриваем как column-set
-        // занимает full vertical span).
+        // Restore outer state. cursorY = bottom most position (for simplicity
+        // we use the bottom of column 0 — treating the column-set as
+        // occupying the full vertical span).
         $ctx->columnCount = $savedColumnCount;
         $ctx->currentColumn = $savedCurrentColumn;
         $ctx->columnGapPt = $savedColumnGap;
@@ -1984,16 +1977,16 @@ final class Engine
         $ctx->columnOriginContentWidth = $savedOriginContentWidth;
         $ctx->leftX = $savedLeftX;
         $ctx->contentWidth = $savedContentWidth;
-        // cursorY — на text inside-column'е. Если внутри columns был page
-        // break — наблюдается cursorY новой page'а. Используем как есть
-        // (последующий content начинается ниже последней column'ы).
+        // cursorY — at text inside-column. If a page break occurred inside
+        // columns, we observe the cursorY of the new page. We use it as-is
+        // (subsequent content starts below the last column).
         $ctx->cursorY -= $cs->spaceAfterPt;
     }
 
     /**
-     * Применяет mirrored/gutter margins для current page'а (вызывается
-     * после создания new page'а). cursorY/topY/bottomY не меняются —
-     * только leftX и contentWidth.
+     * Applies mirrored/gutter margins for the current page (called after
+     * a new page is created). cursorY/topY/bottomY are not changed —
+     * only leftX and contentWidth.
      */
     private function applyPerPageMargins(LayoutContext $ctx): void
     {
@@ -2003,13 +1996,13 @@ final class Engine
     }
 
     /**
-     * Renders header в top-margin area и footer в bottom-margin area
-     * текущей page. Вызывается при каждом создании новой page.
+     * Renders header in the top-margin area and footer in the bottom-margin
+     * area of the current page. Called whenever a new page is created.
      *
      * Header bounds: leftX..leftX+contentWidth × [pageHeight - topMargin
-     * .. pageHeight]. Cursor стартует прямо под top edge.
+     * .. pageHeight]. Cursor starts just below the top edge.
      * Footer bounds: leftX..leftX+contentWidth × [0 .. bottomMargin].
-     * Cursor стартует sufficiently below content area.
+     * Cursor starts sufficiently below the content area.
      */
     private function renderHeaderFooter(LayoutContext $ctx): void
     {
@@ -2018,9 +2011,9 @@ final class Engine
         }
         $section = $this->currentSection;
 
-        // Phase 86: PDF/UA — header/footer/watermark = /Artifact (excluded
-        // from struct tree / screen readers). Only emit если есть что
-        // рисовать.
+        // PDF/UA — header/footer/watermark = /Artifact (excluded
+        // from struct tree / screen readers). Only emit if there is
+        // anything to draw.
         $taggedPdf = $ctx->pdf->isTagged();
         $hasAnything = $section->hasWatermark()
             || $section->effectiveHeaderBlocksFor($this->currentPageNumber($ctx)) !== []
@@ -2034,10 +2027,10 @@ final class Engine
             $ctx->skipParagraphTag = true;
         }
 
-        // Phase 157: watermark переехал в post-pass рендера (Engine::renderWatermarksPostPass).
-        // mpdf-style: watermark поверх body content с opacity, не под — иначе
-        // прозрачные cells пропускают watermark поверх и он смешивается с
-        // текстом цвета фона. Сейчас здесь только header/footer rendering.
+        // Watermarks moved to a post-pass (Engine::renderWatermarksPostPass).
+        // mpdf-style: watermark over body content with opacity, not under —
+        // otherwise transparent cells let the watermark show through and it
+        // blends with background-color text. Only header/footer rendering here.
         $setup = $ctx->pageSetup;
         [$pageWidth, $pageHeight] = $setup->dimensions();
 
@@ -2045,11 +2038,11 @@ final class Engine
         $effectiveLeftX = $setup->leftXForPage($pageNum);
         $effectiveContentWidth = $setup->contentWidthPtForPage($pageNum);
 
-        // Phase 156: adaptive header/footer zones. mpdf-style behavior —
-        // если header/footer высота превышает margins.topPt/.bottomPt,
-        // расширить zone и сдвинуть body topY/bottomY. Иначе header rendered
+        // Adaptive header/footer zones (mpdf-style behavior) — if the
+        // header/footer height exceeds margins.topPt/.bottomPt, expand the
+        // zone and shift body topY/bottomY. Otherwise header is rendered
         // over body content (overlap visible).
-        $headerPaddingPt = 8.0;  // gap между header и body content
+        $headerPaddingPt = 8.0;  // gap between header and body content
         $footerPaddingPt = 8.0;
 
         $headerBlocks = $section->effectiveHeaderBlocksFor($pageNum);
@@ -2058,11 +2051,11 @@ final class Engine
             foreach ($headerBlocks as $block) {
                 $headerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
             }
-            // Header zone goes from pageHeight-4 (близко к top edge) вниз;
+            // Header zone goes from pageHeight-4 (close to top edge) down;
             // bottom of zone = pageHeight - max(margins.topPt, headerHeight + headerPaddingPt).
             $effectiveTopMargin = max($setup->margins->topPt, $headerHeight + $headerPaddingPt);
             $headerZoneBottomY = $pageHeight - $effectiveTopMargin + $headerPaddingPt / 2;
-            // Push body topY down если header overflowит default margin.
+            // Push body topY down if header overflows default margin.
             $adaptiveBodyTopY = $pageHeight - $effectiveTopMargin;
             if ($adaptiveBodyTopY < $ctx->topY) {
                 $ctx->topY = $adaptiveBodyTopY;
@@ -2093,11 +2086,11 @@ final class Engine
             foreach ($footerBlocks as $block) {
                 $footerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
             }
-            // Footer zone goes from y=margins.bottomPt up или больше если footer
-            // overflowит default bottom margin.
+            // Footer zone goes from y=margins.bottomPt up, or higher if footer
+            // overflows default bottom margin.
             $effectiveBottomMargin = max($setup->margins->bottomPt, $footerHeight + $footerPaddingPt);
             $footerZoneTopY = $effectiveBottomMargin - $footerPaddingPt / 2;
-            // Push body bottomY up если footer overflowит default margin.
+            // Push body bottomY up if footer overflows default margin.
             if ($effectiveBottomMargin > $ctx->bottomY) {
                 $ctx->bottomY = $effectiveBottomMargin;
             }
@@ -2118,7 +2111,7 @@ final class Engine
             }
         }
 
-        // Phase 86: close /Artifact + restore tag suppression.
+        // Close /Artifact + restore tag suppression.
         if ($artifactOpen) {
             $ctx->currentPage->endMarkedContent();
             $ctx->skipParagraphTag = $savedSkip;
@@ -2126,11 +2119,11 @@ final class Engine
     }
 
     /**
-     * Renders diagonal watermark на текущей page. Centered, 72pt size,
+     * Renders diagonal watermark on the current page. Centered, 72pt size,
      * angle ≈ -45° (down-right), light-gray (0.88 0.88 0.88).
      *
-     * Text positioned relative к center page'а; rotation matrix вращает
-     * around этой точки.
+     * Text positioned relative to page center; rotation matrix rotates
+     * around that point.
      */
     private function renderWatermark(string $text, ?float $opacity, LayoutContext $ctx): void
     {
@@ -2138,16 +2131,16 @@ final class Engine
         [$pageWidth, $pageHeight] = $setup->dimensions();
 
         $sizePt = 72;
-        // Estimate text width — для positioning'а centre.
+        // Estimate text width — for centering positioning.
         $textWidth = $this->defaultFont !== null
             ? (new TextMeasurer($this->defaultFont, $sizePt))->widthPt($text)
             : mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
 
-        // Хотим чтобы центр rotated text оказался в центре page'а.
-        // Tm-матрица применяется к origin'у (0,0) → перемещает к (x,y).
-        // Поскольку текст рисуется от baseline left, для центрирования:
+        // We want the center of the rotated text to land at page center.
+        // The Tm matrix applies to origin (0,0) → moves it to (x,y).
+        // Since text is drawn from baseline left, for centering:
         // start position = pageCenter - rotatedHalfWidth × cosθ + ...
-        // Для простоты: размещаем baseline left at offset от центра.
+        // For simplicity: place baseline left at an offset from center.
         $angleRad = -M_PI / 4; // -45°
         $halfWidth = $textWidth / 2;
         $cx = $pageWidth / 2 - $halfWidth * cos($angleRad);
@@ -2167,13 +2160,13 @@ final class Engine
     }
 
     /**
-     * Phase 157: draw both image и text watermarks on a specific Page.
-     * Called в post-pass после рендера body content, чтобы watermark
-     * оказался ABOVE контента (mpdf-style stamp).
+     * Draw both image and text watermarks on a specific Page.
+     * Called in a post-pass after body content rendering so that the
+     * watermark lands ABOVE the content (mpdf-style stamp).
      */
     private function renderWatermarksOnPage(\Dskripchenko\PhpPdf\Section $section, \Dskripchenko\PhpPdf\Pdf\Page $page): void
     {
-        // Image first (если есть оба, text лежит поверх image).
+        // Image first (if both, text lies over image).
         if ($section->hasImageWatermark()) {
             $this->renderWatermarkImageOnPage(
                 $section->watermarkImage,
@@ -2239,12 +2232,12 @@ final class Engine
     }
 
     /**
-     * Phase 30: Image watermark — centered на странице, scaled to
-     * $widthPt с сохранением aspect ratio. null widthPt → 50% page width.
+     * Image watermark — centered on the page, scaled to $widthPt
+     * preserving aspect ratio. null widthPt → 50% page width.
      *
-     * Прозрачность не применяется автоматически: рекомендуется передавать
-     * заранее подготовленный PNG с alpha-каналом или светлый JPEG, иначе
-     * водяной знак закроет контент.
+     * Transparency is not applied automatically: pass a pre-prepared PNG
+     * with an alpha channel or a light JPEG, otherwise the watermark will
+     * cover the content.
      */
     private function renderWatermarkImage(
         \Dskripchenko\PhpPdf\Image\PdfImage $image,
@@ -2270,8 +2263,8 @@ final class Engine
     }
 
     /**
-     * Physical 1-based index текущей page'и (для mirrored margins +
-     * first-page logic). НЕ учитывает firstPageNumber offset.
+     * Physical 1-based index of the current page (for mirrored margins +
+     * first-page logic). Does NOT account for the firstPageNumber offset.
      */
     private function currentPageNumber(LayoutContext $ctx): int
     {
@@ -2285,8 +2278,8 @@ final class Engine
     }
 
     /**
-     * Displayed page number для Field PAGE — с учётом pageSetup.
-     * firstPageNumber offset.
+     * Displayed page number for Field PAGE — accounting for the
+     * pageSetup firstPageNumber offset.
      */
     private function displayedPageNumber(LayoutContext $ctx): int
     {
@@ -2307,7 +2300,7 @@ final class Engine
 
     private function renderHorizontalRule(LayoutContext $ctx): void
     {
-        // Spacing вокруг hr ~6pt сверху и снизу.
+        // Spacing around hr ~6pt above and below.
         $ctx->cursorY -= 6;
         $this->ensureRoomFor($ctx, 1);
         $ctx->currentPage->strokeRect(
@@ -2319,22 +2312,14 @@ final class Engine
     }
 
     /**
-     * Block-level image rendering — applying alignment, sizing с aspect
-     * ratio, page-overflow detection. Image-as-inline (text wrap) — Phase L.
-     *
-     * Если image слишком high для current page → forcePageBreak'аем,
-     * затем рендерим вверху новой page. Если image больше всей contentHeight'а
-     * (i.e. не fits даже в empty page) — скейлим down пропорционально.
-     */
-    /**
-     * Phase 32: Code 128 barcode block.
+     * Linear barcode block (Code 128 and others).
      *
      * Algorithm:
-     *  1. Encode value через Code128Encoder → list<bool> modules (с quiet
-     *     zone).
+     *  1. Encode value via the appropriate encoder → list<bool> modules
+     *     (with quiet zone).
      *  2. Module width = barcodeWidth / moduleCount. Default barcode width
-     *     = moduleCount × 1pt (rough; обычно нужен tweak в caller'е).
-     *  3. Draw bars: каждый contiguous run of black modules → fillRect.
+     *     = moduleCount × 1pt (rough; typically needs a tweak in the caller).
+     *  3. Draw bars: each contiguous run of black modules → fillRect.
      *  4. Optional caption under bars (human-readable).
      */
     private function renderBarcode(Barcode $bc, LayoutContext $ctx): void
@@ -2353,14 +2338,14 @@ final class Engine
             return;
         }
 
-        // Phase 124: PDF417 — stacked linear (multiple rows of bars).
+        // PDF417 — stacked linear (multiple rows of bars).
         if ($bc->format === \Dskripchenko\PhpPdf\Element\BarcodeFormat::Pdf417) {
             $this->renderPdf417Barcode($bc, $ctx);
 
             return;
         }
 
-        // Encode по format'у (linear barcodes only — QR обрабатывается выше).
+        // Encode by format (linear barcodes only — QR handled above).
         [$modules, $captionText] = match ($bc->format) {
             \Dskripchenko\PhpPdf\Element\BarcodeFormat::Code128 => [
                 (new \Dskripchenko\PhpPdf\Barcode\Code128Encoder($bc->value))->modulesWithQuietZone(10),
@@ -2443,14 +2428,14 @@ final class Engine
         $totalHeight = $barsHeight + $captionHeight;
         $this->ensureRoomFor($ctx, $totalHeight);
 
-        // X-position по alignment.
+        // X-position by alignment.
         $blockX = match ($bc->alignment) {
             Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $totalWidth) / 2,
             Alignment::End => $ctx->leftX + $ctx->contentWidth - $totalWidth,
             default => $ctx->leftX,
         };
 
-        // Draw bars: collapse contiguous black runs в single fillRect.
+        // Draw bars: collapse contiguous black runs into a single fillRect.
         $yBottom = $ctx->cursorY - $barsHeight;
         $runStart = null;
         for ($i = 0; $i < $moduleCount; $i++) {
@@ -2475,9 +2460,9 @@ final class Engine
             );
         }
 
-        // Caption (human-readable). Используем base-14 Helvetica либо
-        // embedded font если задан. Для EAN-13/UPC-A caption — canonical
-        // form с checksum digit.
+        // Caption (human-readable). Use base-14 Helvetica or the
+        // embedded font when set. For EAN-13/UPC-A caption — canonical
+        // form with checksum digit.
         if ($bc->showText) {
             $captionY = $yBottom - $bc->textSizePt - 1.0;
             $captionWidth = $this->defaultFont !== null
@@ -2503,8 +2488,8 @@ final class Engine
     }
 
     /**
-     * Phase 104: DataMatrix 2D barcode (ECC 200). Modules — 2D bool matrix;
-     * рендерим through общий 2D matrix path с quiet zone 1 module.
+     * DataMatrix 2D barcode (ECC 200). Modules — 2D bool matrix;
+     * rendered through the shared 2D matrix path with quiet zone 1 module.
      */
     private function renderDataMatrixBarcode(Barcode $bc, LayoutContext $ctx): void
     {
@@ -2516,7 +2501,7 @@ final class Engine
     }
 
     /**
-     * Phase 125: Aztec compact (1-4 layers, 15..27 squared).
+     * Aztec compact (1-4 layers, 15..27 squared).
      */
     private function renderAztecBarcode(\Dskripchenko\PhpPdf\Element\Barcode $bc, LayoutContext $ctx): void
     {
@@ -2528,7 +2513,7 @@ final class Engine
     }
 
     /**
-     * Phase 124: PDF417 stacked-linear render. Каждый logical row повторяется
+     * PDF417 stacked-linear render. Each logical row is repeated
      * vertically rowHeight times (default 3 modules — ISO recommends 3).
      */
     private function renderPdf417Barcode(\Dskripchenko\PhpPdf\Element\Barcode $bc, LayoutContext $ctx): void
@@ -2537,7 +2522,7 @@ final class Engine
         $matrix = $enc->modules();
         $logicalRows = count($matrix);
         $cols = count($matrix[0]);
-        $rowHeightModules = 3; // ISO §5.3.2 рекомендует rowHeight ≥ 3 × X-dim.
+        $rowHeightModules = 3; // ISO §5.3.2 recommends rowHeight ≥ 3 × X-dim.
         $quietZoneH = 2;
         $quietZoneV = 2;
 
@@ -2547,7 +2532,7 @@ final class Engine
         $totalWidthPt = $bc->widthPt ?? ($totalModuleCols * 0.5);
         $totalWidthPt = min($totalWidthPt, $ctx->contentWidth);
         $moduleWidth = $totalWidthPt / $totalModuleCols;
-        // Aspect ratio преобразуется в module height = X-dim units.
+        // Aspect ratio converted to module height = X-dim units.
         $moduleHeight = $moduleWidth;
         $totalHeightPt = $totalModuleRows * $moduleHeight;
 
@@ -2562,7 +2547,7 @@ final class Engine
 
         $yTop = $ctx->cursorY;
         $matrixOffsetX = $quietZoneH * $moduleWidth;
-        // Каждая logical row рендерится rowHeight раз (vertical replication).
+        // Each logical row is rendered rowHeight times (vertical replication).
         for ($lr = 0; $lr < $logicalRows; $lr++) {
             for ($vr = 0; $vr < $rowHeightModules; $vr++) {
                 $globalRow = $lr * $rowHeightModules + $vr;
@@ -2609,7 +2594,7 @@ final class Engine
     }
 
     /**
-     * Phase 36+104: общий 2D matrix render (QR + DataMatrix).
+     * Shared 2D matrix render (QR + DataMatrix).
      *
      * @param  list<list<bool>>  $matrix
      */
@@ -2676,9 +2661,9 @@ final class Engine
     }
 
     /**
-     * Phase 36: QR code 2D barcode. Modules — 2D bool matrix; рендерим
-     * как grid of black squares. Quiet zone (4 modules) добавляется
-     * вокруг матрицы.
+     * QR code 2D barcode. Modules — 2D bool matrix; rendered
+     * as a grid of black squares. Quiet zone (4 modules) is added
+     * around the matrix.
      */
     private function renderQrBarcode(Barcode $bc, LayoutContext $ctx): void
     {
@@ -2689,7 +2674,7 @@ final class Engine
         $gridSize = $matrixSize + 2 * $quietZone;
 
         // 2D — totalWidth = totalHeight. widthPt determines size; heightPt
-        // ignored для QR (preserved для caption layout).
+        // ignored for QR (preserved for caption layout).
         $totalSizePt = $bc->widthPt ?? 80.0;
         $totalSizePt = min($totalSizePt, $ctx->contentWidth);
         $moduleSize = $totalSizePt / $gridSize;
@@ -2705,10 +2690,10 @@ final class Engine
         };
 
         $yTop = $ctx->cursorY;
-        // QR top-left corner в PDF (origin = bottom-left): yTop minus
+        // QR top-left corner in PDF (origin = bottom-left): yTop minus
         // (quietZone modules) for the actual matrix region.
-        // Draw matrix row by row; для каждой row collapse contiguous black
-        // modules в single horizontal fillRect для efficiency.
+        // Draw matrix row by row; for each row collapse contiguous black
+        // modules into a single horizontal fillRect for efficiency.
         $matrixOffset = $quietZone * $moduleSize;
         for ($row = 0; $row < $matrixSize; $row++) {
             $rowYBottom = $yTop - $matrixOffset - ($row + 1) * $moduleSize;
@@ -2736,7 +2721,7 @@ final class Engine
             }
         }
 
-        // Optional caption (default false для QR — традиционно нет text).
+        // Optional caption (default false for QR — traditionally no text).
         if ($bc->showText) {
             $captionY = $yTop - $totalSizePt - $bc->textSizePt - 1.0;
             $captionWidth = $this->defaultFont !== null
@@ -2762,9 +2747,9 @@ final class Engine
     }
 
     /**
-     * Phase 222: render current page's footnotes at page bottom (per-page mode).
+     * Render current page's footnotes at page bottom (per-page mode).
      *
-     * Saves cursorY, jumps к reserved zone Y, renders separator + numbered
+     * Saves cursorY, jumps to reserved zone Y, renders separator + numbered
      * footnotes, restores cursorY. Footnotes drawn from
      * `footnotes[pageFootnoteStart..end]`.
      */
@@ -2788,7 +2773,7 @@ final class Engine
         $zoneTop = $ctx->bottomY; // current adjusted bottomY = top of zone
         $zoneBottom = $zoneTop - $ctx->footnoteReserveBottomPt;
 
-        // Temporarily allow rendering в zone area: extend bottomY down.
+        // Temporarily allow rendering in zone area: extend bottomY down.
         $ctx->bottomY = $zoneBottom;
         $ctx->cursorY = $zoneTop;
 
@@ -2804,7 +2789,7 @@ final class Engine
         for ($idx = $start; $idx < count($ctx->footnotes); $idx++) {
             $marker = ($idx + 1).'. ';
             $p = new Paragraph([new Run($marker.$ctx->footnotes[$idx])]);
-            // Use renderBlock но avoid recursion на footnote rendering itself.
+            // Use renderBlock but avoid recursion on footnote rendering itself.
             $this->renderBlock($p, $ctx);
         }
 
@@ -2814,12 +2799,12 @@ final class Engine
     }
 
     /**
-     * Phase 40: Renders collected footnotes as endnotes-style block:
+     * Renders collected footnotes as an endnotes-style block:
      *  - 0.5pt horizontal rule separator
-     *  - "N. content" lines numbered по порядку collection
+     *  - "N. content" lines numbered by collection order
      *
-     * Rendered at end of section's body (после last block, перед switch
-     * на next section).
+     * Rendered at the end of section's body (after the last block, before
+     * switching to the next section).
      */
     private function renderEndnotes(LayoutContext $ctx): void
     {
@@ -2843,7 +2828,7 @@ final class Engine
     {
         $ctx->cursorY -= $img->spaceBeforePt;
 
-        // Phase 62: tagged PDF — wrap image в /Figure struct element с
+        // Tagged PDF — wrap image in /Figure struct element with
         // optional /Alt text.
         $taggedPdf = $ctx->pdf->isTagged();
         $mcid = null;
@@ -2854,7 +2839,7 @@ final class Engine
 
         [$widthPt, $heightPt] = $img->effectiveSizePt();
 
-        // Scale down если image больше content area по любой dimension.
+        // Scale down if image is larger than content area in any dimension.
         $maxWidth = $ctx->contentWidth;
         if ($widthPt > $maxWidth) {
             $ratio = $maxWidth / $widthPt;
@@ -2868,25 +2853,25 @@ final class Engine
             $heightPt *= $ratio;
         }
 
-        // Если не хватает места на текущей page → page break.
+        // If there is not enough space on the current page → page break.
         $this->ensureRoomFor($ctx, $heightPt);
 
-        // X-position по alignment'у.
+        // X-position by alignment.
         $x = match ($img->alignment) {
             Alignment::Center => $ctx->leftX + ($ctx->contentWidth - $widthPt) / 2,
             Alignment::End => $ctx->leftX + $ctx->contentWidth - $widthPt,
             default => $ctx->leftX,
         };
 
-        // Pdf coords: drawImage принимает (x, y, w, h), где y — bottom-left
-        // угол image'а (PDF Y-axis растёт вверх).
+        // PDF coords: drawImage takes (x, y, w, h), where y is the
+        // bottom-left corner of the image (PDF Y-axis grows upward).
         $y = $ctx->cursorY - $heightPt;
         $ctx->currentPage->drawImage($img->source, $x, $y, $widthPt, $heightPt);
 
         $ctx->cursorY -= $heightPt;
         $ctx->cursorY -= $img->spaceAfterPt;
 
-        // Phase 62: end Figure tag + register struct element с alt text.
+        // End Figure tag + register struct element with alt text.
         if ($taggedPdf && $mcid !== null) {
             $ctx->currentPage->endMarkedContent();
             $ctx->pdf->addStructElement('Figure', $mcid, $ctx->currentPage, $img->altText);
@@ -2899,9 +2884,9 @@ final class Engine
             $this->forcePageBreak($ctx);
         }
 
-        // Phase 48: Tagged PDF — wrap paragraph content в BDC/EMC.
-        // Phase 61: skipParagraphTag=true когда caller (e.g. Heading)
-        // управляет tagging сам.
+        // Tagged PDF — wrap paragraph content in BDC/EMC.
+        // skipParagraphTag=true when the caller (e.g. Heading)
+        // manages tagging itself.
         $taggedPdf = $ctx->pdf->isTagged() && ! $ctx->skipParagraphTag;
         $mcid = null;
         if ($taggedPdf) {
@@ -2911,8 +2896,8 @@ final class Engine
 
         $ctx->cursorY -= $p->style->spaceBeforePt;
 
-        // Phase 25: paragraph padding + background-color.
-        // Pre-measure paragraph height чтобы нарисовать bg ПЕРЕД content'ом.
+        // Paragraph padding + background-color.
+        // Pre-measure paragraph height to draw bg BEFORE content.
         $hasPadding = $p->style->paddingTopPt + $p->style->paddingRightPt
             + $p->style->paddingBottomPt + $p->style->paddingLeftPt > 0;
         $hasBackground = $p->style->backgroundColor !== null;
@@ -2935,8 +2920,8 @@ final class Engine
             $ctx->contentWidth -= $p->style->paddingLeftPt + $p->style->paddingRightPt;
         }
 
-        // Outline entry для heading paragraph'а (только в final pass —
-        // first pass знаниями не нужен).
+        // Outline entry for heading paragraph (only in the final pass —
+        // not needed during the first pass).
         if ($p->headingLevel !== null && $this->totalPagesHint !== null) {
             $title = $this->extractPlainText($p->children);
             if ($title !== '') {
@@ -2953,16 +2938,16 @@ final class Engine
         $headingStyle = $this->headingStyle($p->headingLevel);
         $effectiveDefault = $p->defaultRunStyle->inheritFrom($headingStyle);
 
-        // Build list of «items» — atomic units для line breaking.
+        // Build list of "items" — atomic units for line breaking.
         // Word | LineBreak | PageBreak | Bookmark (synthetic marker).
-        // Word items могут иметь 'link' tag для Hyperlink wrap'а — нужно
-        // для emit'а /Link annotation'а после line render'а.
-        // Field инстансы резолвятся в word'ы через resolveField($ctx).
+        // Word items may have a 'link' tag for Hyperlink wrap — needed
+        // to emit /Link annotation after the line renders.
+        // Field instances are resolved to words via resolveField($ctx).
         $items = [];
         $this->tokenizeChildren($p->children, $effectiveDefault, $items, null, $ctx);
 
-        // Layout indents для first line (firstLineIndent применяется
-        // только к первой line, остальные используют indentLeft).
+        // Layout indents for first line (firstLineIndent applies
+        // only to the first line; the rest use indentLeft).
         $isFirstLine = true;
         $availableWidth = $ctx->contentWidth - $p->style->indentLeftPt - $p->style->indentRightPt;
         $firstLineExtraIndent = $p->style->indentFirstLinePt;
@@ -2973,9 +2958,9 @@ final class Engine
         $currentWidth = 0;
         $effectiveAvail = $availableWidth - ($isFirstLine ? $firstLineExtraIndent : 0);
 
-        // Phase 33: while-loop with explicit index because soft-hyphen
-        // overflow handling использует array_splice() для re-enqueue
-        // remainder в the same items array.
+        // While-loop with explicit index because soft-hyphen
+        // overflow handling uses array_splice() to re-enqueue
+        // remainder into the same items array.
         $i = -1;
         while (++$i < count($items)) {
             $item = $items[$i];
@@ -2999,16 +2984,16 @@ final class Engine
                 continue;
             }
             if ($item['type'] === 'bookmark') {
-                // Bookmark — zero-width marker; attaches к current line top-Y
-                // во время emitLine(). Если current line пуста, attached к
-                // следующей line.
+                // Bookmark — zero-width marker; attaches to the current line's
+                // top-Y during emitLine(). If the current line is empty,
+                // attached to the next line.
                 $currentLine[] = $item;
 
                 continue;
             }
 
             if ($item['type'] === 'image') {
-                // Image atom — width известен, sep как для слова.
+                // Image atom — width is known, sep behaves like a word.
                 $atomWidth = $item['width'];
                 $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $effectiveDefault);
                 if ($currentLine !== [] && $currentWidth + $sepWidth + $atomWidth > $effectiveAvail) {
@@ -3030,8 +3015,8 @@ final class Engine
             $wordWidth = $this->measureWidth($word, $style);
             $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $style);
 
-            // Phase 189: hanging punctuation — trailing punct discounted из
-            // wrap decision (it visually overflows past margin).
+            // Hanging punctuation — trailing punct discounted from
+            // the wrap decision (it visually overflows past the margin).
             $effectiveWordWidth = $wordWidth;
             if ($this->hangingPunctuation) {
                 $lastChar = mb_substr($word, -1, 1, 'UTF-8');
@@ -3041,9 +3026,9 @@ final class Engine
             }
 
             if ($currentLine !== [] && $currentWidth + $sepWidth + $effectiveWordWidth > $effectiveAvail) {
-                // Phase 33: Try soft-hyphen split — if word can be broken at SHY
+                // Try soft-hyphen split — if the word can be broken at SHY
                 // marker such that prefix + '-' fits in remaining space, place
-                // prefix here и put remainder as new item на следующую line.
+                // the prefix here and put the remainder as a new item on the next line.
                 $remainingSpace = $effectiveAvail - $currentWidth - $sepWidth;
                 $shySplit = $this->trySplitOnSoftHyphen($word, $style, $remainingSpace);
                 if ($shySplit !== null) {
@@ -3051,13 +3036,13 @@ final class Engine
                     $firstItem = $item;
                     $firstItem['text'] = $firstWithHyphen;
                     $currentLine[] = $firstItem;
-                    // Emit line с splitted prefix.
+                    // Emit line with the split prefix.
                     $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
                     $currentLine = [];
                     $currentWidth = 0;
                     $isFirstLine = false;
                     $effectiveAvail = $availableWidth;
-                    // Re-enqueue remainder для следующей итерации.
+                    // Re-enqueue remainder for the next iteration.
                     $remainderItem = $item;
                     $remainderItem['text'] = $remainder;
                     array_splice($items, $i + 1, 0, [$remainderItem]);
@@ -3081,7 +3066,7 @@ final class Engine
             $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent);
         }
 
-        // Phase 25: restore leftX/contentWidth + apply paddingBottom.
+        // Restore leftX/contentWidth + apply paddingBottom.
         if ($hasPadding || $hasBackground) {
             $ctx->leftX = $savedLeftX;
             $ctx->contentWidth = $savedContentWidth;
@@ -3090,7 +3075,7 @@ final class Engine
 
         $ctx->cursorY -= $p->style->spaceAfterPt;
 
-        // Phase 48: end tagged content + register struct element.
+        // End tagged content + register struct element.
         if ($taggedPdf && $mcid !== null) {
             $ctx->currentPage->endMarkedContent();
             $ctx->pdf->addStructElement('P', $mcid, $ctx->currentPage);
@@ -3098,11 +3083,12 @@ final class Engine
     }
 
     /**
-     * Flatten inline-tree в plain list of items для line-break algorithm.
+     * Flatten the inline tree into a plain list of items for the line-break
+     * algorithm.
      *
-     * Hyperlink children получают 'link' tag для последующего annotation
-     * emission'а. Bookmark вставляется как synthetic 'bookmark' item.
-     * Field резолвится в word item с конкретным текстом (PAGE → currentPage,
+     * Hyperlink children get a 'link' tag for later annotation emission.
+     * Bookmark is inserted as a synthetic 'bookmark' item.
+     * Field resolves to a word item with concrete text (PAGE → currentPage,
      * NUMPAGES → totalPagesHint, DATE/TIME → now, MERGEFIELD → field name).
      *
      * @param  list<\Dskripchenko\PhpPdf\Element\InlineElement>  $children
@@ -3119,7 +3105,7 @@ final class Engine
         foreach ($children as $child) {
             if ($child instanceof Run) {
                 $childStyle = $child->style->inheritFrom($effectiveDefault);
-                // Phase 188: \t (tab) — emit 'tab' marker между segments.
+                // \t (tab) — emit 'tab' marker between segments.
                 $segments = explode("\t", $child->text);
                 foreach ($segments as $segIdx => $segment) {
                     foreach ($this->splitWords($segment) as $word) {
@@ -3148,13 +3134,13 @@ final class Engine
                     $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle, 'link' => $currentLink];
                 }
                 if (str_ends_with($resolved, ' ')) {
-                    // Сохраняем trailing space (важно для "Page X of Y" layout'а).
+                    // Preserve trailing space (important for "Page X of Y" layout).
                     $items[] = ['type' => 'word', 'text' => '', 'style' => $childStyle, 'link' => $currentLink];
                 }
             } elseif ($child instanceof Image) {
-                // Phase 16: inline image — atom в line-break algorithm.
-                // Width/height из effectiveSizePt(); link tag propagates
-                // (image wrapped в Hyperlink → clickable image).
+                // Inline image — atom in the line-break algorithm.
+                // Width/height from effectiveSizePt(); link tag propagates
+                // (image wrapped in Hyperlink → clickable image).
                 [$imgW, $imgH] = $child->effectiveSizePt();
                 $items[] = [
                     'type' => 'image',
@@ -3164,8 +3150,8 @@ final class Engine
                     'link' => $currentLink,
                 ];
             } elseif ($child instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
-                // Phase 40: collect footnote text + insert auto-numbered
-                // superscript marker (Run с superscript=true).
+                // Collect footnote text + insert auto-numbered
+                // superscript marker (Run with superscript=true).
                 if ($ctx !== null) {
                     $ctx->footnotes[] = $child->content;
                     $marker = (string) count($ctx->footnotes);
@@ -3177,13 +3163,13 @@ final class Engine
     }
 
     /**
-     * Резолвит Field в готовую strлinку для emission.
+     * Resolves a Field to a ready-to-emit string.
      *
-     * PAGE     → currentPageNumber($ctx) (или 1 при measurement без ctx)
-     * NUMPAGES → totalPagesHint (или 99 placeholder при first pass)
-     * DATE     → текущая дата в указанном формате (DD.MM.YYYY default)
-     * TIME     → текущее время (HH:mm default)
-     * MERGEFIELD → format-параметр = name (placeholder text)
+     * PAGE     → currentPageNumber($ctx) (or 1 when measuring without ctx)
+     * NUMPAGES → totalPagesHint (or 99 placeholder during first pass)
+     * DATE     → current date in the specified format (DD.MM.YYYY default)
+     * TIME     → current time (HH:mm default)
+     * MERGEFIELD → format parameter = name (placeholder text)
      */
     private function resolveField(Field $f, ?LayoutContext $ctx): string
     {
@@ -3200,9 +3186,9 @@ final class Engine
     }
 
     /**
-     * Extracts plain text из inline children, рекурсивно проникая в
-     * Hyperlink/Bookmark wrappers. Используется для outline titles
-     * + аналогичных случаев когда нужно только содержимое без styling'а.
+     * Extracts plain text from inline children, recursively descending into
+     * Hyperlink/Bookmark wrappers. Used for outline titles and similar
+     * cases where only the content is needed without styling.
      *
      * @param  list<\Dskripchenko\PhpPdf\Element\InlineElement>  $children
      */
@@ -3244,7 +3230,7 @@ final class Engine
     }
 
     /**
-     * Эмитит line — позиционирует слова, обновляет cursorY.
+     * Emits a line — positions words, updates cursorY.
      *
      * @param  list<array{type: string, text?: string, style?: RunStyle}>  $items
      */
@@ -3257,8 +3243,8 @@ final class Engine
         float $firstLineIndent,
         bool $isLastLine = true,
     ): void {
-        // Split items на word/marker. Markers (bookmark) — zero-width;
-        // attached к line top-Y но не учитываются для line-width.
+        // Split items into word/marker. Markers (bookmark) are zero-width;
+        // attached to the line top-Y but not counted in line-width.
         $wordItems = [];
         $bookmarks = [];
         foreach ($items as $item) {
@@ -3270,8 +3256,8 @@ final class Engine
         }
 
         if ($wordItems === []) {
-            // Пустая line — advance cursorY на дефолтную height, attach bookmarks
-            // к current top-Y.
+            // Empty line — advance cursorY by the default height, attach bookmarks
+            // to the current top-Y.
             $sizePt = $defaultStyle->sizePt ?? $this->defaultFontSizePt;
             $lineHeight = $this->effectiveLineHeightPt($p, $sizePt);
             $this->ensureRoomFor($ctx, $lineHeight);
@@ -3281,9 +3267,9 @@ final class Engine
             return;
         }
 
-        // Max font size в этой line determines line height. Images
-        // также contribute через высоту (inline image увеличивает
-        // line-height если выше чем текст).
+        // Max font size in this line determines line height. Images
+        // also contribute via height (inline image increases
+        // line-height if taller than text).
         $maxSizePt = 0;
         $maxImageHeight = 0;
         foreach ($wordItems as $item) {
@@ -3300,7 +3286,7 @@ final class Engine
             }
         }
         if ($maxSizePt === 0) {
-            // Line содержит только images — line-height = image-height.
+            // Line contains only images — line-height = image-height.
             $maxSizePt = $defaultStyle->sizePt ?? $this->defaultFontSizePt;
         }
         $textLineHeight = $this->effectiveLineHeightPt($p, $maxSizePt);
@@ -3310,8 +3296,8 @@ final class Engine
 
         $this->registerBookmarksAt($ctx, $bookmarks, $ctx->cursorY);
 
-        // Вычислить total content width этой line.
-        // Phase 188: tabs treated as minimum-width spacers (tabStopPt) для wrap.
+        // Compute total content width of this line.
+        // Tabs are treated as minimum-width spacers (tabStopPt) for wrap.
         $totalContentWidth = 0;
         $countWords = count($wordItems);
         for ($i = 0; $i < $countWords; $i++) {
@@ -3337,16 +3323,16 @@ final class Engine
         $startX = $ctx->leftX + $p->style->indentLeftPt + ($isFirstLine ? $firstLineIndent : 0);
 
         // Justify (Both/Distribute) — distribute extra space across gaps
-        // между words. Last-line + lines с ≥80% fill skipped (CSS spec'у
-        // следующая norm: avoid huge gaps).
+        // between words. Last-line + lines with ≥80% fill are skipped
+        // (CSS norm: avoid huge gaps).
         $extraPerGap = 0.0;
         $isJustify = ($p->style->alignment === Alignment::Both
             || $p->style->alignment === Alignment::Distribute);
         if ($isJustify && ! $isLastLine && $countWords > 1) {
             $slack = $effectiveAvail - $totalContentWidth;
             $fillRatio = $effectiveAvail > 0 ? $totalContentWidth / $effectiveAvail : 1.0;
-            // Расширяем только если line хотя бы 60% заполнена (избегаем
-            // нелепо большие gaps на коротких lines).
+            // Expand only if the line is at least 60% filled (avoid
+            // absurdly large gaps on short lines).
             if ($slack > 0 && $fillRatio >= 0.6) {
                 $extraPerGap = $slack / ($countWords - 1);
             }
@@ -3361,21 +3347,21 @@ final class Engine
                 break;
             default:
                 // Start / Both / Distribute → start at startX; justify
-                // распределяется через $extraPerGap при rendering.
+                // is distributed via $extraPerGap at rendering time.
                 break;
         }
 
         $baselineY = $ctx->cursorY - $maxSizePt * 0.8;
 
-        // Phase 158: TJ-array grouping — accumulate consecutive items с same
-        // effective style/baseline/size into single showText call. Каждый
-        // showText emits BT/Tf/Tm/Tj/ET — батчинг убирает 4×N overhead bytes.
-        // Не батчим при: justified (extraPerGap > 0), images, super/sub,
+        // TJ-array grouping — accumulate consecutive items with the same
+        // effective style/baseline/size into a single showText call. Each
+        // showText emits BT/Tf/Tm/Tj/ET — batching removes 4×N overhead bytes.
+        // Don't batch when: justified (extraPerGap > 0), images, super/sub,
         // style change, link boundary change. Decorations (underline/strike)
-        // emit'ятся inline per-batch.
+        // are emitted inline per-batch.
         //
-        // Link tracking + decorations работают per-batch: при flush batch,
-        // если все items underlined — draw line под batch width.
+        // Link tracking + decorations work per-batch: when flushing a batch,
+        // if all items are underlined — draw a line under the batch width.
         $x = $startX;
         $linkStartX = null;
         $linkLastX = null;
@@ -3405,7 +3391,7 @@ final class Engine
         $batchBaselineY = 0.0;
         $batchSizePt = 0.0;
         $batchStyle = null;
-        $batchEndX = 0.0;  // running end-X для decorations + link tracking
+        $batchEndX = 0.0;  // running end-X for decorations + link tracking
         $flushBatch = function () use (&$batchText, &$batchStartX, &$batchBaselineY, &$batchSizePt, &$batchStyle, &$batchEndX, $ctx): void {
             if ($batchText === '' || $batchStyle === null) {
                 $batchText = '';
@@ -3424,7 +3410,7 @@ final class Engine
             $batchStyle = null;
         };
 
-        // Compatibility: текущий item совместим с currently building batch?
+        // Compatibility: is the current item compatible with the currently building batch?
         $compatible = function (RunStyle $itemStyle, float $itemSizePt, float $itemBaselineY) use (&$batchStyle, &$batchSizePt, &$batchBaselineY): bool {
             if ($batchStyle === null) {
                 return false;
@@ -3451,13 +3437,13 @@ final class Engine
             $item = $wordItems[$i];
             $style = $item['style'] ?? $defaultStyle;
 
-            // Phase 188: tab item — advance x к next tab stop.
+            // Tab item — advance x to next tab stop.
             if (($item['type'] ?? null) === 'tab') {
                 $flushBatch();
                 $relativeX = $x - $startX;
                 $nextStop = ((int) ($relativeX / $this->tabStopPt) + 1) * $this->tabStopPt;
                 $newX = $startX + $nextStop;
-                // Ensure we move forward at least minimum (если currently at multiple of tabStopPt).
+                // Ensure we move forward at least the minimum (if currently at a multiple of tabStopPt).
                 if ($newX <= $x) {
                     $newX = $x + $this->tabStopPt;
                 }
@@ -3518,7 +3504,7 @@ final class Engine
                 }
             }
 
-            // Phase 158: try to batch this word с previous batch.
+            // Try to batch this word with the previous batch.
             $canBatch = $extraPerGap === 0.0 && $compatible($style, $sizePt, $wordBaselineY);
             if ($canBatch) {
                 $batchText .= $word;
@@ -3539,7 +3525,7 @@ final class Engine
 
             if ($i + 1 < $countWords) {
                 $nextItem = $wordItems[$i + 1];
-                // Phase 188: если next item — tab, не append space (tab sets exact x).
+                // If next item is tab, do not append space (tab sets exact x).
                 if (($nextItem['type'] ?? null) === 'tab') {
                     continue;
                 }
@@ -3555,19 +3541,19 @@ final class Engine
                     $nextSize *= 0.7;
                     $nextBaselineY -= $baseSizePt * 0.15;
                 }
-                // Phase 158: добавляем space к current batch если next item тоже
-                // text и compatible — тогда space станет частью одной showText.
+                // Add space to the current batch if the next item is also
+                // text and compatible — then the space becomes part of a single showText.
                 $nextLink = $nextItem['link'] ?? null;
                 $spaceCanBatch = ! $nextIsImage
                     && $extraPerGap === 0.0
                     && $nextLink === $linkRef
                     && $compatible($nextStyle, $nextSize, $nextBaselineY);
                 if ($spaceCanBatch && $batchText !== '') {
-                    // Append space к batch — next iteration appends word.
+                    // Append space to batch — next iteration appends word.
                     $batchText .= ' ';
                     $batchEndX = $x + $spaceWidth;
                 } else {
-                    // Space не batchable — flush + emit отдельно.
+                    // Space not batchable — flush + emit separately.
                     $flushBatch();
                     $x += $spaceWidth;
                     $this->showText($ctx->currentPage, ' ', $x - $spaceWidth, $baselineY, $sizePt, $style);
@@ -3590,7 +3576,7 @@ final class Engine
     }
 
     /**
-     * Регистрирует bookmark destinations'ы для current line top-Y.
+     * Registers bookmark destinations for the current line top-Y.
      *
      * @param  list<array<string, mixed>>  $bookmarks
      */
@@ -3607,13 +3593,13 @@ final class Engine
     }
 
     /**
-     * Draws underline и/или strikethrough линии под/через rendered word.
+     * Draws underline and/or strikethrough lines below/through the rendered word.
      *
-     * Position relative to baseline (PDF coordinate system Y растёт вверх):
-     *  - Underline: ~ baselineY - sizePt × 0.12 (чуть ниже baseline)
-     *  - Strike:    ~ baselineY + sizePt × 0.28 (через x-height)
-     * Stroke width: sizePt × 0.055 (тоньше чем глифы).
-     * Color: текущий цвет текста (Run.style.color), default чёрный.
+     * Position relative to baseline (PDF coordinate system Y grows upward):
+     *  - Underline: ~ baselineY - sizePt × 0.12 (slightly below baseline)
+     *  - Strike:    ~ baselineY + sizePt × 0.28 (through x-height)
+     * Stroke width: sizePt × 0.055 (thinner than glyphs).
+     * Color: current text color (Run.style.color), default black.
      */
     private function drawTextDecorations(Page $page, float $x, float $baselineY, float $width, float $sizePt, RunStyle $style): void
     {
@@ -3633,15 +3619,15 @@ final class Engine
     }
 
     /**
-     * Renders text using engine's resolved font (bold/italic variant если
-     * registered, иначе defaultFont, иначе fallbackStandard).
-     * Применяет style.color через rg-operator если задан.
+     * Renders text using the engine's resolved font (bold/italic variant if
+     * registered, otherwise defaultFont, otherwise fallbackStandard).
+     * Applies style.color via the rg-operator when set.
      */
     private function showText(Page $page, string $text, float $x, float $baselineY, float $sizePt, RunStyle $style): void
     {
-        // Phase 33: SHY (U+00AD) — невидимый soft hyphen marker, strip
-        // перед drawing'ом (визуально не должен рендериться, кроме как при
-        // wrap point — это уже handled через '-' append в split helper).
+        // SHY (U+00AD) — invisible soft hyphen marker, strip before
+        // drawing (visually it must not render except at the wrap point —
+        // already handled via '-' append in the split helper).
         $text = self::stripSoftHyphens($text);
         $r = $g = $b = null;
         if ($style->color !== null) {
@@ -3657,12 +3643,12 @@ final class Engine
     }
 
     /**
-     * Measures width в pt — использует resolveEmbeddedFont для точных
-     * metrics bold/italic variant'а.
+     * Measures width in pt — uses resolveEmbeddedFont for precise
+     * metrics of the bold/italic variant.
      */
     private function measureWidth(string $text, RunStyle $style): float
     {
-        // Phase 33: SHY invisible → стрипим для width estimation.
+        // SHY is invisible → strip for width estimation.
         $text = self::stripSoftHyphens($text);
         $font = $this->resolveEmbeddedFont($style, $text);
         if ($font !== null) {
@@ -3677,7 +3663,7 @@ final class Engine
     }
 
     /**
-     * Phase 33: U+00AD (SOFT HYPHEN, HTML &shy;) — невидимый wrap hint.
+     * U+00AD (SOFT HYPHEN, HTML &shy;) — invisible wrap hint.
      */
     public static function stripSoftHyphens(string $text): string
     {
@@ -3685,18 +3671,18 @@ final class Engine
     }
 
     /**
-     * Phase 33: Tries to split word на (prefix + '-', remainder) at one of
-     * the soft hyphen positions так, чтобы prefix + '-' влез в \$maxWidth.
-     * Greedy: предпочитаем самый последний SHY, оставляющий больше места
-     * для остальной строки (но всё ещё fitting в \$maxWidth).
+     * Tries to split a word into (prefix + '-', remainder) at one of the
+     * soft hyphen positions such that prefix + '-' fits in \$maxWidth.
+     * Greedy: prefer the latest SHY that leaves more space for the
+     * remaining string (but still fits in \$maxWidth).
      *
-     * Returns [firstWithHyphen, remainder] or null если не удалось разбить.
+     * Returns [firstWithHyphen, remainder] or null if no split was possible.
      *
      * @return array{0: string, 1: string}|null
      */
     private function trySplitOnSoftHyphen(string $word, RunStyle $style, float $maxWidth): ?array
     {
-        // SHY positions (byte-level в UTF-8 — U+00AD = 2 bytes: 0xC2 0xAD).
+        // SHY positions (byte-level in UTF-8 — U+00AD = 2 bytes: 0xC2 0xAD).
         $shy = "\u{00AD}";
         if (! str_contains($word, $shy)) {
             return null;
@@ -3706,7 +3692,7 @@ final class Engine
         for ($i = count($parts) - 1; $i >= 1; $i--) {
             $prefix = implode('', array_slice($parts, 0, $i));
             $remainder = implode($shy, array_slice($parts, $i));
-            // measureWidth уже strip'ит SHY, безопасно.
+            // measureWidth already strips SHY, so this is safe.
             $w = $this->measureWidth($prefix.'-', $style);
             if ($w <= $maxWidth) {
                 return [$prefix.'-', $remainder];
@@ -3729,7 +3715,7 @@ final class Engine
     }
 
     /**
-     * Phase 79: effective line height в pt absolute.
+     * Effective line height in pt absolute.
      * lineHeightPt explicit > lineHeightMult * fontSize > default.
      */
     private function effectiveLineHeightPt(Paragraph $p, float $fontSize): float
@@ -3744,7 +3730,7 @@ final class Engine
 
     /**
      * Heading style cascade defaults: H1 = 24pt bold, H2 = 20pt bold, ...
-     * Это override-able caller'ом через явные RunStyle/ParagraphStyle.
+     * Can be overridden by the caller via explicit RunStyle/ParagraphStyle.
      */
     private function headingStyle(?int $level): RunStyle
     {
@@ -3765,21 +3751,16 @@ final class Engine
     }
 
     /**
-     * Renders Table: column-width distribution, row-by-row layout с
-     * pre-measurement каждого row (для row-height), drawing background
+     * Renders Table: column-width distribution, row-by-row layout with
+     * pre-measurement of each row (for row-height), drawing background
      * + borders, vertical alignment of cell content.
      *
-     * Phase 5b ограничения (исправит Phase 5c):
-     *  - columnSpan/rowSpan игнорируются (assumed 1)
-     *  - isHeader rows НЕ повторяются на следующих страницах
-     *  - row-split при page overflow — full row уходит на новую страницу
-     *
-     * Алгоритм:
+     * Algorithm:
      *  1. Compute total table width + per-column widths
-     *  2. Position table inside content area по table.style.alignment
-     *  3. Для каждого row:
-     *     a. Pre-measure высоту каждой cell → row height = max
-     *     b. ensureRoomFor(row height) → page break если не помещается
+     *  2. Position table inside content area by table.style.alignment
+     *  3. For each row:
+     *     a. Pre-measure each cell's height → row height = max
+     *     b. ensureRoomFor(row height) → page break if it doesn't fit
      *     c. Draw cell backgrounds, then content, then borders
      *  4. spaceBefore/After
      */
@@ -3791,7 +3772,7 @@ final class Engine
 
         $ctx->cursorY -= $t->style->spaceBeforePt;
 
-        // Phase 65: tagged PDF — wrap table в /Table struct.
+        // Tagged PDF — wrap table in /Table struct.
         $taggedPdf = $ctx->pdf->isTagged();
         $tableMcid = null;
         if ($taggedPdf) {
@@ -3807,7 +3788,7 @@ final class Engine
         $headerRows = array_values(array_filter($t->rows, fn (Row $r): bool => $r->isHeader));
 
         $totalRows = count($t->rows);
-        // Phase 153: cross-row border priority tracking. Reset on page break
+        // Cross-row border priority tracking. Reset on page break
         // (repeated header rows form a fresh row sequence).
         $prevRowBottomByCol = [];
         foreach ($t->rows as $rowIdx => $row) {
@@ -3820,8 +3801,8 @@ final class Engine
                 if (! $row->isHeader) {
                     foreach ($headerRows as $hr) {
                         $hh = $this->measureRowHeight($t, $hr, $colWidths);
-                        // На repeat'е header row не считаем last (это всё
-                        // ещё начало page, дальше будут data rows).
+                        // On header row repeat, don't count it as last (this is still
+                        // the start of the page, more data rows will follow).
                         $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx, false, $prevRowBottomByCol);
                         $ctx->cursorY -= $hh;
                     }
@@ -3834,7 +3815,7 @@ final class Engine
 
         $ctx->cursorY -= $t->style->spaceAfterPt;
 
-        // Phase 65: end /Table struct.
+        // End /Table struct.
         if ($taggedPdf && $tableMcid !== null) {
             $ctx->currentPage->endMarkedContent();
             $ctx->pdf->addStructElement('Table', $tableMcid, $ctx->currentPage);
@@ -3859,7 +3840,7 @@ final class Engine
     private function computeColumnWidths(Table $t, float $tableWidth, int $columnCount): array
     {
         if ($t->columnWidthsPt !== null && count($t->columnWidthsPt) === $columnCount) {
-            // Scale to fit tableWidth если sum differs.
+            // Scale to fit tableWidth if the sum differs.
             $sum = array_sum($t->columnWidthsPt);
             if ($sum > 0) {
                 $scale = $tableWidth / $sum;
@@ -3918,13 +3899,13 @@ final class Engine
      */
     /**
      * @param  array<int, \Dskripchenko\PhpPdf\Style\Border>  &$prevRowBottomByCol
-     *   Map column-index → bottom border of the cell occupying it в prior row.
-     *   Modified в-place: после renderRow() contains current row's bottoms
-     *   keyed by column position (учитывая column spans).
+     *   Map column-index → bottom border of the cell occupying it in the prior row.
+     *   Modified in-place: after renderRow() contains the current row's bottoms
+     *   keyed by column position (accounting for column spans).
      */
     private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false, array &$prevRowBottomByCol = []): void
     {
-        // Phase 65: tagged PDF — wrap row в /TR struct.
+        // Tagged PDF — wrap row in /TR struct.
         $taggedPdf = $ctx->pdf->isTagged();
         $rowMcid = null;
         if ($taggedPdf) {
@@ -3936,19 +3917,19 @@ final class Engine
         $rowBottomY = $rowTopY - $rowHeight;
         $collapse = $t->style->borderCollapse;
         $columnCount = count($colWidths);
-        // Phase 19: border-spacing — separate mode shrink'ет каждый cell
-        // на spacing/2 с каждой стороны. В collapse игнорируется.
+        // Border-spacing — separate mode shrinks each cell by spacing/2
+        // on every side. Ignored in collapse mode.
         $spacing = ! $collapse ? $t->style->borderSpacingPt : 0;
         $gap = $spacing / 2;
-        // Phase 28: track previous cell's right border для "thicker wins"
-        // priority resolution on shared left/right edges в collapse mode.
+        // Track previous cell's right border for "thicker wins"
+        // priority resolution on shared left/right edges in collapse mode.
         $prevCellRight = null;
-        // Phase 153: collect this row's bottom borders by column index —
-        // assigned к caller's $prevRowBottomByCol для next row's top compare.
+        // Collect this row's bottom borders by column index —
+        // assigned to the caller's $prevRowBottomByCol for the next row's top compare.
         $currentRowBottoms = [];
 
-        // 1. Backgrounds + content + borders в три pass'а (background ниже,
-        //    borders сверху, content между).
+        // 1. Backgrounds + content + borders in three passes (background below,
+        //    borders above, content in between).
         $cellX = $tableLeftX;
         $colIdx = 0;
         foreach ($row->cells as $cell) {
@@ -3958,7 +3939,7 @@ final class Engine
             }
             $cs = $this->effectiveCellStyle($t, $cell);
 
-            // Background fill (rounded если cornerRadius > 0).
+            // Background fill (rounded if cornerRadius > 0).
             if ($cs->backgroundColor !== null) {
                 [$r, $g, $b] = $this->hexToRgb($cs->backgroundColor);
                 $drawX = $cellX + $gap;
@@ -3989,14 +3970,14 @@ final class Engine
             }
             $cs = $this->effectiveCellStyle($t, $cell);
 
-            // Phase 65: wrap cell в /TD struct.
+            // Wrap cell in /TD struct.
             $cellMcid = null;
             if ($taggedPdf) {
                 $cellMcid = $ctx->currentPage->nextMcid();
                 $ctx->currentPage->beginMarkedContent('TD', $cellMcid);
             }
 
-            // Phase 65: cell context — suppress nested paragraph /P tags
+            // Cell context — suppress nested paragraph /P tags
             // (cell-level wrapping subsumes them).
             $savedSkip = $ctx->skipParagraphTag;
             $ctx->skipParagraphTag = true;
@@ -4012,7 +3993,7 @@ final class Engine
             $colIdx += $cell->columnSpan;
         }
 
-        // Borders на top.
+        // Borders on top.
         $cellX = $tableLeftX;
         $colIdx = 0;
         foreach ($row->cells as $cell) {
@@ -4037,9 +4018,9 @@ final class Engine
                     );
                 } elseif ($collapse) {
                     $isLastCol = ($colIdx + $cell->columnSpan) >= $columnCount;
-                    // Phase 28 + Phase 153: "thicker wins" — within-row сравниваем
-                    // current.left vs previous cell's right; cross-row сравниваем
-                    // current.top vs previous row's bottom (по column index).
+                    // "Thicker wins" — within-row we compare
+                    // current.left vs previous cell's right; cross-row we compare
+                    // current.top vs previous row's bottom (by column index).
                     $leftBorder = $borders->left;
                     if ($prevCellRight !== null) {
                         $leftBorder = $this->moreProminent($leftBorder, $prevCellRight);
@@ -4057,7 +4038,7 @@ final class Engine
                     $this->drawCellBorders($ctx->currentPage, $drawX, $drawY, $drawW, $drawH, $collapsed);
                     $prevCellRight = $borders->right;
                     // Record this cell's bottom border on all spanned columns
-                    // для cross-row priority comparison в next row.
+                    // for cross-row priority comparison in the next row.
                     for ($k = $colIdx; $k < $colIdx + $cell->columnSpan; $k++) {
                         $currentRowBottoms[$k] = $borders->bottom;
                     }
@@ -4070,10 +4051,10 @@ final class Engine
             $colIdx += $cell->columnSpan;
         }
 
-        // Phase 153: pass current row's bottom borders к caller for next row.
+        // Pass current row's bottom borders to caller for the next row.
         $prevRowBottomByCol = $currentRowBottoms;
 
-        // Phase 65: end /TR struct.
+        // End /TR struct.
         if ($taggedPdf && $rowMcid !== null) {
             $ctx->currentPage->endMarkedContent();
             $ctx->pdf->addStructElement('TR', $rowMcid, $ctx->currentPage);
@@ -4106,12 +4087,11 @@ final class Engine
             cursorY: $cellTopY - $cs->paddingTopPt - $vOffset,
             leftX: $cellX + $cs->paddingLeftPt,
             contentWidth: $contentWidth,
-            // Cell content не вызывает auto-page-break (Phase 5b).
+            // Cell content does not trigger auto-page-break.
             bottomY: $cellTopY - $rowHeight - 10000,
             topY: $cellTopY - $cs->paddingTopPt - $vOffset,
             pageSetup: $ctx->pageSetup,
-            // Phase 65: propagate skipParagraphTag (table cells suppress
-            // nested /P tagging).
+            // Propagate skipParagraphTag (table cells suppress nested /P tagging).
             skipParagraphTag: $ctx->skipParagraphTag,
         );
 
@@ -4122,10 +4102,10 @@ final class Engine
 
     private function effectiveCellStyle(Table $t, Cell $cell): CellStyle
     {
-        // Cell-style имеет priority. defaultCellStyle применяется только
-        // если cell.style identical-equal к bare-default CellStyle (т.е.
-        // user не задал свой стиль). Это эвристика — Phase 5c сделает
-        // полноценный cascade через explicit merge.
+        // Cell-style has priority. defaultCellStyle applies only when
+        // cell.style is identical-equal to a bare-default CellStyle (i.e.
+        // the user did not set their own style). This is a heuristic —
+        // a full cascade with explicit merging is a future improvement.
         if ($cell->style == new CellStyle) {
             return $t->style->defaultCellStyle;
         }
@@ -4143,15 +4123,15 @@ final class Engine
     }
 
     /**
-     * Phase 28: CSS border priority resolution для collapse-mode shared
-     * edges. Spec rules (ISO HTML 4 / CSS 2.1 §17.6.2.1):
+     * CSS border priority resolution for collapse-mode shared edges.
+     * Spec rules (ISO HTML 4 / CSS 2.1 §17.6.2.1):
      *   1. Style 'hidden' beats everything (null wins; no border drawn)
      *   2. Style 'none' loses to everything
      *   3. Wider border wins
      *   4. Same width: double > solid > dashed > dotted
      *   5. Same everything: first-cell-drawn wins (left/top side preferred)
      *
-     * Возвращает winning Border (или $a если equal).
+     * Returns the winning Border (or $a if equal).
      */
     private function moreProminent(?Border $a, ?Border $b): ?Border
     {
@@ -4190,7 +4170,7 @@ final class Engine
     }
 
     /**
-     * Все 4 стороны одинаковые (style + width + color) И non-null?
+     * Are all 4 sides identical (style + width + color) AND non-null?
      */
     private function areBordersUniform(BorderSet $bs): bool
     {
@@ -4230,8 +4210,8 @@ final class Engine
         [$r, $g, $bb] = $this->hexToRgb($b->color);
         $totalWidth = $b->widthPt();
         if ($b->style === BorderStyle::Double) {
-            // Double-line: 2 параллельные strokes, каждая width=total/3,
-            // gap между ними = total/3. CSS spec: declared width = full span.
+            // Double-line: 2 parallel strokes, each width=total/3,
+            // gap between them = total/3. CSS spec: declared width = full span.
             $stroke = $totalWidth / 3;
             $offset = $totalWidth / 3 + $stroke / 2;
             $page->strokeRect($x, $y + $offset, $w, 0, $stroke, $r, $g, $bb);
@@ -4287,7 +4267,7 @@ final class Engine
     }
 
     /**
-     * Pure measurement — no side effects на pdf/page.
+     * Pure measurement — no side effects on pdf/page.
      */
     private function measureBlockHeight(BlockElement $block, float $contentWidth): float
     {
@@ -4306,11 +4286,11 @@ final class Engine
         $headingStyle = $this->headingStyle($p->headingLevel);
         $effectiveDefault = $p->defaultRunStyle->inheritFrom($headingStyle);
 
-        // Build items list (тот же подход что в renderParagraph).
+        // Build items list (same approach as in renderParagraph).
         /** @var list<array<string, mixed>> $items */
         $items = [];
         $this->tokenizeChildren($p->children, $effectiveDefault, $items, null);
-        // Skip bookmark items для measurement — zero-width markers.
+        // Skip bookmark items for measurement — zero-width markers.
         $items = array_values(array_filter($items, fn ($it): bool => $it['type'] !== 'bookmark'));
 
         $availableWidth = $contentWidth - $p->style->indentLeftPt - $p->style->indentRightPt;
@@ -4427,12 +4407,12 @@ final class Engine
     private const float LIST_LEVEL_INDENT_PT = 18.0;
 
     /**
-     * Renders bullet/ordered list через injection маркера в первую
-     * Paragraph каждого item'а + hanging-indent (через ParagraphStyle.
+     * Renders a bullet/ordered list by injecting a marker into the first
+     * Paragraph of each item + hanging-indent (via ParagraphStyle
      * indentLeftPt + indentFirstLinePt = -markerWidth).
      *
-     * Nested ListNode (через ListItem.nestedList) рекурсивно рисуется
-     * с увеличенным $level.
+     * Nested ListNode (via ListItem.nestedList) is rendered recursively
+     * with an increased $level.
      */
     private function renderListNode(ListNode $list, LayoutContext $ctx, int $level): void
     {
@@ -4441,7 +4421,7 @@ final class Engine
         }
         $ctx->cursorY -= $list->spaceBeforePt;
 
-        // Phase 66: tagged PDF — wrap list в /L struct.
+        // Tagged PDF — wrap list in /L struct.
         $taggedPdf = $ctx->pdf->isTagged();
         $listMcid = null;
         if ($taggedPdf) {
@@ -4456,7 +4436,7 @@ final class Engine
             $number = $list->startAt + $i;
             $marker = $this->formatListMarker($number, $format);
 
-            // Phase 66: per-item /LI wrap.
+            // Per-item /LI wrap.
             $itemMcid = null;
             if ($taggedPdf) {
                 $itemMcid = $ctx->currentPage->nextMcid();
@@ -4494,14 +4474,14 @@ final class Engine
         $children = $item->children;
 
         if ($children === []) {
-            // Пустой item — render только marker.
+            // Empty item — render only marker.
             $children = [new Paragraph([new Run('')])];
         }
 
         $firstChild = $children[0];
         if ($firstChild instanceof Paragraph) {
-            // Prepend marker to first paragraph's first child через injection
-            // нового Run'а. Hanging indent через indentLeftPt+indentFirstLinePt.
+            // Prepend marker to first paragraph's first child by injecting
+            // a new Run. Hanging indent via indentLeftPt+indentFirstLinePt.
             $newFirstChildren = [new Run($marker), ...$firstChild->children];
             $newStyle = $firstChild->style->copy(
                 indentLeftPt: $baseIndent,
@@ -4528,14 +4508,14 @@ final class Engine
                     );
                     $this->renderBlock($childWithIndent, $ctx);
                 } else {
-                    // Non-paragraph (Image/Table/etc.) — render через sub-context
-                    // с indented leftX.
+                    // Non-paragraph (Image/Table/etc.) — render via sub-context
+                    // with indented leftX.
                     $this->renderIndentedBlock($child, $baseIndent, $ctx);
                 }
             }
         } else {
-            // First child — не paragraph. Render marker как standalone paragraph
-            // + потом все children with indent.
+            // First child is not a paragraph. Render marker as a standalone
+            // paragraph + then all children with indent.
             $markerP = new Paragraph(
                 children: [new Run(trim($marker))],
                 style: new ParagraphStyle(indentLeftPt: $baseIndent - self::LIST_LEVEL_INDENT_PT),
@@ -4552,7 +4532,7 @@ final class Engine
     }
 
     /**
-     * Renders BlockElement (Image/Table/etc.) с increased leftX (sub-ctx).
+     * Renders BlockElement (Image/Table/etc.) with increased leftX (sub-ctx).
      */
     private function renderIndentedBlock(BlockElement $block, float $indentPt, LayoutContext $ctx): void
     {
@@ -4616,8 +4596,8 @@ final class Engine
     }
 
     /**
-     * Splits text на «words» по whitespace. Preserves multiple spaces
-     * NOT (single split). Empty strings filtered out.
+     * Splits text into "words" by whitespace. Does NOT preserve multiple
+     * spaces (single split). Empty strings filtered out.
      *
      * @return list<string>
      */

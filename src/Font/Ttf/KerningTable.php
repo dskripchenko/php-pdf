@@ -7,21 +7,21 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
 /**
  * Kerning lookup table — pair-wise advance adjustments.
  *
- * Запрос:
- *   $kern->lookup(leftGid, rightGid): int  // xAdvance adjustment в FUnits
+ * Query:
+ *   $kern->lookup(leftGid, rightGid): int  // xAdvance adjustment in FUnits
  *                                            // (negative = pair closer)
  *
- * Источник:
- *  - GPOS lookup type 2 «Pair Adjustment Positioning», format 1 (specific
- *    pairs) и format 2 (class-based pairs). Парсится GposReader'ом.
+ * Source:
+ *  - GPOS lookup type 2 "Pair Adjustment Positioning", format 1 (specific
+ *    pairs) and format 2 (class-based pairs). Parsed by GposReader.
  *  - Legacy `kern` table (Apple TT) — not supported here; modern fonts
- *    используют GPOS exclusively.
+ *    use GPOS exclusively.
  *
  * Use cases:
- *  - TextMeasurer: учитывает kerning при measure pt-width строки
- *  - PdfFont: эмитит TJ-operator с position adjustment'ами в content stream
+ *  - TextMeasurer: accounts for kerning when measuring pt-width of a string
+ *  - PdfFont: emits TJ-operator with position adjustments in content stream
  *
- * Performance: lookup O(1) через nested-array indexing.
+ * Performance: O(1) lookup via nested-array indexing.
  */
 final class KerningTable
 {
@@ -33,7 +33,7 @@ final class KerningTable
     public function add(int $leftGid, int $rightGid, int $xAdvanceFu): void
     {
         if ($xAdvanceFu === 0) {
-            return; // не сохраняем нулевые pair'ы
+            return; // do not store zero-adjustment pairs
         }
         if (! isset($this->pairs[$leftGid])) {
             $this->pairs[$leftGid] = [];
@@ -45,8 +45,8 @@ final class KerningTable
     }
 
     /**
-     * Lookup xAdvance adjustment для pair (left, right). Возвращает 0
-     * если pair не задан (no kerning).
+     * Lookup xAdvance adjustment for pair (left, right). Returns 0 if
+     * the pair is not defined (no kerning).
      */
     public function lookup(int $leftGid, int $rightGid): int
     {

@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Substitution rules для basic ligatures (GSUB lookup type 4).
+ * Substitution rules for basic ligatures (GSUB lookup type 4).
  *
- * Структура:
+ * Structure:
  *   firstGlyph → list<LigatureRule>
  *
  * LigatureRule = {components: [g2, g3, ...], result: gN}
- * означает: если после firstGlyph следуют g2, g3, ... → заменить
- * (firstGlyph + g2 + g3 + ...) на single ligature glyph gN.
+ * means: if firstGlyph is followed by g2, g3, ... → replace
+ * (firstGlyph + g2 + g3 + ...) with single ligature glyph gN.
  *
- * Multiple rules per firstGlyph (e.g., «f» имеет правила для «fi», «fl»,
- * «ffi», «ffl») — длинные правила сортируются впереди, чтобы матчить
- * «ffi» раньше «fi».
+ * Multiple rules per firstGlyph (e.g., "f" has rules for "fi", "fl",
+ * "ffi", "ffl") — longer rules are sorted first so that "ffi" matches
+ * before "fi".
  *
  * Apply algorithm: greedy longest-match per position.
  */
@@ -28,8 +28,8 @@ final class LigatureSubstitutions
     private int $ruleCount = 0;
 
     /**
-     * @param  list<int>  $components  Glyph'ы AFTER first (т.е. для «fi»
-     *                           передаём [i_gid]).
+     * @param  list<int>  $components  Glyphs AFTER first (i.e. for "fi"
+     *                           pass [i_gid]).
      */
     public function add(int $firstGlyph, array $components, int $resultGlyph): void
     {
@@ -39,25 +39,25 @@ final class LigatureSubstitutions
         $this->byFirst[$firstGlyph][] = [
             'components' => $components,
             'result' => $resultGlyph,
-            // 'sources' — массив glyph ID'ов которые составляют ligature
-            // (включая first). Используется PdfFont'ом для построения
+            // 'sources' — array of glyph IDs that compose the ligature
+            // (including first). Used by PdfFont to build a
             // multi-codepoint ToUnicode CMap.
             'sources' => array_merge([$firstGlyph], $components),
         ];
         $this->ruleCount++;
 
-        // Сортируем rules для firstGlyph longest-first.
+        // Sort rules for firstGlyph longest-first.
         usort($this->byFirst[$firstGlyph], static fn ($a, $b) => count($b['components']) - count($a['components']));
     }
 
     /**
-     * Применяет ligature substitution к list'у glyph ID'ов. Greedy longest-
-     * match per position. Возвращает substituted list + map результата на
-     * source glyph'и (для ToUnicode CMap построения).
+     * Applies ligature substitution to a list of glyph IDs. Greedy
+     * longest-match per position. Returns the substituted list plus a map
+     * from result to source glyphs (for ToUnicode CMap construction).
      *
      * @param  list<int>  $glyphs
      * @return array{glyphs: list<int>, sourceMap: array<int, list<int>>}
-     *         glyphs — после substitution; sourceMap — ligatureGlyph →
+     *         glyphs — after substitution; sourceMap — ligatureGlyph →
      *         list of component glyph IDs (for ToUnicode multi-cp emission)
      */
     public function apply(array $glyphs): array
@@ -76,7 +76,7 @@ final class LigatureSubstitutions
                 $components = $rule['components'];
                 $compCount = count($components);
                 if ($i + $compCount >= $n) {
-                    continue; // не хватает glyph'ов в input'е
+                    continue; // not enough glyphs in input
                 }
                 $allMatch = true;
                 for ($k = 0; $k < $compCount; $k++) {

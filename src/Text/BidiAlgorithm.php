@@ -5,22 +5,22 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Text;
 
 /**
- * Phase 136: Unicode Bidirectional Algorithm (UAX #9) — implicit levels.
+ * Unicode Bidirectional Algorithm (UAX #9) — implicit levels.
  *
- * Implements core Bidi rules для mixed LTR/RTL paragraphs:
- *  - Bidi class lookup (range-based, не полная UCD таблица)
+ * Implements core Bidi rules for mixed LTR/RTL paragraphs:
+ *  - Bidi class lookup (range-based, not the full UCD table)
  *  - Paragraph level detection (P2/P3)
  *  - W rules (W1-W7, weak character resolution)
  *  - N rules (N1-N2, neutral resolution)
  *  - I rules (I1-I2, level assignment)
  *  - L2 reordering (reverse RTL runs)
  *
- * Phase 148 additions:
+ * Additional features:
  *  - X9 filter: drop bidi formatting characters (LRE/RLE/LRO/RLO/PDF)
- *  - L3 mirroring: paired bracket/punctuation chars в RTL runs swapped
- *    с их Unicode mirror counterparts
+ *  - L3 mirroring: paired bracket/punctuation chars in RTL runs swapped
+ *    with their Unicode mirror counterparts
  *
- * Phase 187: X1-X10 explicit embedding/override stack (UAX 9 §3.3):
+ * X1-X10 explicit embedding/override stack (UAX 9 §3.3):
  *  - LRE/RLE push embedding level
  *  - LRO/RLO push level + override (force L or R type)
  *  - PDF pop level
@@ -29,12 +29,12 @@ namespace Dskripchenko\PhpPdf\Text;
  *  - 125-level max stack depth
  *  - FSI direction = first strong char before matching PDI
  *
- * Не реализовано:
+ * Not implemented:
  *  - L4 (combining marks reordering) — handled implicitly via NSM class
  *
- * Use case: mixed Latin + Arabic/Hebrew text где исходная Bidi
- * algorithm требуется для correct paragraph layout. Pure unidirectional
- * runs работают и без этого алгоритма.
+ * Use case: mixed Latin + Arabic/Hebrew text where the Bidi algorithm
+ * is required for correct paragraph layout. Pure unidirectional runs
+ * work without this algorithm.
  */
 final class BidiAlgorithm
 {
@@ -70,7 +70,7 @@ final class BidiAlgorithm
     public const ON = 'ON';
 
     /**
-     * Reorder UTF-8 paragraph для visual display.
+     * Reorder UTF-8 paragraph for visual display.
      *
      * Returns visually-ordered codepoints (left-to-right). RTL runs reversed.
      *
@@ -96,9 +96,9 @@ final class BidiAlgorithm
         $types = array_map([self::class, 'bidiClass'], $cps);
         $paragraphLevel ??= self::detectParagraphLevel($types);
 
-        // Phase 187: X1-X8 explicit embedding + override stack processing
+        // X1-X8 explicit embedding + override stack processing
         // per UAX 9 §3.3. Sets per-char explicit levels; outputs filtered cps
-        // (formatting chars removed по X9) и parallel level array.
+        // (formatting chars removed by X9) and parallel level array.
         $explicitResult = self::applyExplicitLevels($cps, $types, $paragraphLevel);
         $cps = $explicitResult['cps'];
         $explicitLevels = $explicitResult['levels'];
@@ -110,20 +110,20 @@ final class BidiAlgorithm
         $resolved = $types;
         self::applyW($resolved, $paragraphLevel);
         self::applyN($resolved, $paragraphLevel);
-        // Phase 187: implicit levels (I rules) use base levels = explicit levels
-        // from X-step, не paragraph level uniformly.
+        // Implicit levels (I rules) use base levels = explicit levels
+        // from X-step, not paragraph level uniformly.
         $levels = self::applyIWithExplicitBase($resolved, $explicitLevels);
 
-        // Phase 148: L3 mirroring BEFORE L2 reorder — mirror chars at odd
-        // (RTL) levels using levels still aligned к original cps.
+        // L3 mirroring BEFORE L2 reorder — mirror chars at odd
+        // (RTL) levels using levels still aligned to original cps.
         $cps = self::applyL3($cps, $levels);
 
         return self::applyL2($cps, $levels);
     }
 
     /**
-     * Phase 148: X9 filter. Bidi formatting characters don't appear в
-     * rendered output (UAX 9 §3.3, после L1).
+     * X9 filter. Bidi formatting characters don't appear in
+     * rendered output (UAX 9 §3.3, after L1).
      *
      * @param  list<int>  $cps
      * @return list<int>
@@ -145,12 +145,12 @@ final class BidiAlgorithm
     }
 
     /**
-     * Phase 148: L3 mirroring. Применяется ДО L2 reorder пока levels всё
-     * ещё parallel к input cps. Для каждой позиции at odd level (RTL),
-     * если char имеет mirror counterpart — заменить им.
+     * L3 mirroring. Applied BEFORE L2 reorder while levels are still
+     * parallel to input cps. For each position at odd level (RTL),
+     * if the char has a mirror counterpart — replace it.
      *
      * @param  list<int>  $cps
-     * @param  list<int>  $levels   levels parallel к input cps
+     * @param  list<int>  $levels   levels parallel to input cps
      * @return list<int>
      */
     private static function applyL3(array $cps, array $levels): array
@@ -203,7 +203,7 @@ final class BidiAlgorithm
     ];
 
     /**
-     * Determine Bidi class для codepoint via range tables. Subset of UCD —
+     * Determine Bidi class for a codepoint via range tables. Subset of UCD —
      * covers Latin, Cyrillic, Arabic, Hebrew, digits, common punctuation,
      * whitespace.
      */
@@ -325,7 +325,7 @@ final class BidiAlgorithm
      * @param  list<string>  $types  modified in-place
      */
     /**
-     * Phase 187: UAX 9 §3.3 X1-X10 — explicit embedding/override stack.
+     * UAX 9 §3.3 X1-X10 — explicit embedding/override stack.
      *
      * Processes:
      *   LRE U+202A — Left-to-Right Embedding (push even level)
@@ -340,7 +340,7 @@ final class BidiAlgorithm
      *
      * Stack depth limit: 125 levels (max embedding level). Overflow → ignore.
      *
-     * Output: filtered cps (X9 removes formatting chars) с per-char explicit
+     * Output: filtered cps (X9 removes formatting chars) with per-char explicit
      * level + post-X type (overrides change strong types).
      *
      * @param  list<int>  $cps
@@ -378,7 +378,7 @@ final class BidiAlgorithm
                     $overflowEmbedding++;
                 }
 
-                continue; // X9: формат-char removed from output
+                continue; // X9: formatting char removed from output
             }
             // X5a..X5c: isolate push.
             if ($cp === 0x2066 || $cp === 0x2067 || $cp === 0x2068) {
@@ -387,7 +387,7 @@ final class BidiAlgorithm
                 if ($cp === 0x2068) {
                     $isRtl = self::fsiDirection($cps, $i, $types);
                 }
-                // Output isolate char itself с current level (UAX 9: isolates get level).
+                // Output isolate char itself with current level (UAX 9: isolates get level).
                 $outCps[] = $cp;
                 $outTypes[] = $isRtl ? self::R : self::L;
                 $outLevels[] = $top['level'];
@@ -403,7 +403,7 @@ final class BidiAlgorithm
 
                 continue;
             }
-            // X6a: PDI — pop к last isolate.
+            // X6a: PDI — pop to last isolate.
             if ($cp === 0x2069) {
                 if ($overflowIsolate > 0) {
                     $overflowIsolate--;
@@ -452,8 +452,8 @@ final class BidiAlgorithm
     }
 
     /**
-     * FSI direction detection — scan forward к first strong char before
-     * matching PDI или end of input.
+     * FSI direction detection — scan forward to first strong char before
+     * matching PDI or end of input.
      *
      * @param  list<int>  $cps
      * @param  list<string>  $types
@@ -486,7 +486,7 @@ final class BidiAlgorithm
     }
 
     /**
-     * Phase 187: implicit level assignment using explicit base levels
+     * Implicit level assignment using explicit base levels
      * (post-X step) instead of single paragraph level.
      *
      * @param  list<string>  $types
@@ -533,12 +533,12 @@ final class BidiAlgorithm
                 $prev = $types[$i];
             }
         }
-        // W2: EN preceded (через ET, CS, etc.) by AL becomes AN.
+        // W2: EN preceded (via ET, CS, etc.) by AL becomes AN.
         for ($i = 0; $i < $n; $i++) {
             if ($types[$i] !== self::EN) {
                 continue;
             }
-            // Walk back through neutrals/weaks к previous strong.
+            // Walk back through neutrals/weaks to previous strong.
             for ($j = $i - 1; $j >= 0; $j--) {
                 $tj = $types[$j];
                 if ($tj === self::L || $tj === self::R) {
@@ -600,13 +600,13 @@ final class BidiAlgorithm
                 $types[$i] = self::EN;
             }
         }
-        // W6: separators и terminators между non-EN/AN → ON.
+        // W6: separators and terminators between non-EN/AN → ON.
         for ($i = 0; $i < $n; $i++) {
             if (in_array($types[$i], [self::ES, self::ET, self::CS], true)) {
                 $types[$i] = self::ON;
             }
         }
-        // W7: EN preceded by L (через neutrals) becomes L.
+        // W7: EN preceded by L (via neutrals) becomes L.
         for ($i = 0; $i < $n; $i++) {
             if ($types[$i] !== self::EN) {
                 continue;
@@ -626,7 +626,7 @@ final class BidiAlgorithm
 
     /**
      * N rules — neutral resolution (per UAX 9 §3.3.4).
-     * Simplified: N1+N2 combined без bracket pair handling (N0).
+     * Simplified: N1+N2 combined without bracket pair handling (N0).
      *
      * @param  list<string>  $types
      */
@@ -634,7 +634,7 @@ final class BidiAlgorithm
     {
         $n = count($types);
         $neutral = [self::B, self::S, self::WS, self::ON];
-        // Find runs of consecutive neutrals и assign based on surrounding strong types.
+        // Find runs of consecutive neutrals and assign based on surrounding strong types.
         $sorR = $paragraphLevel === 1 ? self::R : self::L;
         $i = 0;
         while ($i < $n) {
@@ -720,7 +720,7 @@ final class BidiAlgorithm
     }
 
     /**
-     * L2 — reverse contiguous spans of chars at level ≥ k для k from
+     * L2 — reverse contiguous spans of chars at level ≥ k for k from
      * max(levels) down to lowest odd level.
      *
      * @param  list<int>  $cps

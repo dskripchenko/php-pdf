@@ -5,16 +5,14 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 124: PDF417 codeword pattern table + RS factor tables.
+ * PDF417 codeword pattern table + RS factor tables.
  *
- * Все значения — facts из ISO/IEC 15438:2006 Annex 3 (codeword patterns)
- * + Annex F (RS factor polynomials). Numerical data — не охраняется
- * copyright (Feist v. Rural Tel. Co.); только наш окружающий код является
- * нашим original work под MIT.
+ * All values are facts from ISO/IEC 15438:2006 Annex 3 (codeword patterns)
+ * and Annex F (RS factor polynomials).
  *
  * Cluster indices: 0, 3, 6 — outer index 0/1/2 maps to cluster 0/3/6.
- * Каждый pattern — 17-bit integer; MSB = first module (bar); LSB = last module.
- * Все patterns: 4 bars + 4 spaces, each width 1-6, total 17 modules.
+ * Each pattern is a 17-bit integer; MSB = first module (bar); LSB = last module.
+ * All patterns: 4 bars + 4 spaces, each width 1-6, total 17 modules.
  *
  * Start pattern: 0x1FEA8 (17 bits) — 11111111010101000.
  * Stop pattern:  0x3FA29 (18 bits) — 111111101000101001 + trailing bar.
@@ -324,7 +322,7 @@ final class Pdf417Patterns
     ];
 
     /**
-     * Reed-Solomon factor polynomials over GF(929) для ECC levels 0..8.
+     * Reed-Solomon factor polynomials over GF(929) for ECC levels 0..8.
      * Number of factors per level = 2^(level+1): 2, 4, 8, 16, 32, 64, 128, 256, 512.
      *
      * @var array<int, list<int>>

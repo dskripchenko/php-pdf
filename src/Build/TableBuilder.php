@@ -14,7 +14,7 @@ use Dskripchenko\PhpPdf\Style\CellStyle;
 use Dskripchenko\PhpPdf\Style\TableStyle;
 
 /**
- * Fluent builder для Table.
+ * Fluent builder for Table.
  *
  * Pattern:
  *   TableBuilder::new()

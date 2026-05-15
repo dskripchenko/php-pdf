@@ -7,15 +7,15 @@ namespace Dskripchenko\PhpPdf\Font;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 
 /**
- * Композит из нескольких FontProvider'ов — пробует каждый по порядку,
- * возвращает первый non-null result.
+ * Composite of several FontProviders — tries each in order and returns
+ * the first non-null result.
  *
- * Используется когда у caller'а несколько источников шрифтов:
- *  - Bundled (LiberationFontProvider из php-pdf-fonts-liberation)
- *  - User-provided (DirectoryFontProvider с /var/fonts)
- *  - Fallback на dummy/null
+ * Used when the caller has several font sources:
+ *  - Bundled (LiberationFontProvider from php-pdf-fonts-liberation)
+ *  - User-provided (DirectoryFontProvider with /var/fonts)
+ *  - Fallback to dummy/null
  *
- * Provider'ы хранятся в insertion order — earliest wins.
+ * Providers are stored in insertion order — earliest wins.
  */
 final class ChainedFontProvider implements FontProvider
 {
@@ -28,7 +28,7 @@ final class ChainedFontProvider implements FontProvider
     }
 
     /**
-     * Прокидывает provider в конец цепочки (lowest priority).
+     * Appends a provider to the end of the chain (lowest priority).
      */
     public function append(FontProvider $provider): self
     {
@@ -38,7 +38,7 @@ final class ChainedFontProvider implements FontProvider
     }
 
     /**
-     * Добавляет provider в начало (highest priority).
+     * Prepends a provider to the start of the chain (highest priority).
      */
     public function prepend(FontProvider $provider): self
     {

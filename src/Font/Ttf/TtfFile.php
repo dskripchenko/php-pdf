@@ -5,21 +5,21 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * TrueType Font file parser (минимальный для POC-R2.a).
+ * Minimal TrueType Font file parser.
  *
- * Парсит только то, что нужно для PDF font embedding:
- *  - Table directory (поиск offset'ов всех таблиц)
- *  - `head`  → unitsPerEm, xMin/yMin/xMax/yMax (для FontBBox)
+ * Parses only what is needed for PDF font embedding:
+ *  - Table directory (locate offsets of all tables)
+ *  - `head`  → unitsPerEm, xMin/yMin/xMax/yMax (for FontBBox)
  *  - `hhea`  → ascent/descent, numberOfHMetrics
  *  - `maxp` → numGlyphs
- *  - `hmtx` → advance widths массив
- *  - `cmap` → character-to-glyph-id mapping (формат 4 + формат 12)
- *  - `name` → PostScript name (для /BaseFont)
- *  - `OS/2` → CapHeight (опционально), italic angle hints
+ *  - `hmtx` → advance widths array
+ *  - `cmap` → character-to-glyph-id mapping (format 4 + format 12)
+ *  - `name` → PostScript name (for /BaseFont)
+ *  - `OS/2` → CapHeight (optional), italic angle hints
  *  - `post` → italicAngle, isFixedPitch
  *
- * НЕ парсит: glyf/loca/cvt/fpgm/prep (содержат glyph outlines + hinting,
- * embed'ятся в PDF как opaque FontFile2 stream).
+ * Does NOT parse: glyf/loca/cvt/fpgm/prep (these contain glyph outlines +
+ * hinting and are embedded in the PDF as an opaque FontFile2 stream).
  *
  * Reference: ISO/IEC 14496-22 + Apple TrueType Reference Manual.
  */
@@ -27,7 +27,7 @@ final class TtfFile
 {
     /**
      * Scaler type magic. 0x00010000 = TTF (Windows/Adobe).
-     * 'true' = Apple TTF (old). 'OTTO' = OTF with CFF (мы НЕ поддерживаем).
+     * 'true' = Apple TTF (old). 'OTTO' = OTF with CFF (NOT supported).
      */
     private const int SCALER_TTF = 0x00010000;
 
@@ -44,14 +44,14 @@ final class TtfFile
 
     private int $numGlyphs;
 
-    /** @var list<int>  bbox: [xMin, yMin, xMax, yMax] в FUnits */
+    /** @var list<int>  bbox: [xMin, yMin, xMax, yMax] in FUnits */
     private array $bbox;
 
     private int $ascent;
 
     private int $descent;
 
-    /** @var list<int>  index = glyphId; value = advance width в FUnits */
+    /** @var list<int>  index = glyphId; value = advance width in FUnits */
     private array $advanceWidths;
 
     /** @var array<int, int>  unicodeCodepoint → glyphId */
@@ -133,8 +133,8 @@ final class TtfFile
     }
 
     /**
-     * Lazy-parsed kerning table из GPOS (cached). Null если GPOS отсутствует
-     * или не содержит pair-adjustment lookup'ов.
+     * Lazy-parsed kerning table from GPOS (cached). Null if GPOS is absent
+     * or does not contain pair-adjustment lookups.
      */
     private ?KerningTable $kerningTable = null;
 
@@ -159,8 +159,8 @@ final class TtfFile
     }
 
     /**
-     * Lazy-parsed ligature substitutions (cached) из GSUB. Null если
-     * GSUB отсутствует или не содержит 'liga' feature lookup'ов.
+     * Lazy-parsed ligature substitutions (cached) from GSUB. Null if
+     * GSUB is absent or does not contain 'liga' feature lookups.
      */
     private ?LigatureSubstitutions $ligatures = null;
 
@@ -188,9 +188,9 @@ final class TtfFile
     private array $singleSubstByFeature = [];
 
     /**
-     * Phase 143-144: read GSUB Type 1 Single Substitution для произвольного
-     * feature tag (e.g. 'rphf' для Indic reph, 'half'/'init'/'medi'/'fina'
-     * для half-forms и Arabic positional forms).
+     * Read GSUB Type 1 Single Substitution for an arbitrary feature tag
+     * (e.g. 'rphf' for Indic reph, 'half'/'init'/'medi'/'fina' for
+     * half-forms and Arabic positional forms).
      */
     public function singleSubstitutionsForFeature(string $featureTag): ?SingleSubstitutions
     {
@@ -207,8 +207,8 @@ final class TtfFile
     }
 
     /**
-     * Резолв Unicode codepoint → glyph ID. Возвращает 0 (.notdef) если char
-     * не покрывается font'ом.
+     * Resolve Unicode codepoint → glyph ID. Returns 0 (.notdef) if char
+     * is not covered by the font.
      */
     public function glyphIdForChar(int $codepoint): int
     {
@@ -221,7 +221,7 @@ final class TtfFile
     }
 
     /**
-     * Доступ к raw-offset таблицы (для подкласс'ов / debug).
+     * Access to the raw-offset table (for subclasses / debug).
      *
      * @return array{offset: int, length: int}|null
      */
@@ -231,7 +231,7 @@ final class TtfFile
     }
 
     /**
-     * Phase 131: Detect OpenType variable font (presence of `fvar` table).
+     * Detect OpenType variable font (presence of `fvar` table).
      */
     public function isVariable(): bool
     {
@@ -242,11 +242,11 @@ final class TtfFile
     private ?array $fvarParsed = null;
 
     /**
-     * Phase 131: Variation axes definitions из fvar table.
+     * Variation axes definitions from fvar table.
      *
-     * Returns list of axes с tag (4-char like "wght", "wdth", "ital", "slnt",
-     * "opsz" or custom), min/default/max values, и nameId (for human-readable
-     * name lookup via `name` table).
+     * Returns a list of axes with tag (4-char like "wght", "wdth", "ital",
+     * "slnt", "opsz" or custom), min/default/max values, and nameId (for
+     * human-readable name lookup via `name` table).
      *
      * @return list<array{tag:string,min:float,default:float,max:float,nameId:int,flags:int}>
      */
@@ -256,10 +256,11 @@ final class TtfFile
     }
 
     /**
-     * Phase 131: Named instances (predefined coordinate combinations) из fvar.
+     * Named instances (predefined coordinate combinations) from fvar.
      *
-     * Each instance имеет subfamily nameId (e.g., "Light", "Regular", "Bold"),
-     * coordinates map axisTag → value, optional postScript nameId.
+     * Each instance has a subfamily nameId (e.g., "Light", "Regular",
+     * "Bold"), a coordinates map axisTag → value, and an optional
+     * postScript nameId.
      *
      * @return list<array{nameId:int,coordinates:array<string,float>,postScriptNameId:?int,flags:int}>
      */
@@ -283,15 +284,15 @@ final class TtfFile
     }
 
     /**
-     * Phase 131: Lookup human-readable name by nameID through `name` table.
-     * Returns null если nameID не найден.
+     * Lookup human-readable name by nameID through the `name` table.
+     * Returns null if nameID is not found.
      */
     public function nameById(int $nameId): ?string
     {
         return $this->namesById[$nameId] ?? null;
     }
 
-    /** Phase 132: lazy avar/HVAR/MVAR parsers. */
+    /** Lazy avar/HVAR/MVAR parsers. */
     private ?AvarReader $avar = null;
 
     private bool $avarParsed = false;
@@ -346,7 +347,7 @@ final class TtfFile
         return $this->mvar;
     }
 
-    /** Phase 133: lazy gvar parser. */
+    /** Lazy gvar parser. */
     private ?GvarReader $gvar = null;
 
     private bool $gvarParsed = false;
@@ -366,9 +367,9 @@ final class TtfFile
     }
 
     /**
-     * Phase 132: convert user-space axis coords к normalized -1..+1 space.
-     * Applies linear default normalization, then avar piecewise-linear remap
-     * если avar table present.
+     * Convert user-space axis coords to normalized -1..+1 space. Applies
+     * linear default normalization, then avar piecewise-linear remap if
+     * an avar table is present.
      *
      * @param  array<string, float>  $userCoords  axis tag → user value
      * @return array<int, float>  axis index → normalized coord (-1..+1)
@@ -380,7 +381,7 @@ final class TtfFile
         $avar = $this->avar();
         foreach ($axes as $i => $axis) {
             $val = $userCoords[$axis['tag']] ?? $axis['default'];
-            // Clamp к [min, max].
+            // Clamp to [min, max].
             $val = max($axis['min'], min($axis['max'], $val));
             // Linear default normalization.
             if ($val < $axis['default']) {
@@ -400,8 +401,9 @@ final class TtfFile
     }
 
     /**
-     * Phase 132: interpolated advance width для glyph под given axis coords.
-     * Falls back на default advanceWidth если font не variable или HVAR absent.
+     * Interpolated advance width for a glyph under given axis coords.
+     * Falls back to the default advanceWidth if the font is not variable
+     * or HVAR is absent.
      *
      * @param  array<string, float>  $userCoords
      */
@@ -419,8 +421,8 @@ final class TtfFile
     }
 
     /**
-     * Phase 132: interpolated font metric (e.g., 'asc ', 'desc', 'cpht').
-     * Returns base metric value plus MVAR delta, или base value если no MVAR.
+     * Interpolated font metric (e.g., 'asc ', 'desc', 'cpht'). Returns
+     * the base metric value plus MVAR delta, or the base value if no MVAR.
      *
      * @param  array<string, float>  $userCoords
      */
@@ -439,14 +441,14 @@ final class TtfFile
     /**
      * Read header + table directory.
      * Header: scaler type (4) + numTables (2) + 3 × uint16 = 12 bytes.
-     * Каждый entry — tag (4) + checksum (4) + offset (4) + length (4) = 16.
+     * Each entry: tag (4) + checksum (4) + offset (4) + length (4) = 16.
      */
     private function parseTableDirectory(): void
     {
         $this->reader->seek(0);
         $scaler = $this->reader->readUInt32();
 
-        // 0x00010000 для standard TTF, 'OTTO' для CFF-based OTF.
+        // 0x00010000 for standard TTF, 'OTTO' for CFF-based OTF.
         if ($scaler !== self::SCALER_TTF
             && substr($this->bytes, 0, 4) !== self::SCALER_APPLE) {
             if (substr($this->bytes, 0, 4) === self::SCALER_OTF_CFF) {
@@ -456,7 +458,7 @@ final class TtfFile
         }
 
         $numTables = $this->reader->readUInt16();
-        $this->reader->skip(6); // searchRange + entrySelector + rangeShift — нам не нужны
+        $this->reader->skip(6); // searchRange + entrySelector + rangeShift — not needed
 
         for ($i = 0; $i < $numTables; $i++) {
             $tag = $this->reader->readTag();
@@ -469,11 +471,11 @@ final class TtfFile
 
     /**
      * `head` table — base font metrics.
-     * Offsets (от start таблицы):
+     * Offsets (from start of table):
      *   0..3   majorVersion, minorVersion (Fixed)
      *   4..7   fontRevision (Fixed)
      *   8..11  checkSumAdjustment
-     *   12..15 magicNumber (должен быть 0x5F0F3CF5)
+     *   12..15 magicNumber (must be 0x5F0F3CF5)
      *   16..17 flags
      *   18..19 unitsPerEm
      *   20..35 created/modified (Date64, 16 bytes total)
@@ -498,7 +500,7 @@ final class TtfFile
     }
 
     /**
-     * `maxp` — содержит numGlyphs (offset 4, uint16).
+     * `maxp` — contains numGlyphs (offset 4, uint16).
      */
     private function parseMaxp(): void
     {
@@ -526,9 +528,9 @@ final class TtfFile
     }
 
     /**
-     * `hmtx` — массив longHorMetric (advance width + lsb) первых
-     * numHMetrics + опциональный массив только-lsb для остальных.
-     * Glyph'ы с index >= numHMetrics используют last-known advance width.
+     * `hmtx` — array of longHorMetric (advance width + lsb) for the first
+     * numHMetrics entries plus an optional lsb-only array for the rest.
+     * Glyphs with index >= numHMetrics use the last-known advance width.
      */
     private function parseHmtx(): void
     {
@@ -539,23 +541,23 @@ final class TtfFile
         $lastWidth = 0;
         for ($i = 0; $i < $this->numHMetrics; $i++) {
             $lastWidth = $this->reader->readUInt16();
-            $this->reader->skip(2); // lsb (signed, не используем)
+            $this->reader->skip(2); // lsb (signed, not used)
             $this->advanceWidths[$i] = $lastWidth;
         }
-        // Остальные glyph'ы — lsb only, ширина = lastWidth.
+        // Remaining glyphs — lsb only, width = lastWidth.
         for ($i = $this->numHMetrics; $i < $this->numGlyphs; $i++) {
             $this->advanceWidths[$i] = $lastWidth;
         }
     }
 
     /**
-     * Phase 192: vertical metrics support.
+     * Vertical metrics support.
      *
-     * `vhea` table (vertical header) — analog hhea но для vertical writing.
+     * `vhea` table (vertical header) — analog of hhea for vertical writing.
      * Offsets: 4..5 ascent, 6..7 descent, 34..35 numOfLongVerMetrics.
      *
-     * `vmtx` table — analog hmtx с advance height + topSideBearing pairs.
-     * Used for CJK vertical writing /WMode 1.
+     * `vmtx` table — analog of hmtx with advance height + topSideBearing
+     * pairs. Used for CJK vertical writing /WMode 1.
      */
     /** @var array<int, int>|null Lazy-parsed advance heights (vertical advance per glyph) */
     private ?array $advanceHeights = null;
@@ -580,7 +582,7 @@ final class TtfFile
         if (! $this->hasVerticalMetrics()) {
             return;
         }
-        // Read vhea для numOfLongVerMetrics.
+        // Read vhea for numOfLongVerMetrics.
         $vheaOffset = $this->requireTable('vhea');
         $this->reader->seek($vheaOffset + 34);
         $numVMetrics = $this->reader->readUInt16();
@@ -599,18 +601,18 @@ final class TtfFile
     }
 
     /**
-     * `cmap` — character-to-glyph mapping. Содержит несколько subtables;
-     * мы ищем сначала format 12 (full Unicode), потом format 4 (BMP).
+     * `cmap` — character-to-glyph mapping. Contains several subtables;
+     * we look for format 12 (full Unicode) first, then format 4 (BMP).
      *
      * cmap header:
      *   0..1   version (uint16)
      *   2..3   numTables (uint16)
-     *   далее numTables entries по 8 байт:
+     *   then numTables entries of 8 bytes each:
      *     0..1 platformID
      *     2..3 encodingID
-     *     4..7 offset (от начала cmap-таблицы)
+     *     4..7 offset (from start of cmap table)
      *
-     * Предпочтения:
+     * Preferences:
      *   - Windows / Unicode full (platform 3, encoding 10) — format 12
      *   - Windows / BMP (platform 3, encoding 1) — format 4
      *   - Unicode / BMP (platform 0, encoding 3) — format 4
@@ -664,11 +666,11 @@ final class TtfFile
             return 4; // Unicode / BMP
         }
 
-        return null; // не используем (Macintosh, Symbol, etc.)
+        return null; // not used (Macintosh, Symbol, etc.)
     }
 
     /**
-     * cmap format 4 — segment mapping для BMP (U+0000..U+FFFF).
+     * cmap format 4 — segment mapping for BMP (U+0000..U+FFFF).
      *
      * Schema:
      *   0..1   format (= 4)
@@ -683,9 +685,9 @@ final class TtfFile
      *   ...    idRangeOffset array (segCount × uint16)
      *   ...    glyphIdArray
      *
-     * Алгоритм mapping:
+     * Mapping algorithm:
      *   for each char c:
-     *     найти segment i где startCode[i] <= c <= endCode[i]
+     *     find segment i where startCode[i] <= c <= endCode[i]
      *     if idRangeOffset[i] == 0:
      *       glyphId = (c + idDelta[i]) mod 65536
      *     else:
@@ -726,7 +728,7 @@ final class TtfFile
         for ($i = 0; $i < $segCount; $i++) {
             $start = $startCode[$i];
             $end = $endCode[$i];
-            // Last segment всегда 0xFFFF..0xFFFF mapping to 0. Skip.
+            // Last segment is always 0xFFFF..0xFFFF mapping to 0. Skip.
             if ($start === 0xFFFF && $end === 0xFFFF) {
                 continue;
             }
@@ -752,7 +754,7 @@ final class TtfFile
     }
 
     /**
-     * cmap format 12 — segmented mapping for full UCS-4 (с supplementary
+     * cmap format 12 — segmented mapping for full UCS-4 (with supplementary
      * planes outside BMP).
      *
      * Schema:
@@ -785,13 +787,13 @@ final class TtfFile
     }
 
     /**
-     * `name` table — содержит metadata strings (font family, postscript name).
+     * `name` table — contains metadata strings (font family, postscript name).
      *
      * Header:
-     *   0..1  format (обычно 0)
+     *   0..1  format (usually 0)
      *   2..3  count
-     *   4..5  stringOffset (от начала name-таблицы)
-     *   далее `count` записей по 12 байт:
+     *   4..5  stringOffset (from start of name table)
+     *   then `count` records of 12 bytes each:
      *     0..1 platformID
      *     2..3 encodingID
      *     4..5 languageID
@@ -799,10 +801,10 @@ final class TtfFile
      *     8..9 length
      *     10..11 offset
      *
-     * Мы ищем nameID 6 (PostScript name). Предпочтение — Windows
-     * (platformID 3) с Unicode (UTF-16BE).
+     * We look for nameID 6 (PostScript name). Preference — Windows
+     * (platformID 3) with Unicode (UTF-16BE).
      */
-    /** @var array<int, string> Phase 131: nameId → decoded UTF-8 string (best-quality variant). */
+    /** @var array<int, string> nameId → decoded UTF-8 string (best-quality variant). */
     private array $namesById = [];
 
     private function parseName(): void
@@ -818,7 +820,7 @@ final class TtfFile
         $count = $this->reader->readUInt16();
         $stringOffset = $this->reader->readUInt16();
 
-        // Collect все name records, prefer Windows platform=3 над Macintosh=1.
+        // Collect all name records, prefer Windows platform=3 over Macintosh=1.
         $best = null;
         for ($i = 0; $i < $count; $i++) {
             $platformId = $this->reader->readUInt16();
@@ -837,8 +839,8 @@ final class TtfFile
             if ($value === '' || $value === false) {
                 continue;
             }
-            // Phase 131: store ALL name IDs для variable-font instance/axis lookup.
-            // Prefer Windows (platform 3) — overwrites Mac entry если оба есть.
+            // Store ALL name IDs for variable-font instance/axis lookup.
+            // Prefer Windows (platform 3) — overwrites Mac entry if both exist.
             if (! isset($this->namesById[$nameId]) || $platformId === 3) {
                 $this->namesById[$nameId] = $value;
             }
@@ -852,7 +854,7 @@ final class TtfFile
     }
 
     /**
-     * `post` — italicAngle (Fixed 16.16, offset 4) и isFixedPitch
+     * `post` — italicAngle (Fixed 16.16, offset 4) and isFixedPitch
      * (uint32, offset 12, non-zero = monospace).
      */
     private function parsePost(): void
@@ -866,7 +868,7 @@ final class TtfFile
         }
         $offset = $info['offset'];
         $this->reader->seek($offset + 4);
-        // italicAngle: Fixed 16.16. Высокие 16 бит — integer часть.
+        // italicAngle: Fixed 16.16. High 16 bits are the integer part.
         $italicRaw = $this->reader->readInt32();
         $this->italicAngle = $italicRaw >> 16;
 

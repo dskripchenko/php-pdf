@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 207: Pharmacode (Laetus / Pharmaceutical Binary Code) encoder.
+ * Pharmacode (Laetus / Pharmaceutical Binary Code) encoder.
  *
- * One-track pharmaceutical barcode для pill packaging, blister packs.
+ * One-track pharmaceutical barcode for pill packaging, blister packs.
  * Simplest of all 1D barcode formats — no start/stop, no check digit,
  * no character set (numeric only). Range: 3..131070.
  *
@@ -44,7 +44,7 @@ final class PharmacodeEncoder
     public readonly int $value;
 
     /**
-     * Bar sequence — list<bool> где true = wide, false = narrow.
+     * Bar sequence — list<bool> where true = wide, false = narrow.
      * Left-to-right rendering order.
      *
      * @var list<bool>
@@ -94,7 +94,7 @@ final class PharmacodeEncoder
     }
 
     /**
-     * Build the bar sequence для value. Returns list<bool> where
+     * Build the bar sequence for value. Returns list<bool> where
      * true = wide, false = narrow. Bars are in left-to-right rendering order.
      *
      * @return list<bool>

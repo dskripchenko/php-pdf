@@ -7,39 +7,40 @@ namespace Dskripchenko\PhpPdf\Font;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 
 /**
- * Abstraction для font-resolution: caller просит шрифт по имени, реализация
- * возвращает TtfFile (или null если не знает этого имени).
+ * Abstraction for font resolution: the caller asks for a font by name and
+ * the implementation returns a TtfFile (or null if it does not know the name).
  *
- * Использование:
+ * Usage:
  *
  *   $provider = new ChainedFontProvider(
- *       new LiberationFontProvider(),     // из php-pdf-fonts-liberation
+ *       new LiberationFontProvider(),     // from php-pdf-fonts-liberation
  *       new CustomFontProvider('/path/to/my/fonts'),
  *   );
  *
  *   $ttf = $provider->resolve('Arial');
- *   // → LiberationSans (metric-compatible aliasing в LiberationFontProvider)
+ *   // → LiberationSans (metric-compatible aliasing in LiberationFontProvider)
  *
  *   $ttf = $provider->resolve('Helvetica');
- *   // → null (Helvetica = PDF base-14, embedding не нужен)
+ *   // → null (Helvetica = PDF base-14, embedding not required)
  *
- * Phase 2 API minimum:
+ * Minimum API:
  *   - resolve(name): ?TtfFile
  *
- * Future expansions (Phase 5+):
+ * Possible future expansions:
  *   - resolveBold/Italic variants
- *   - FontProvider implementations для CSS-family stacks
+ *   - FontProvider implementations for CSS-family stacks
  *     ('Arial, Helvetica, sans-serif')
- *   - FontProvider'ы для system-installed font discovery
+ *   - FontProviders for system-installed font discovery
  */
 interface FontProvider
 {
     /**
-     * Резолвит font name → TtfFile или null если provider не знает имя.
+     * Resolves font name → TtfFile, or null if the provider does not know
+     * the name.
      *
-     * Имена case-sensitive — provider'ы могут нормализовать сами.
-     * PostScript names — наиболее устойчивый вариант (LiberationSans
-     * vs «Liberation Sans» или «liberation-sans»).
+     * Names are case-sensitive — providers may normalize on their own.
+     * PostScript names are the most stable variant (LiberationSans
+     * vs "Liberation Sans" or "liberation-sans").
      */
     public function resolve(string $fontName): ?TtfFile;
 }

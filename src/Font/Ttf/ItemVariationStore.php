@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 132: OpenType Item Variation Store (shared между HVAR, MVAR, GDEF, COLR).
+ * OpenType Item Variation Store (shared between HVAR, MVAR, GDEF, COLR).
  *
- * Stores set of variation regions + delta sets. Каждый delta set указывает
- * как item value меняется когда normalized axis coords change.
+ * Stores a set of variation regions + delta sets. Each delta set describes
+ * how an item value changes when normalized axis coords change.
  *
  * Per OpenType spec §6.2.7:
  *
@@ -39,7 +39,7 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  * DeltaSet: shortDeltaCount × int16, then (regionIndexCount-shortDeltaCount) × int8.
  *
  * Long-format variation data (newer fonts): wordDeltaCount uses int32 for first
- * deltaCount items, with optional WORD_DELTAS flag — для now treated like int16.
+ * deltaCount items, with optional WORD_DELTAS flag — for now treated like int16.
  */
 final class ItemVariationStore
 {
@@ -120,8 +120,8 @@ final class ItemVariationStore
     }
 
     /**
-     * Compute interpolated delta для (outerIndex, innerIndex) under given
-     * normalized axis coordinates.
+     * Compute the interpolated delta for (outerIndex, innerIndex) under
+     * the given normalized axis coordinates.
      *
      * @param  array<int, float>  $normCoords  axis index → normalized value (-1..+1)
      */

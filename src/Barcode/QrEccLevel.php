@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 37: QR error correction levels.
+ * QR error correction levels.
  *
  * L = ~7% recovery (max data capacity)
  * M = ~15% recovery
  * Q = ~25% recovery
  * H = ~30% recovery (lowest data capacity, highest resilience)
  *
- * Format info bits в QR matrix encoded как:
+ * Format info bits in QR matrix encoded as:
  *   L = 01, M = 00, Q = 11, H = 10.
  */
 enum QrEccLevel: string

@@ -9,23 +9,23 @@ use Dskripchenko\PhpPdf\Pdf\Writer;
 /**
  * Image XObject for PDF embedding.
  *
- * Supports PNG and JPEG. For JPEG passes-through bytes (PDF accepts
+ * Supports PNG and JPEG. For JPEG passes bytes through (PDF accepts
  * DCT-encoded streams natively); for PNG decodes IDAT and re-encodes
- * через Flate.
+ * via Flate.
  *
- * SCOPE LIMITATIONS for v0.1 / POC-R6.a:
- *  - PNG color types: только 2 (RGB) и 6 (RGBA) с bit depth 8
- *  - JPEG: только baseline / extended sequential DCT (SOF0/SOF1/SOF2/SOF3)
+ * SCOPE LIMITATIONS:
+ *  - PNG color types: only 2 (RGB) and 6 (RGBA) with bit depth 8
+ *  - JPEG: only baseline / extended sequential DCT (SOF0/SOF1/SOF2/SOF3)
  *  - PNG interlacing (Adam7): NOT supported
- *  - PNG palette (color type 3): NOT supported для POC, можно добавить
- *  - Alpha channel в RGBA: для POC ignor'им, рендерим как RGB
+ *  - PNG palette (color type 3): NOT supported
+ *  - Alpha channel in RGBA: ignored, rendered as RGB
  *  - ICC color profiles: skip
  *  - 16-bit channels: skip
  *
- * Использование:
+ * Usage:
  *   $img = PdfImage::fromPath('/tmp/photo.jpg');
  *   $imgRef = $img->registerWith($writer);
- *   // в content stream:
+ *   // in content stream:
  *   q  w 0 0 h x y cm  /Im1 Do  Q
  */
 final class PdfImage
@@ -35,10 +35,10 @@ final class PdfImage
     public function __construct(
         public readonly int $widthPx,
         public readonly int $heightPx,
-        public readonly string $filter,         // /FlateDecode или /DCTDecode
-        public readonly string $colorSpace,     // /DeviceRGB или /DeviceGray
+        public readonly string $filter,         // /FlateDecode or /DCTDecode
+        public readonly string $colorSpace,     // /DeviceRGB or /DeviceGray
         public readonly int $bitsPerComponent,  // typically 8
-        public readonly string $imageData,      // raw bytes для PDF stream
+        public readonly string $imageData,      // raw bytes for PDF stream
     ) {}
 
     public static function fromPath(string $path): self
@@ -86,14 +86,14 @@ final class PdfImage
     }
 
     /**
-     * Parses JPEG file. PDF accepts DCT-encoded streams напрямую (без
-     * decoding), so мы просто wrap raw bytes.
+     * Parses a JPEG file. PDF accepts DCT-encoded streams directly (without
+     * decoding), so the raw bytes are simply wrapped.
      *
-     * JPEG structure: serie SOI(FF D8) + segments + SOS + compressed
-     * data + EOI(FF D9). Каждый segment marker = 0xFF + type byte +
-     * 2-byte length (включая length bytes сами).
+     * JPEG structure: SOI(FF D8) + segments + SOS + compressed
+     * data + EOI(FF D9). Each segment marker = 0xFF + type byte +
+     * 2-byte length (the length bytes themselves are included).
      *
-     * Для dimensions ищем SOF0/SOF1/SOF2/SOF3 marker (0xFFC0..0xFFC3):
+     * For dimensions, look for SOF0/SOF1/SOF2/SOF3 marker (0xFFC0..0xFFC3):
      *   1 byte sample precision
      *   2 bytes height (big-endian)
      *   2 bytes width
@@ -115,12 +115,12 @@ final class PdfImage
             if ($marker === 0xD8 || $marker === 0xD9 || ($marker >= 0xD0 && $marker <= 0xD7)) {
                 continue;
             }
-            // SOS — start of scan; dimensions уже должны были быть в SOF.
+            // SOS — start of scan; dimensions should already have been in SOF.
             if ($marker === 0xDA) {
                 break;
             }
 
-            // Payload length (включая длину bytes сами, не payload only).
+            // Payload length (includes the length bytes themselves, not payload only).
             $segLen = (ord($bytes[$pos]) << 8) | ord($bytes[$pos + 1]);
 
             // SOF0..SOF3 — baseline / extended / progressive / lossless.
@@ -165,11 +165,11 @@ final class PdfImage
      *   1 byte interlace (0 = none, 1 = Adam7)
      *
      * IDAT chunks — zlib-deflated image data. Concatenated together
-     * if multiple, потом passed как PDF Flate stream.
+     * if multiple, then passed as a PDF Flate stream.
      *
-     * Для PDF Flate decode требуется DecodeParms с Predictor 15 (PNG
-     * filters), Colors, BitsPerComponent, Columns — иначе reader
-     * не сможет правильно decompress'ить.
+     * PDF Flate decode requires DecodeParms with Predictor 15 (PNG
+     * filters), Colors, BitsPerComponent, Columns — otherwise the reader
+     * cannot decompress correctly.
      */
     private static function parsePng(string $bytes): self
     {
@@ -218,22 +218,22 @@ final class PdfImage
         [$colorSpace, $components] = match ($colorType) {
             2 => ['/DeviceRGB', 3],   // RGB
             0 => ['/DeviceGray', 1],  // Grayscale
-            // Note: RGBA (6) и Gray+Alpha (4) для POC рендерим как
-            // RGB/Gray без alpha. Phase 6 добавит SMask для alpha.
+            // Note: RGBA (6) and Gray+Alpha (4) are rendered as
+            // RGB/Gray without alpha.
             6 => ['/DeviceRGB', 4],
             4 => ['/DeviceGray', 2],
             default => throw new \RuntimeException("PNG color type $colorType not supported."),
         };
 
-        // PNG IDAT уже zlib-compressed с PNG filters per scanline.
-        // Для PDF Flate decode нужен DecodeParms predictor 15 (PNG-style).
-        // Мы упрощаем для POC: re-encode без predictor. Это значит
-        // decompress IDAT, strip PNG filter bytes, re-compress без filter.
-        // Для 1×1 image это излишне, но если будут multi-byte изображения
-        // — нужен real decoder.
+        // PNG IDAT is zlib-compressed with PNG filters per scanline.
+        // PDF Flate decode requires DecodeParms predictor 15 (PNG-style).
+        // Simplified: re-encode without predictor. That means
+        // decompress IDAT, strip PNG filter bytes, re-compress without filter.
+        // For a 1×1 image this is overkill, but for multi-byte images
+        // a real decoder is required.
         //
-        // PNG данные после inflate: каждая scanline начинается с 1 filter
-        // byte, потом scanline.width × bytesPerPixel actual pixel bytes.
+        // PNG data after inflate: each scanline starts with 1 filter
+        // byte, then scanline.width × bytesPerPixel actual pixel bytes.
         // bytesPerPixel = components × (bitDepth/8) = components × 1.
         $inflated = @gzuncompress($idat);
         if ($inflated === false) {
@@ -250,7 +250,7 @@ final class PdfImage
             $prevRow = $unfilteredRow;
         }
 
-        // Strip alpha если RGBA → RGB.
+        // Strip alpha if RGBA → RGB.
         if ($colorType === 6) {
             $stripped = '';
             for ($i = 0; $i < strlen($unfilteredRows); $i += 4) {
@@ -288,8 +288,8 @@ final class PdfImage
      *   3 = Average (x - (left + above) / 2)
      *   4 = Paeth (x - paeth predictor)
      *
-     * Минимальная реализация для нескольких filter types — для POC хватит
-     * filter 0 (None) который libpng по умолчанию для маленьких images.
+     * Minimal implementation for several filter types — filter 0 (None)
+     * is sufficient as libpng defaults to it for small images.
      */
     private static function applyPngFilter(int $filter, string $row, string $prev, int $components): string
     {

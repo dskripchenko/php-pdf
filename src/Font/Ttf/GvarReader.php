@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 133: `gvar` table parser — Glyph Variations.
+ * `gvar` table parser — Glyph Variations.
  *
- * Provides per-glyph point delta vectors для variable fonts. Each glyph
+ * Provides per-glyph point delta vectors for variable fonts. Each glyph
  * has zero or more "tuple variations" — collections of (x, y) deltas
  * applied at specific axis coordinate regions.
  *
@@ -18,25 +18,25 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  *   uint16  minorVersion (=0)
  *   uint16  axisCount
  *   uint16  sharedTupleCount
- *   Offset32 sharedTuplesOffset (relative к gvar start)
+ *   Offset32 sharedTuplesOffset (relative to gvar start)
  *   uint16  glyphCount
  *   uint16  flags (bit 0: longOffsets — uint32 vs uint16/2 offsets)
- *   Offset32 glyphVariationDataArrayOffset (relative к gvar start)
- *   Offset[glyphCount+1] glyphVariationDataOffsets (relative к array offset)
+ *   Offset32 glyphVariationDataArrayOffset (relative to gvar start)
+ *   Offset[glyphCount+1] glyphVariationDataOffsets (relative to array offset)
  *
  * Shared tuples: sharedTupleCount × axisCount × F2DOT14 normalized coords.
  *
  * Per-glyph variation data:
  *   uint16 tupleVariationCount (bit 12: SHARED_POINT_NUMBERS, low 12 bits: count)
- *   Offset16 dataOffset (где starts packed point/delta data)
+ *   Offset16 dataOffset (where the packed point/delta data starts)
  *   TupleVariationHeader[count]
  *   packed data (point numbers + X deltas + Y deltas per tuple)
  *
- * IUP (Interpolation of Unreferenced Points) — НЕ реализован в этой
- * фазе; точки которые не имеют explicit delta остаются на default
- * position. Это даёт корректные results для fonts где ВСЕ outline points
- * имеют explicit deltas (typical для well-designed variable fonts), но
- * может cause visual glitches иначе.
+ * IUP (Interpolation of Unreferenced Points) is NOT implemented here;
+ * points without an explicit delta remain at the default position. This
+ * yields correct results for fonts where ALL outline points have explicit
+ * deltas (typical for well-designed variable fonts), but may cause visual
+ * glitches otherwise.
  */
 final class GvarReader
 {
@@ -108,11 +108,12 @@ final class GvarReader
     }
 
     /**
-     * Compute per-point (x, y) deltas для glyph под given normalized coords.
+     * Compute per-point (x, y) deltas for a glyph under the given
+     * normalized coords.
      *
-     * Returns sparse array: [pointIdx => ['x' => dx, 'y' => dy]].
-     * Points без explicit delta in any tuple отсутствуют в результате (NB:
-     * this is IUP-deferred — apply default position).
+     * Returns a sparse array: [pointIdx => ['x' => dx, 'y' => dy]].
+     * Points without an explicit delta in any tuple are absent from the
+     * result (NB: this is IUP-deferred — apply the default position).
      *
      * @param  array<int, float>  $normCoords  axis index → normalized -1..+1
      * @return array<int, array{x:float, y:float}>
@@ -139,7 +140,7 @@ final class GvarReader
         $headerCursor = $start + 4;
         $dataCursor = $start + $dataOffset;
 
-        // Read shared point numbers если present.
+        // Read shared point numbers if present.
         $sharedPoints = null;
         if ($sharedPointNumbers) {
             [$sharedPoints, $dataCursor] = self::readPackedPointNumbers($this->bytes, $dataCursor, $glyphPointCount);
@@ -192,7 +193,7 @@ final class GvarReader
                 continue;
             }
 
-            // Decode point numbers + deltas из packed data.
+            // Decode point numbers + deltas from packed data.
             $tupleDataStart = $dataCursor;
             $cur = $dataCursor;
             $points = $sharedPoints;
@@ -225,7 +226,7 @@ final class GvarReader
     }
 
     /**
-     * Compute scalar для tuple — region tent function.
+     * Compute scalar for tuple — region tent function.
      *
      * @param  list<float>  $peak
      * @param  list<float>|null  $start
@@ -241,7 +242,7 @@ final class GvarReader
                 continue; // axis not involved
             }
             if ($start === null || $end === null) {
-                // Default region: 0..peak или peak..0
+                // Default region: 0..peak or peak..0
                 $s = $p > 0 ? 0.0 : $p;
                 $e = $p > 0 ? $p : 0.0;
                 // Adjust: at $p we have factor 1, at boundary 0.

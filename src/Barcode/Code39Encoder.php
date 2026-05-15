@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 202: Code 39 barcode encoder.
+ * Code 39 barcode encoder.
  *
  * Code 39 (ISO/IEC 16388) — alphanumeric variable-length barcode. Encodes:
  *  - Digits 0-9
@@ -89,9 +89,9 @@ final class Code39Encoder
     public readonly string $canonical;
 
     /**
-     * @param  string  $value  Input string (case-insensitive — нижний регистр
-     *                         автоматически нормализуется к верхнему).
-     * @param  bool  $withCheckDigit  Append Mod-43 check digit (Phase 202).
+     * @param  string  $value  Input string (case-insensitive — lowercase
+     *                         is automatically normalized to uppercase).
+     * @param  bool  $withCheckDigit  Append Mod-43 check digit.
      */
     public function __construct(string $value, bool $withCheckDigit = false)
     {
@@ -145,8 +145,8 @@ final class Code39Encoder
     }
 
     /**
-     * Compute Mod-43 check digit character для input.
-     * Sum символьных values mod 43 → indexed back to MOD43_VALUES.
+     * Compute Mod-43 check digit character for input.
+     * Sum of character values mod 43 → indexed back to MOD43_VALUES.
      */
     public static function checkDigitChar(string $value): string
     {

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 206: MSI Plessey (Modified Plessey) barcode encoder.
+ * MSI Plessey (Modified Plessey) barcode encoder.
  *
- * Variable-length numeric barcode common в retail shelf labeling и
+ * Variable-length numeric barcode common in retail shelf labeling and
  * inventory tracking. Each digit = 4 bits BCD encoded MSB first.
  *
  * Bit encoding (3 modules per bit):
@@ -21,7 +21,7 @@ namespace Dskripchenko\PhpPdf\Barcode;
  * Module count = 3 + 12·N + 4 = 12·N + 7
  *
  * Optional Mod-10 check digit (most common) via `withCheckDigit: true`.
- * Mod-11 не реализован (rarely used в production).
+ * Mod-11 is not implemented (rarely used in production).
  */
 final class MsiPlesseyEncoder
 {
@@ -94,7 +94,7 @@ final class MsiPlesseyEncoder
     }
 
     /**
-     * Mod-10 check digit (Luhn-style для MSI):
+     * Mod-10 check digit (Luhn-style for MSI):
      *  1. Take odd-positioned digits from right (positions 1,3,5...)
      *  2. Concatenate as integer, multiply by 2, sum decimal digits
      *  3. Add even-positioned digits from right
@@ -106,7 +106,7 @@ final class MsiPlesseyEncoder
             throw new \InvalidArgumentException('computeCheckDigit expects non-empty digit string');
         }
 
-        // Collect odd-positioned (from right, 1-indexed) и even-positioned digits.
+        // Collect odd-positioned (from right, 1-indexed) and even-positioned digits.
         $oddConcat = '';
         $evenSum = 0;
         $len = strlen($digits);

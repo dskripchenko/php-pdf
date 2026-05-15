@@ -5,22 +5,22 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 209: Code 11 (USS Code 11) barcode encoder.
+ * Code 11 (USS Code 11) barcode encoder.
  *
- * Numeric + dash variable-length barcode, primarily используется в telecom
- * для labeling telephone equipment, also lab samples.
+ * Numeric + dash variable-length barcode, primarily used in telecom for
+ * labeling telephone equipment, also lab samples.
  *
  * Encoding:
  *  - 11 characters: 0-9 + `-` (dash)
- *  - Each char = 5 elements (3 bars + 2 spaces) с 1 or 2 wide elements
+ *  - Each char = 5 elements (3 bars + 2 spaces) with 1 or 2 wide elements
  *  - Wide:narrow ratio = 2:1
- *  - Module count per char: 6 or 7 depending на pattern
+ *  - Module count per char: 6 or 7 depending on pattern
  *  - Implicit `*` start/stop wrapper + 1-narrow inter-char gap
  *
  * Optional Mod-11 check digits:
- *  - С (single): для inputs ≤ 10 chars — appended automatically when
+ *  - C (single): for inputs ≤ 10 chars — appended automatically when
  *    `withCheckDigit: true`
- *  - С + K (double): для inputs > 10 chars — when `doubleCheck: true`
+ *  - C + K (double): for inputs > 10 chars — when `doubleCheck: true`
  */
 final class Code11Encoder
 {
@@ -43,7 +43,7 @@ final class Code11Encoder
         '*' => '00110', // start/stop
     ];
 
-    /** Value table для Mod-11 check digit. */
+    /** Value table for Mod-11 check digit. */
     private const VALUES = '0123456789-';
 
     private const WIDE_RATIO = 2;
@@ -121,7 +121,7 @@ final class Code11Encoder
     /**
      * Mod-11 check digit. Weights cycle 1..maxWeight from right.
      *
-     * @param  int  $maxWeight  10 для C check, 9 для K check.
+     * @param  int  $maxWeight  10 for C check, 9 for K check.
      */
     public static function computeCheckDigit(string $value, int $maxWeight = 10): int
     {

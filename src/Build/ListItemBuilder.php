@@ -13,13 +13,13 @@ use Dskripchenko\PhpPdf\Element\Run;
 use Dskripchenko\PhpPdf\Style\ListFormat;
 
 /**
- * Fluent builder для ListItem.
+ * Fluent builder for ListItem.
  *
- * Содержит children + optional nestedList. Привычный pattern:
+ * Contains children + optional nestedList. The common pattern:
  *   $r->item('Top item')
  *     ->bulletList(fn($l) => $l->item('Sub 1')->item('Sub 2'))
  *
- * Или через nest() callback:
+ * Or via the nest() callback:
  *   $r->item(fn($i) => $i
  *       ->text('Item text')
  *       ->nest(ListFormat::Decimal, fn($sub) => $sub->item('1.1'))

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 186: composite glyph parser + serializer.
+ * Composite glyph parser + serializer.
  *
- * Composite glyph (numberOfContours < 0) — комбинация других glyphs с
- * optional position offsets + scale matrices. Used для diacritics
- * (e.g., letter с accent = base glyph + accent component).
+ * Composite glyph (numberOfContours < 0) — a combination of other glyphs
+ * with optional position offsets + scale matrices. Used for diacritics
+ * (e.g., letter with accent = base glyph + accent component).
  *
  * Format (OpenType §6.2):
  *   int16 numberOfContours (= -1 → composite)
@@ -23,11 +23,11 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  *     else if WE_HAVE_AN_X_AND_Y_SCALE: F2DOT14 xscale, yscale
  *     else if WE_HAVE_A_TWO_BY_TWO: F2DOT14 xscale, scale01, scale10, yscale
  *   Continue while flags has MORE_COMPONENTS set.
- *   If WE_HAVE_INSTRUCTIONS на last component:
+ *   If WE_HAVE_INSTRUCTIONS on the last component:
  *     uint16 numInstr, uint8 instructions[]
  *
- * Variation: gvar deltas apply к component anchor points (arg1, arg2 когда
- * ARGS_ARE_XY_VALUES). Point N в gvar = component N's anchor.
+ * Variation: gvar deltas apply to component anchor points (arg1, arg2 when
+ * ARGS_ARE_XY_VALUES). Point N in gvar = component N's anchor.
  */
 final class CompositeGlyph
 {
@@ -45,7 +45,7 @@ final class CompositeGlyph
     /**
      * @param  list<array{flags: int, glyphIndex: int, arg1: int, arg2: int, byteOffset: int, argSize: int, isXY: bool}>  $components
      * @param  string  $rawHeader  bytes 0..9 (5 int16: numContours + bbox)
-     * @param  string  $rawTail    bytes после last component (instructions если есть)
+     * @param  string  $rawTail    bytes after last component (instructions if present)
      */
     private function __construct(
         public readonly string $rawHeader,
@@ -55,8 +55,8 @@ final class CompositeGlyph
     ) {}
 
     /**
-     * Parse composite glyph bytes. Returns null если glyph не composite
-     * (numberOfContours >= 0) или empty.
+     * Parse composite glyph bytes. Returns null if glyph is not composite
+     * (numberOfContours >= 0) or empty.
      */
     public static function parse(string $bytes): ?self
     {
@@ -112,14 +112,14 @@ final class CompositeGlyph
             }
         } while ($flags & self::FLAG_MORE_COMPONENTS);
 
-        // Tail = instructions (если есть) + padding.
+        // Tail = instructions (if any) + padding.
         $rawTail = substr($bytes, $offset);
 
         return new self($rawHeader, $components, $rawTail, $bytes);
     }
 
     /**
-     * Re-serialize composite glyph с modified component dx/dy offsets.
+     * Re-serialize composite glyph with modified component dx/dy offsets.
      *
      * @param  array<int, array{dx: int, dy: int}>  $newOffsets  componentIdx → new anchor offset
      */
@@ -136,7 +136,7 @@ final class CompositeGlyph
                 $arg1 = $newOffsets[$idx]['dx'];
                 $arg2 = $newOffsets[$idx]['dy'];
             }
-            // Determine if args need promotion к int16 (when value out of int8 range).
+            // Determine if args need promotion to int16 (when value is out of int8 range).
             $promoteToWords = $comp['argSize'] === 1 && (
                 $arg1 < -128 || $arg1 > 127 || $arg2 < -128 || $arg2 > 127
             );

@@ -5,30 +5,30 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Text;
 
 /**
- * Phase 135: Arabic basic shaping (cursive contextual forms).
+ * Arabic basic shaping (cursive contextual forms).
  *
- * Maps logical-order UTF-8 Arabic text → visually-ordered codepoints с
+ * Maps logical-order UTF-8 Arabic text to visually-ordered codepoints with
  * appropriate Presentation Forms B variants (FE70-FEFF block).
  *
  * Algorithm (per Unicode UAX 9 + Arabic Shaping spec):
- *  1. Classify каждый char's joining type (R/L/D/C/T/U).
+ *  1. Classify each char's joining type (R/L/D/C/T/U).
  *  2. For each non-transparent char, determine if its right-side / left-side
  *     can join based on neighbors.
  *  3. Pick form: isolated / initial / medial / final.
- *  4. Map к Presentation Forms B codepoint (или return original если no form).
- *  5. Reverse output order для RTL display (PDF text matrix is LTR, so
- *     visual order = reverse of logical для Arabic).
+ *  4. Map to Presentation Forms B codepoint (or return original if no form).
+ *  5. Reverse output order for RTL display (PDF text matrix is LTR, so
+ *     visual order = reverse of logical for Arabic).
  *
  * Joining types:
- *  - R (Right): joins к prev neighbor (= right in visual)
- *  - L (Left): joins к next neighbor
+ *  - R (Right): joins to prev neighbor (= right in visual)
+ *  - L (Left): joins to next neighbor
  *  - D (Dual): joins both
  *  - C (Causing): like ZWJ, doesn't show, forces joining
  *  - T (Transparent): diacritics, don't affect joining
  *  - U (Non-joining): isolated always
  *
  * Scope: 28 base Arabic letters + alef variants + hamza + lam-alef.
- * Diacritics (fatha/kasra/damma/etc.) treated как transparent.
+ * Diacritics (fatha/kasra/damma/etc.) treated as transparent.
  */
 final class ArabicShaper
 {
@@ -46,7 +46,7 @@ final class ArabicShaper
 
     /**
      * Arabic letter joining classes (codepoint → joining type).
-     * Source: Unicode 16.0 ArabicShaping.txt subset для basic Arabic block.
+     * Source: Unicode 16.0 ArabicShaping.txt subset for basic Arabic block.
      */
     private const JOINING_TYPE = [
         // Hamza
@@ -101,7 +101,7 @@ final class ArabicShaper
 
     /**
      * Presentation Forms B mapping: base codepoint → [isolated, final, initial, medial].
-     * 0 entries mean form doesn't exist для letter.
+     * 0 entries mean the form doesn't exist for the letter.
      */
     private const PRESENTATION_FORMS = [
         // Hamza variants
@@ -164,7 +164,7 @@ final class ArabicShaper
      *
      * Non-Arabic chars passed through unchanged. RTL reversal applied.
      *
-     * @return list<int>  visually-ordered codepoints (left-to-right в PDF)
+     * @return list<int>  visually-ordered codepoints (left-to-right in PDF)
      */
     public static function shape(string $utf8): array
     {
@@ -173,9 +173,9 @@ final class ArabicShaper
             return [];
         }
 
-        // Step 1: split into Arabic runs (consecutive Arabic chars) и non-Arabic.
+        // Step 1: split into Arabic runs (consecutive Arabic chars) and non-Arabic.
         // For now, simple approach: process whole string, shape Arabic chars,
-        // pass through others. RTL reordering applied к Arabic runs.
+        // pass through others. RTL reordering applied to Arabic runs.
         $shaped = self::shapeCodepoints($cps);
         $shaped = self::applyLamAlefLigatures($shaped);
 
@@ -183,7 +183,7 @@ final class ArabicShaper
     }
 
     /**
-     * Phase 136: Shape Arabic chars в LOGICAL order (без RTL reversal).
+     * Shape Arabic chars in LOGICAL order (without RTL reversal).
      * Used by Bidi-aware pipeline: shape first, then Bidi handles reorder.
      *
      * @param  list<int>  $cps
@@ -234,10 +234,10 @@ final class ArabicShaper
                 break;
             }
 
-            // Right-side joins если: this is R/D AND prev is L/D/C
+            // Right-side joins if: this is R/D AND prev is L/D/C
             $joinsRight = ($jt === self::JT_R || $jt === self::JT_D)
                 && in_array($prevJt, [self::JT_L, self::JT_D, self::JT_C], true);
-            // Left-side joins если: this is L/D AND next is R/D/C
+            // Left-side joins if: this is L/D AND next is R/D/C
             $joinsLeft = ($jt === self::JT_L || $jt === self::JT_D)
                 && in_array($nextJt, [self::JT_R, self::JT_D, self::JT_C], true);
 
@@ -252,7 +252,7 @@ final class ArabicShaper
             $shapedCp = $forms[$formIdx] ?? 0;
             if ($shapedCp === 0) {
                 // Form doesn't exist (e.g., ALEF only has isol+fina). Fall
-                // back through priority: fina > isol для R-only letters.
+                // back through priority: fina > isol for R-only letters.
                 $shapedCp = $forms[1] ?: $forms[0];
             }
             $shaped[$i] = $shapedCp;
@@ -262,7 +262,7 @@ final class ArabicShaper
     }
 
     /**
-     * Replace LAM (or its forms) + ALEF (or its forms) sequences с ligature
+     * Replace LAM (or its forms) + ALEF (or its forms) sequences with ligature
      * presentation forms (FEF5..FEFC).
      *
      * @param  list<int>  $cps
@@ -311,18 +311,18 @@ final class ArabicShaper
     }
 
     /**
-     * Reverse Arabic runs для visual order. Non-Arabic chars retain logical order.
+     * Reverse Arabic runs for visual order. Non-Arabic chars retain logical order.
      *
-     * For pure Arabic text (no Latin), просто reverse whole array.
-     * Mixed text: реверсируется только Arabic spans.
+     * For pure Arabic text (no Latin), simply reverse the whole array.
+     * Mixed text: only Arabic spans are reversed.
      *
      * @param  list<int>  $cps
      * @return list<int>
      */
     private static function reverseRtlRuns(array $cps): array
     {
-        // Heuristic: if any char is Arabic, treat entire string as RTL и reverse.
-        // Better impl would split runs, но достаточно для basic Arabic.
+        // Heuristic: if any char is Arabic, treat entire string as RTL and reverse.
+        // Better impl would split runs, but this is sufficient for basic Arabic.
         $hasArabic = false;
         foreach ($cps as $cp) {
             if (self::isArabicRange($cp)) {

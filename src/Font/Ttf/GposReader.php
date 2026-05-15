@@ -5,21 +5,21 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * GPOS table parser — извлекает pair-wise kerning data в KerningTable.
+ * GPOS table parser — extracts pair-wise kerning data into a KerningTable.
  *
- * Scope (Phase 2c):
+ * Scope:
  *  - lookup type 2 (Pair Adjustment Positioning) format 1 + format 2
- *  - valueFormat: только X_ADVANCE bit (0x0004). Остальные позиционные
- *    adjustments (xPlacement, yAdvance, yPlacement, device tables) для
- *    западноевропейской типографики не критичны и игнорируются для POC.
+ *  - valueFormat: only the X_ADVANCE bit (0x0004). Other positional
+ *    adjustments (xPlacement, yAdvance, yPlacement, device tables) are
+ *    not critical for Western European typography and are ignored.
  *
- * Не покрывает:
- *  - GPOS lookup type 1 (single positioning) — обычно для diacritic
- *    placement, не для kerning
- *  - lookup type 3 (cursive attachment) — для скриптовых шрифтов
+ * Not covered:
+ *  - GPOS lookup type 1 (single positioning) — usually for diacritic
+ *    placement, not for kerning
+ *  - lookup type 3 (cursive attachment) — for script fonts
  *  - lookup type 4-8 (mark positioning, contextual, etc.) — Arabic/Indic
- *  - Script/feature filtering — мы grab'аем ВСЕ pair-adjustment lookup'ы
- *    как kerning (большинство шрифтов имеют один lookup type 2 = kern)
+ *  - Script/feature filtering — we grab ALL pair-adjustment lookups
+ *    as kerning (most fonts have a single lookup type 2 = kern)
  *
  * Reference: OpenType GPOS spec, https://docs.microsoft.com/typography/opentype/spec/gpos
  */
@@ -53,14 +53,14 @@ final class GposReader
         // GPOS Header:
         //   uint16 majorVersion
         //   uint16 minorVersion
-        //   uint16 scriptListOffset       (от base)
+        //   uint16 scriptListOffset       (from base)
         //   uint16 featureListOffset
         //   uint16 lookupListOffset
         $reader->seek($base);
         $reader->skip(2); // majorVersion
         $reader->skip(2); // minorVersion
-        $reader->skip(2); // scriptListOffset — мы не filter'им по script
-        $reader->skip(2); // featureListOffset — мы не filter'им по feature
+        $reader->skip(2); // scriptListOffset — we do not filter by script
+        $reader->skip(2); // featureListOffset — we do not filter by feature
         $lookupListOffset = $reader->readUInt16();
 
         $this->readLookupList($sourceBytes, $base + $lookupListOffset, $table);
@@ -71,7 +71,7 @@ final class GposReader
     /**
      * LookupList:
      *   uint16 lookupCount
-     *   Offset16 lookups[lookupCount]  (от start LookupList'а)
+     *   Offset16 lookups[lookupCount]  (from start of LookupList)
      */
     private function readLookupList(string $bytes, int $listOffset, KerningTable $table): void
     {
@@ -88,11 +88,11 @@ final class GposReader
 
     /**
      * Lookup table:
-     *   uint16 lookupType (мы интересуемся 2 = Pair Adjustment)
+     *   uint16 lookupType (we care about 2 = Pair Adjustment)
      *   uint16 lookupFlag
      *   uint16 subTableCount
-     *   Offset16 subtableOffsets[subTableCount]   (от Lookup start)
-     *   (optional uint16 markFilteringSet если flag & 0x10)
+     *   Offset16 subtableOffsets[subTableCount]   (from Lookup start)
+     *   (optional uint16 markFilteringSet if flag & 0x10)
      */
     private function readLookup(string $bytes, int $lookupOffset, KerningTable $table): void
     {
@@ -103,7 +103,7 @@ final class GposReader
         $subTableCount = $reader->readUInt16();
 
         if ($lookupType !== 2) {
-            return; // не pair adjustment — игнор
+            return; // not pair adjustment — ignore
         }
 
         for ($i = 0; $i < $subTableCount; $i++) {
@@ -114,7 +114,7 @@ final class GposReader
     }
 
     /**
-     * Pair Adjustment subtable — dispatcher на format 1 или 2.
+     * Pair Adjustment subtable — dispatcher on format 1 or 2.
      *
      * Format 1 (specific pairs):
      *   uint16 posFormat (= 1)
@@ -148,10 +148,10 @@ final class GposReader
         $valueFormat2 = $reader->readUInt16();
 
         if (($valueFormat1 & self::VALUE_X_ADVANCE) === 0) {
-            return; // Нет X_ADVANCE для первого glyph'а — не kerning в нашем понимании
+            return; // No X_ADVANCE for the first glyph — not kerning in our sense
         }
 
-        // Parse coverage list — glyph IDs которые могут быть 'first'.
+        // Parse coverage list — glyph IDs that can be 'first'.
         $coverageGlyphs = $this->readCoverage($bytes, $subOffset + $coverageOffset);
         if ($coverageGlyphs === []) {
             return;
@@ -176,7 +176,7 @@ final class GposReader
         int $valueFormat2,
         KerningTable $table,
     ): void {
-        // Reader позиция: после valueFormat2. Дальше:
+        // Reader position: after valueFormat2. Next:
         //   uint16 pairSetCount
         //   Offset16 pairSetOffsets[pairSetCount]
         $pairSetCount = $reader->readUInt16();
@@ -221,7 +221,7 @@ final class GposReader
         for ($j = 0; $j < $pairValueCount; $j++) {
             $secondGid = $reader->readUInt16();
             $value1 = $this->readValueRecord($reader, $valueFormat1);
-            // Skip value2 (мы используем только value1.xAdvance).
+            // Skip value2 (we only use value1.xAdvance).
             $reader->skip($valueSize2);
 
             $xAdvance = $value1['xAdvance'];
@@ -243,7 +243,7 @@ final class GposReader
         int $valueFormat2,
         KerningTable $table,
     ): void {
-        // Reader позиция: после valueFormat2.
+        // Reader position: after valueFormat2.
         //   Offset16 classDef1
         //   Offset16 classDef2
         //   uint16 class1Count
@@ -261,11 +261,11 @@ final class GposReader
         $recordSize = $valueSize1 + $valueSize2;
 
         // Class records — array class1Count × class2Count.
-        // Каждый record содержит value1 + value2 для (class1, class2) pair.
+        // Each record contains value1 + value2 for the (class1, class2) pair.
         $classRecordsBase = $reader->tell();
 
-        // Pre-compute (class1, class2) → xAdvance — bypass'аем все cells
-        // которые имеют zero adjustment'ы (most pairs).
+        // Pre-compute (class1, class2) → xAdvance — skip cells that have
+        // zero adjustments (most pairs).
         $kerningByClass = []; // class1 → class2 → xAdvance
         for ($c1 = 0; $c1 < $class1Count; $c1++) {
             for ($c2 = 0; $c2 < $class2Count; $c2++) {
@@ -279,15 +279,15 @@ final class GposReader
             }
         }
 
-        // Раскрываем (class1, class2) → (gid1, gid2). Для каждого
-        // covered first-glyph (т.е. в coverage list'е) узнаём class1,
-        // потом для каждого class2 с non-zero adjustment добавляем
-        // pair для всех gid2 в class2.
+        // Expand (class1, class2) → (gid1, gid2). For each covered
+        // first-glyph (i.e. in the coverage list) we look up class1, then
+        // for each class2 with a non-zero adjustment we add a pair for
+        // all gid2 in class2.
         //
-        // Class 0 = «default class», содержит все glyph'ы, которые
-        // не назначены explicit class'ом. Для kerning мы интересуемся
-        // только explicit-classed glyph'ами в Coverage (для first) +
-        // в classDef2 (для second).
+        // Class 0 = "default class", contains all glyphs that are not
+        // assigned an explicit class. For kerning we care only about
+        // explicit-classed glyphs in Coverage (for first) and in
+        // classDef2 (for second).
 
         // Reverse classDef2: class → list<gid>.
         $class2Members = [];
@@ -309,7 +309,7 @@ final class GposReader
     }
 
     /**
-     * Coverage table (referenced by GPOS subtables) — два формата:
+     * Coverage table (referenced by GPOS subtables) — two formats:
      *
      * Format 1: explicit list
      *   uint16 coverageFormat (= 1)
@@ -322,7 +322,7 @@ final class GposReader
      *   RangeRecord rangeRecords[rangeCount]:
      *     uint16 startGlyphID
      *     uint16 endGlyphID
-     *     uint16 startCoverageIndex  (мы это не используем, нужно для GSUB)
+     *     uint16 startCoverageIndex  (we do not use this; needed for GSUB)
      *
      * @return list<int>  ordered list of glyph IDs in coverage
      */
@@ -353,7 +353,7 @@ final class GposReader
     }
 
     /**
-     * ClassDef table — два формата:
+     * ClassDef table — two formats:
      *
      * Format 1: consecutive glyph range
      *   uint16 classFormat (= 1)
@@ -369,7 +369,7 @@ final class GposReader
      *     uint16 endGlyphID
      *     uint16 class
      *
-     * Glyph'ы не в ClassDef → class 0 (default).
+     * Glyphs not in ClassDef → class 0 (default).
      *
      * @return array<int, int>  glyphId → class (only non-zero classes)
      */
@@ -407,8 +407,8 @@ final class GposReader
     }
 
     /**
-     * ValueRecord size в bytes — depends на valueFormat bits.
-     * Каждый set bit = 2 bytes (int16 value или uint16 device table offset).
+     * ValueRecord size in bytes — depends on valueFormat bits.
+     * Each set bit = 2 bytes (int16 value or uint16 device table offset).
      */
     private function valueRecordSize(int $valueFormat): int
     {
@@ -423,8 +423,8 @@ final class GposReader
     }
 
     /**
-     * Reads ValueRecord по valueFormat. Возвращает only xAdvance — то
-     * единственное что нас интересует для kerning.
+     * Reads ValueRecord by valueFormat. Returns only xAdvance — the only
+     * thing we care about for kerning.
      *
      * @return array{xAdvance: int}
      */

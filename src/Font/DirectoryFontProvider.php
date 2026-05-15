@@ -7,17 +7,17 @@ namespace Dskripchenko\PhpPdf\Font;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 
 /**
- * FontProvider, который сканирует директорию для TTF файлов и резолвит
- * по PostScript-имени (из TTF name table).
+ * FontProvider that scans a directory for TTF files and resolves them
+ * by PostScript name (from the TTF name table).
  *
- * Lazy: TTF не парсится при construct'е — только когда первый resolve()
- * вызовется. Cached после первого парсинга.
+ * Lazy: TTFs are not parsed at construction — only when the first
+ * resolve() call happens. Cached after the first parse.
  *
  * Usage:
  *   $provider = new DirectoryFontProvider('/path/to/fonts');
  *   $ttf = $provider->resolve('MyCustomFont-Regular');
  *
- * Recursive search опционально (default off).
+ * Recursive search is optional (default off).
  */
 final class DirectoryFontProvider implements FontProvider
 {
@@ -46,7 +46,7 @@ final class DirectoryFontProvider implements FontProvider
     }
 
     /**
-     * Path к найденному TTF без парсинга (для debug / introspection).
+     * Path to the resolved TTF without parsing (for debug / introspection).
      */
     public function pathFor(string $fontName): ?string
     {
@@ -56,7 +56,7 @@ final class DirectoryFontProvider implements FontProvider
     }
 
     /**
-     * Все известные шрифты в директории (после index'ирования).
+     * All known fonts in the directory (after indexing).
      *
      * @return array<string, string>  postscriptName → path
      */
@@ -101,14 +101,14 @@ final class DirectoryFontProvider implements FontProvider
             if ($ext !== 'ttf' && $ext !== 'otf') {
                 continue;
             }
-            // Parse name из TTF.
+            // Parse name from TTF.
             try {
                 $ttf = TtfFile::fromFile($path);
                 $name = $ttf->postScriptName();
                 $this->indexed[$name] = $path;
-                // Caching: индекс знает path, не TtfFile. Это позволяет
-                // освобождать memory если TtfFile.bytes не нужен сразу.
-                // resolve() параметрически load'ит TtfFile впервые.
+                // Caching: the index stores the path, not the TtfFile. This
+                // allows memory to be freed when TtfFile.bytes is not needed
+                // immediately. resolve() loads the TtfFile lazily on first use.
             } catch (\Throwable) {
                 // Skip unreadable / corrupt files.
             }

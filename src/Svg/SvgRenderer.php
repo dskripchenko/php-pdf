@@ -7,13 +7,13 @@ namespace Dskripchenko\PhpPdf\Svg;
 use Dskripchenko\PhpPdf\Pdf\Page;
 
 /**
- * Phase 52: SVG → PDF native paths renderer.
+ * SVG → PDF native paths renderer.
  *
- * Parses SVG XML и emits PDF drawing operators на target Page region
- * (x, y, width, height в PDF coords; SVG coords transformed Y-flip +
+ * Parses SVG XML and emits PDF drawing operators onto a target Page region
+ * (x, y, width, height in PDF coords; SVG coords transformed with Y-flip +
  * scaled).
  *
- * SVG namespace ignored — works на любом XML с SVG-named elements.
+ * SVG namespace ignored — works on any XML with SVG-named elements.
  */
 final class SvgRenderer
 {
@@ -35,8 +35,8 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 81: parse opacity attribute (0..1 float).
-     * Returns 1.0 если null или out-of-range.
+     * Parse opacity attribute (0..1 float).
+     * Returns 1.0 if null or out-of-range.
      */
     private static function parseOpacity(\SimpleXMLElement $el, string $attr, float $multiplier = 1.0): float
     {
@@ -56,7 +56,7 @@ final class SvgRenderer
     }
 
     /**
-     * Parse fill/stroke value → [r, g, b, hasColor]. hasColor=false для 'none'.
+     * Parse fill/stroke value → [r, g, b, hasColor]. hasColor=false for 'none'.
      *
      * @return array{0: float, 1: float, 2: float, 3: bool}
      */
@@ -89,10 +89,10 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 73: Parse SVG <style> block content → CSS rules.
+     * Parse SVG <style> block content → CSS rules.
      *
      * Supports tag selectors (rect, circle), class (.foo), id (#bar).
-     * Selectors separated by `,` — applied к each independently.
+     * Selectors separated by `,` — applied to each independently.
      *
      * @return list<array{selector: string, type: string, name: string, declarations: array<string, string>}>
      */
@@ -134,8 +134,8 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 73: Apply matching CSS rules к SimpleXMLElement (mutate attributes
-     * для attributes not yet set). Specificity: id > class > tag.
+     * Apply matching CSS rules to a SimpleXMLElement (mutate attributes
+     * for those not yet set). Specificity: id > class > tag.
      *
      * @param  list<array<string, mixed>>  $rules
      */
@@ -218,7 +218,7 @@ final class SvgRenderer
             return $boxY + ($boxH - $svgY * $scaleY);
         };
 
-        // Phase 73: collect CSS rules from <style> elements + apply к all
+        // Collect CSS rules from <style> elements + apply to all
         // elements recursively before rendering.
         $cssRules = [];
         foreach ($xml->xpath('//style') ?: [] as $styleEl) {
@@ -228,17 +228,17 @@ final class SvgRenderer
             self::applyCssToTree($xml, $cssRules);
         }
 
-        // Phase 74: resolve <use> references к <defs> children.
+        // Resolve <use> references to <defs> children.
         self::resolveUseReferences($xml);
 
-        // Phase 82: collect linearGradient definitions (id → params).
+        // Collect linearGradient definitions (id → params).
         $gradients = self::parseGradients($xml);
 
         self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY, $gradients);
     }
 
     /**
-     * Phase 82: parse all <linearGradient> elements в SVG → id-keyed map.
+     * Parse all <linearGradient> elements in SVG → id-keyed map.
      *
      * @return array<string, array{type: 'linear', x1: float, y1: float, x2: float, y2: float, stops: list<array{offset: float, color: array{0:float,1:float,2:float}}>}>
      */
@@ -255,7 +255,7 @@ final class SvgRenderer
             $x2 = self::parsePctOrFloat((string) ($g['x2'] ?? '1'));
             $y2 = self::parsePctOrFloat((string) ($g['y2'] ?? '0'));
             $stops = self::parseGradientStops($g);
-            // Phase 95: gradientTransform attribute.
+            // gradientTransform attribute.
             $gradTransform = isset($g['gradientTransform'])
                 ? self::parseTransform((string) $g['gradientTransform'])
                 : null;
@@ -266,7 +266,7 @@ final class SvgRenderer
                 'transform' => $gradTransform,
             ];
         }
-        // Phase 91: radialGradient parsing.
+        // radialGradient parsing.
         foreach ($root->xpath('//radialGradient') ?: [] as $g) {
             $id = (string) ($g['id'] ?? '');
             if ($id === '') {
@@ -326,8 +326,8 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 74: Walk dom, replace each <use> с deep-clone of referenced
-     * element. xlink:href или href both supported.
+     * Walk dom, replace each <use> with a deep-clone of the referenced
+     * element. Both xlink:href and href are supported.
      */
     private static function resolveUseReferences(\SimpleXMLElement $root): void
     {
@@ -339,7 +339,7 @@ final class SvgRenderer
         if ($idMap === []) {
             return;
         }
-        // Find все use elements.
+        // Find all use elements.
         $uses = $root->xpath('//use') ?: [];
         foreach ($uses as $use) {
             $href = (string) ($use['href'] ?? $use->attributes('xlink', true)?->href ?? '');
@@ -372,7 +372,7 @@ final class SvgRenderer
                     $newEl->appendChild($childNode->cloneNode(true));
                 }
             }
-            // Override с use's attributes (use x/y/transform overrides ref's).
+            // Override with use's attributes (use x/y/transform overrides ref's).
             foreach ($dom->attributes as $attr) {
                 /** @var \DOMAttr $attr */
                 if (in_array($attr->name, ['href', 'xlink:href'], true)) {
@@ -385,7 +385,7 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 73: recursively apply CSS rules к all child elements.
+     * Recursively apply CSS rules to all child elements.
      *
      * @param  list<array<string, mixed>>  $rules
      */
@@ -410,7 +410,7 @@ final class SvgRenderer
     {
         self::$currentGradients = $gradients;
         foreach ($el->children() as $child) {
-            // Phase 59: apply element-level transform (если есть).
+            // Apply element-level transform (if present).
             $elTx = $tx;
             $elTy = $ty;
             if (isset($child['transform'])) {
@@ -421,9 +421,9 @@ final class SvgRenderer
                     $origTy = $ty;
                     $elTx = static fn (float $x, float $y = 0) => $origTx($a * $x + $c * $y + $e);
                     $elTy = static fn (float $y, float $x = 0) => $origTy($b * $x + $d * $y + $f);
-                    // Pre-compose transformation: we need точные (x, y) inputs.
+                    // Pre-compose transformation: we need exact (x, y) inputs.
                     // Since existing API uses tx(x) and ty(y) separately (no
-                    // cross-coupling), we instead apply transform inline в каждом
+                    // cross-coupling), we instead apply the transform inline in each
                     // shape via wrapper closures that take (x, y) → (px, py).
                     self::walkChildTransformed($child, $page, $tx, $ty, $matrix, $scaleX, $scaleY);
 
@@ -441,16 +441,16 @@ final class SvgRenderer
                 'path' => self::renderPath($child, $page, $elTx, $elTy, $scaleX),
                 'text' => self::renderText($child, $page, $elTx, $elTy, $scaleX),
                 'g' => self::walkElement($child, $page, $elTx, $elTy, $scaleX, $scaleY),
-                'defs' => null, // Phase 74: <defs> children referenced by <use>, не рендерятся напрямую.
-                'style' => null, // Phase 73: <style> parsed separately, не рендерится.
+                'defs' => null, // <defs> children referenced by <use>, not rendered directly.
+                'style' => null, // <style> parsed separately, not rendered.
                 default => null,
             };
         }
     }
 
     /**
-     * Phase 59: apply transform matrix к element-level coords; coords
-     * далее pass через original tx/ty (PDF mapping).
+     * Apply transform matrix to element-level coords; coords
+     * then pass through original tx/ty (PDF mapping).
      *
      * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $matrix  [a, b, c, d, e, f]
      */
@@ -466,16 +466,16 @@ final class SvgRenderer
         [$a, $b, $c, $d, $e, $f] = $matrix;
         // Composed transform: SVG coord (x, y) → transformed (a*x+c*y+e, b*x+d*y+f) → PDF.
         // Single-arg signatures cannot represent cross-coupling, so we
-        // construct point-transforming closures для каждой method.
+        // construct point-transforming closures for each method.
         // Simplest: wrap tx/ty to accept transformed inputs precomputed
-        // by callers. Это требует callers compute (a*x + c*y + e, b*x + d*y + f)
-        // перед calling tx/ty.
+        // by callers. That requires callers compute (a*x + c*y + e, b*x + d*y + f)
+        // before calling tx/ty.
 
-        // Effective scale для stroke-width = sqrt(|a*d - b*c|).
+        // Effective scale for stroke-width = sqrt(|a*d - b*c|).
         $effScale = $scaleX * sqrt(max(abs($a * $d - $b * $c), 1e-9));
 
         $newTx = static function (float $x) use ($a, $c, $e, $origTx): float {
-            // y компонент injected later through cross-coupled wrappers.
+            // y component injected later through cross-coupled wrappers.
             // Fallback if used standalone: y = 0.
             return $origTx($a * $x + $c * 0 + $e);
         };
@@ -484,7 +484,7 @@ final class SvgRenderer
         };
 
         // Properly transform requires cross-axis coupling. Use combined
-        // wrapper that accepts both x and y as a pair: emit точки direct.
+        // wrapper that accepts both x and y as a pair: emit points directly.
         $px = static function (float $x, float $y) use ($a, $c, $e, $origTx): float {
             return $origTx($a * $x + $c * $y + $e);
         };
@@ -508,7 +508,7 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 59: walks children с (px, py) cross-coupled point transformers.
+     * Walk children with (px, py) cross-coupled point transformers.
      *
      * @param  callable(float, float): float  $px
      * @param  callable(float, float): float  $py
@@ -629,7 +629,7 @@ final class SvgRenderer
      */
     private static function renderRectXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX, float $scaleY): void
     {
-        // Transformed rectangle → polygon (4 corners сохраняют rotation).
+        // Transformed rectangle → polygon (4 corners preserve rotation).
         $x = (float) ($el['x'] ?? 0);
         $y = (float) ($el['y'] ?? 0);
         $w = (float) ($el['width'] ?? 0);
@@ -743,8 +743,8 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 59: transformed path. Parses path с same rules как renderPath,
-     * но coords transformed via $px/$py закрытий.
+     * Transformed path. Parses path with the same rules as renderPath,
+     * but coords are transformed via $px/$py closures.
      *
      * @param  callable(float, float): float  $px
      * @param  callable(float, float): float  $py
@@ -759,15 +759,15 @@ final class SvgRenderer
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
-        // Wrap point transformers как (svg-x → pdf-x) / (svg-y → pdf-y)
-        // closures that we'd normally pass к parsePathD. parsePathD expects
-        // single-arg tx/ty, поэтому передаём через identity closures и
-        // post-transform каждый emitted command:
+        // Wrap point transformers as (svg-x → pdf-x) / (svg-y → pdf-y)
+        // closures that we'd normally pass to parsePathD. parsePathD expects
+        // single-arg tx/ty, so we pass through identity closures and
+        // post-transform each emitted command:
         $idTx = static fn (float $x): float => $x;
         $idTy = static fn (float $y): float => $y;
         $rawCommands = self::parsePathD($d, $idTx, $idTy);
 
-        // Transform raw SVG-space commands к PDF coords.
+        // Transform raw SVG-space commands to PDF coords.
         $commands = [];
         foreach ($rawCommands as $cmd) {
             if ($cmd === 'Z') {
@@ -832,7 +832,7 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 58: SVG <text>. Basic support: x, y, font-size, fill.
+     * SVG <text>. Basic support: x, y, font-size, fill.
      *
      * Limitations:
      *  - Uses StandardFont::Helvetica (no font-family resolution).
@@ -851,8 +851,8 @@ final class SvgRenderer
         if (! $hasFill) {
             return;
         }
-        // SVG text positioned at baseline; в PDF showText X-Y используются
-        // same way (Y = baseline).
+        // SVG text positioned at baseline; in PDF showText X-Y are used
+        // the same way (Y = baseline).
         $text = trim((string) $el);
         if ($text === '') {
             return;
@@ -860,7 +860,7 @@ final class SvgRenderer
         $page->showText(
             $text, $tx($x), $ty($y),
             \Dskripchenko\PhpPdf\Pdf\StandardFont::Helvetica,
-            $fontSize * $scaleX, // Scale font size с x-scale.
+            $fontSize * $scaleX, // Scale font size with x-scale.
             $fr, $fg, $fb,
         );
     }
@@ -876,7 +876,7 @@ final class SvgRenderer
         $w = (float) ($el['width'] ?? 0);
         $h = (float) ($el['height'] ?? 0);
 
-        // Phase 82: detect fill="url(#id)" → use shading pattern.
+        // Detect fill="url(#id)" → use shading pattern.
         $fillAttr = (string) ($el['fill'] ?? '#000');
         $patternName = null;
         if (preg_match('@^url\(#([^)]+)\)$@', trim($fillAttr), $m)) {
@@ -915,7 +915,7 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 82: Create + register PDF shading pattern from SVG gradient.
+     * Create + register PDF shading pattern from SVG gradient.
      *
      * @param  array<string, mixed>  $gradient
      */
@@ -928,14 +928,14 @@ final class SvgRenderer
             return null;
         }
 
-        // Phase 91: radial gradient — 6-element coords (cx0, cy0, r0, cx1, cy1, r1).
+        // Radial gradient — 6-element coords (cx0, cy0, r0, cx1, cy1, r1).
         if (($gradient['type'] ?? 'linear') === 'radial') {
             $cx = $rectX + $gradient['cx'] * $rectW;
             $cy = $rectY + $rectH - $gradient['cy'] * $rectH;
             $r = $gradient['r'] * min($rectW, $rectH);
             $fx = $rectX + $gradient['fx'] * $rectW;
             $fy = $rectY + $rectH - $gradient['fy'] * $rectH;
-            // From focal (r=0) outward к (cx, cy, r).
+            // From focal (r=0) outward to (cx, cy, r).
             $coords = [$fx, $fy, 0.0, $cx, $cy, $r];
             $shadingType = \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_RADIAL;
         } else {
@@ -947,8 +947,8 @@ final class SvgRenderer
             $shadingType = \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL;
         }
 
-        // Phase 82: 2 stops — single Type 2 function.
-        // Phase 90: >2 stops — Type 3 stitching of multiple Type 2 sub-functions.
+        // 2 stops — single Type 2 function.
+        // >2 stops — Type 3 stitching of multiple Type 2 sub-functions.
         if (count($stops) === 2) {
             $function = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
                 c0: $stops[0]['color'],
@@ -980,7 +980,7 @@ final class SvgRenderer
             coords: $coords,
             function: $function,
         );
-        // Phase 95: forward gradientTransform к pattern matrix.
+        // Forward gradientTransform to pattern matrix.
         $matrix = $gradient['transform'] ?? null;
         $pattern = new \Dskripchenko\PhpPdf\Pdf\PdfPattern($shading, $matrix);
 
@@ -1045,7 +1045,7 @@ final class SvgRenderer
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
         $sw = (float) ($el['stroke-width'] ?? 1);
 
-        // Phase 81: opacity.
+        // Opacity.
         $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
         $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
         $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
@@ -1116,10 +1116,10 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 53: SVG path parser с поддержкой M/L/H/V/C/S/Q/T/Z commands
+     * SVG path parser supporting M/L/H/V/C/S/Q/T/Z commands
      * (uppercase = absolute, lowercase = relative).
      *
-     * Arc (A/a) — NOT supported (требует ellipse-arc → cubic conversion).
+     * Arc (A/a) — converted to cubic Beziers (see arcToCubics).
      *
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
@@ -1161,9 +1161,9 @@ final class SvgRenderer
 
     /**
      * Parse SVG path "d" attribute → list of PDF-compatible path commands.
-     * Coordinates already transformed через $tx/$ty.
+     * Coordinates already transformed via $tx/$ty.
      *
-     * Quadratic Bezier (Q/T) auto-converted к cubic Bezier (PDF не имеет
+     * Quadratic Bezier (Q/T) auto-converted to cubic Bezier (PDF has no
      * quadratic operator).
      *
      * @param  callable(float): float  $tx
@@ -1172,7 +1172,7 @@ final class SvgRenderer
      */
     private static function parsePathD(string $d, callable $tx, callable $ty): array
     {
-        // Tokenize: split on each command letter (preserve лезерные command'ы как separators).
+        // Tokenize: split on each command letter (preserve command letters as separators).
         $regex = '@([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)@';
         if (! preg_match_all($regex, $d, $matches, PREG_SET_ORDER)) {
             return [];
@@ -1208,7 +1208,7 @@ final class SvgRenderer
                     $commands[] = ['M', $tx($x), $ty($y)];
                     $cx = $x; $cy = $y;
                     $startX = $x; $startY = $y;
-                    // Subsequent pairs treated как L.
+                    // Subsequent pairs treated as L.
                     for ($i = 2; $i + 1 < count($nums); $i += 2) {
                         $x = $isRel ? $cx + $nums[$i] : $nums[$i];
                         $y = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
@@ -1293,7 +1293,7 @@ final class SvgRenderer
                         $qy = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
                         $ex = $isRel ? $cx + $nums[$i + 2] : $nums[$i + 2];
                         $ey = $isRel ? $cy + $nums[$i + 3] : $nums[$i + 3];
-                        // Quadratic к cubic: P1 = start + 2/3 * (Q - start); P2 = end + 2/3 * (Q - end).
+                        // Quadratic to cubic: P1 = start + 2/3 * (Q - start); P2 = end + 2/3 * (Q - end).
                         $c1x = $cx + 2 / 3 * ($qx - $cx);
                         $c1y = $cy + 2 / 3 * ($qy - $cy);
                         $c2x = $ex + 2 / 3 * ($qx - $ex);
@@ -1337,7 +1337,7 @@ final class SvgRenderer
                     break;
 
                 case 'A':
-                    // Phase 63: elliptical arc — convert к cubic Beziers.
+                    // Elliptical arc — convert to cubic Beziers.
                     // 7 args per arc: rx, ry, x-axis-rot, large-arc-flag, sweep-flag, x, y.
                     for ($i = 0; $i + 6 < count($nums); $i += 7) {
                         $arcRx = $nums[$i];
@@ -1368,7 +1368,7 @@ final class SvgRenderer
     }
 
     /**
-     * Phase 63: Convert elliptical arc к sequence of cubic Beziers.
+     * Convert elliptical arc to a sequence of cubic Beziers.
      *
      * Standard SVG endpoint→center parameterization (W3C Implementation
      * Notes §B.2.4) + 90° max-arc subdivision.
@@ -1395,7 +1395,7 @@ final class SvgRenderer
         $x1p = $cosPhi * $dx + $sinPhi * $dy;
         $y1p = -$sinPhi * $dx + $cosPhi * $dy;
 
-        // Step 2: ensure radii достаточны.
+        // Step 2: ensure radii are sufficient.
         $lambda = ($x1p * $x1p) / ($rx * $rx) + ($y1p * $y1p) / ($ry * $ry);
         if ($lambda > 1) {
             $scale = sqrt($lambda);
@@ -1403,7 +1403,7 @@ final class SvgRenderer
             $ry *= $scale;
         }
 
-        // Step 3: compute center в rotated frame.
+        // Step 3: compute center in rotated frame.
         $sign = $fA === $fS ? -1.0 : 1.0;
         $sq = max(
             0.0,
@@ -1414,7 +1414,7 @@ final class SvgRenderer
         $cxp = $factor * ($rx * $y1p / $ry);
         $cyp = $factor * -($ry * $x1p / $rx);
 
-        // Step 4: transform back к user space.
+        // Step 4: transform back to user space.
         $cx = $cosPhi * $cxp - $sinPhi * $cyp + ($x1 + $x2) / 2;
         $cy = $sinPhi * $cxp + $cosPhi * $cyp + ($y1 + $y2) / 2;
 
@@ -1430,7 +1430,7 @@ final class SvgRenderer
             $dtheta += 2 * M_PI;
         }
 
-        // Step 6: split на segments ≤ 90°.
+        // Step 6: split into segments ≤ 90°.
         $segments = max(1, (int) ceil(abs($dtheta) / (M_PI / 2)));
         $delta = $dtheta / $segments;
         $t = 8.0 / 3.0 * sin($delta / 4) * sin($delta / 4) / sin($delta / 2);
@@ -1461,7 +1461,7 @@ final class SvgRenderer
                     $sinPhi * $sx + $cosPhi * $sy + $cy,
                 ];
             };
-            // p1 not needed — already at current point после prev segment.
+            // p1 not needed — already at current point after prev segment.
             [$c1x, $c1y] = $apply($c1);
             [$c2x, $c2y] = $apply($c2);
             [$p2x, $p2y] = $apply($p2);
@@ -1472,7 +1472,7 @@ final class SvgRenderer
     }
 
     /**
-     * Angle между two 2D vectors (signed).
+     * Angle between two 2D vectors (signed).
      *
      * @param  array{0: float, 1: float}  $u
      * @param  array{0: float, 1: float}  $v

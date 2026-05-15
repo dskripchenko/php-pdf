@@ -18,14 +18,14 @@ use Dskripchenko\PhpPdf\Style\ParagraphStyle;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Fluent builder для Paragraph'а.
+ * Fluent builder for Paragraph.
  *
- * Mirror'ит php-docx ParagraphBuilder для API-симметрии. Используется:
- *  - напрямую: `ParagraphBuilder::new()->text('Hi')->bold('world')->build()`
- *  - через callback в DocumentBuilder: `->paragraph(fn($p) => $p->text(...))`
+ * Mirrors php-docx ParagraphBuilder for API symmetry. Used:
+ *  - directly: `ParagraphBuilder::new()->text('Hi')->bold('world')->build()`
+ *  - via callback in DocumentBuilder: `->paragraph(fn($p) => $p->text(...))`
  *
- * Inline-методы (text/bold/etc.) добавляют InlineElement в children;
- * paragraph-level методы (align/spacing/indent/etc.) обновляют $style.
+ * Inline methods (text/bold/etc.) add InlineElements to children;
+ * paragraph-level methods (align/spacing/indent/etc.) update $style.
  */
 final class ParagraphBuilder
 {
@@ -89,7 +89,7 @@ final class ParagraphBuilder
     }
 
     /**
-     * Стилизованный run через callback с RunStyleBuilder.
+     * Styled run via a callback with RunStyleBuilder.
      *
      * Example: ->styled('alert', fn($s) => $s->bold()->color('cc0000'))
      */
@@ -111,8 +111,8 @@ final class ParagraphBuilder
     // ── Hyperlinks ────────────────────────────────────────────────
 
     /**
-     * External hyperlink. $href — URL; $contents — string (создаёт single Run
-     * с underline+blue style) или Closure для custom inline content.
+     * External hyperlink. $href — URL; $contents — string (creates a single Run
+     * with underline+blue style) or Closure for custom inline content.
      */
     public function link(string $href, string|Closure $contents): self
     {
@@ -123,7 +123,7 @@ final class ParagraphBuilder
     }
 
     /**
-     * Internal link — переход к named bookmark.
+     * Internal link — jump to a named bookmark.
      */
     public function internalLink(string $anchorName, string|Closure $contents): self
     {
@@ -134,8 +134,8 @@ final class ParagraphBuilder
     }
 
     /**
-     * Bookmark — named destination. Опциональный $contents добавляет
-     * inline text после метки.
+     * Bookmark — named destination. Optional $contents adds
+     * inline text after the marker.
      */
     public function bookmark(string $name, string|Closure|null $contents = null): self
     {

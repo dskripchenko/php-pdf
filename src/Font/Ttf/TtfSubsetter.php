@@ -5,43 +5,43 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Минимальный TTF subsetter — вырезает unused glyph outlines из `glyf`
- * table, обнуляет соответствующие `loca` entries. Это даёт основной
- * size-win при embedding в PDF (от ~410KB Liberation Sans Regular
- * до ~5-30KB в зависимости от количества unique glyph'ов).
+ * Minimal TTF subsetter — cuts unused glyph outlines from the `glyf`
+ * table and zeroes the corresponding `loca` entries. This is the main
+ * size win for PDF embedding (from ~410KB Liberation Sans Regular down
+ * to ~5-30KB depending on the number of unique glyphs).
  *
- * Алгоритм (упрощённый for Phase 2):
+ * Algorithm (simplified):
  *
- *   1. Парсим `loca` table (offsets в `glyf`).
- *   2. Для каждого glyphId:
- *      - if glyphId == 0 (.notdef) OR в $usedGlyphs → выбираем выкинуть outline
- *      - else → outline становится 0 байт (loca[i] == loca[i+1])
- *   3. Для glyph'ов, которые остались, проверяем composite-references
- *      (component pointers): включаем referenced glyph'и тоже.
- *   4. Перепаковываем `glyf` со cleaned-up entries + новые `loca` offsets.
- *   5. Эмитим subset TTF (все остальные tables копируем as-is).
+ *   1. Parse the `loca` table (offsets into `glyf`).
+ *   2. For each glyphId:
+ *      - if glyphId == 0 (.notdef) OR in $usedGlyphs → keep outline
+ *      - else → outline becomes 0 bytes (loca[i] == loca[i+1])
+ *   3. For glyphs that remain, check composite-references (component
+ *      pointers): include referenced glyphs too.
+ *   4. Repack `glyf` with cleaned-up entries + new `loca` offsets.
+ *   5. Emit subset TTF (all other tables copied as-is).
  *
- * Ограничения этого implementation'а:
- *  - НЕ recompute'им table checksums и whole-file checksum в `head`.
- *    PDF reader'ы tolerant — most don't check. Adobe Acrobat и Preview
- *    точно нет, по empirical опыту mpdf-кода.
- *  - НЕ subset'им hmtx (numHMetrics остаётся прежний; widths для
- *    unused glyph'ов остаются в hmtx). Это даёт небольшой overhead
- *    (~5-15 KB обычно), но избегает renumbering complexity.
- *  - НЕ обрабатываем GPOS/GSUB tables (Phase 2c+ subset'или их если
- *    kerning/ligatures enabled). Для Phase 2b они копируются as-is.
- *  - Composite glyph dependencies — следуем по компонентам через
- *    flag bit 0x20 (MORE_COMPONENTS); track'им транзитивные refs.
+ * Limitations of this implementation:
+ *  - Does NOT recompute table checksums or the whole-file checksum in
+ *    `head`. PDF readers are tolerant — most do not check. Adobe Acrobat
+ *    and Preview certainly do not, per empirical experience with mpdf.
+ *  - Does NOT subset hmtx (numHMetrics stays the same; widths for unused
+ *    glyphs remain in hmtx). This gives a small overhead (~5-15 KB
+ *    typically) but avoids renumbering complexity.
+ *  - Does NOT process GPOS/GSUB tables (they could be subset when
+ *    kerning/ligatures are enabled). Here they are copied as-is.
+ *  - Composite glyph dependencies — followed through components via
+ *    flag bit 0x20 (MORE_COMPONENTS); transitive refs are tracked.
  */
 final class TtfSubsetter
 {
     /**
-     * Phase 215: LRU cache для cross-Writer subset dedup.
+     * LRU cache for cross-Writer subset dedup.
      *
      * Same TtfFile instance + same glyph set + same variation axes →
      * bit-identical subset bytes. Caching saves subsetting + serialization
-     * compute time на batch scenarios (e.g., generating 100 invoices от
-     * same template font).
+     * compute time in batch scenarios (e.g., generating 100 invoices from
+     * the same template font).
      *
      * @var array<string, string>  key → subset bytes
      */
@@ -50,39 +50,40 @@ final class TtfSubsetter
     /** LRU cache size limit (oldest entries evicted on overflow). */
     private const CACHE_MAX = 32;
 
-    /** Force-clear cache (mostly для testing). */
+    /** Force-clear cache (mostly for testing). */
     public static function clearCache(): void
     {
         self::$cache = [];
     }
 
-    /** Current cache size (для testing / monitoring). */
+    /** Current cache size (for testing / monitoring). */
     public static function cacheSize(): int
     {
         return count(self::$cache);
     }
 
     /**
-     * Subset full TTF в minimal version с only указанными glyph IDs.
+     * Subset a full TTF into a minimal version with only the specified
+     * glyph IDs.
      *
-     * Phase 134: если задан $variableInstance, glyph outlines preinterpolate
-     * via gvar deltas (FontFile2 stream становится "frozen" к chosen axis
-     * values — variation tables не embed'ятся в subset).
+     * If $variableInstance is provided, glyph outlines are pre-interpolated
+     * via gvar deltas (the FontFile2 stream becomes "frozen" to chosen
+     * axis values — variation tables are not embedded in the subset).
      *
-     * Phase 215: LRU caching по (source identity, sorted glyphs, axes).
+     * LRU caching by (source identity, sorted glyphs, axes).
      *
-     * @param  array<int, bool>|list<int>  $usedGlyphIds  Если list — преобразуется
-     *                                            во flipped map для O(1) lookup.
-     * @return string  Subset TTF bytes (для embedding'а как FontFile2 stream).
+     * @param  array<int, bool>|list<int>  $usedGlyphIds  If a list — converted
+     *                                            to a flipped map for O(1) lookup.
+     * @return string  Subset TTF bytes (for embedding as a FontFile2 stream).
      */
     public function subset(TtfFile $source, array $usedGlyphIds, ?VariableInstance $variableInstance = null): string
     {
-        // Normalize input в lookup map.
+        // Normalize input into a lookup map.
         $used = $this->normalizeUsedGlyphs($usedGlyphIds);
-        // Glyph 0 (.notdef) — ВСЕГДА.
+        // Glyph 0 (.notdef) — ALWAYS.
         $used[0] = true;
 
-        // Phase 215: cache key — source instance ID + sorted glyphs + axes.
+        // Cache key — source instance ID + sorted glyphs + axes.
         $glyphList = array_keys($used);
         sort($glyphList);
         $axesKey = $variableInstance !== null
@@ -91,7 +92,7 @@ final class TtfSubsetter
         $cacheKey = spl_object_id($source).'|'.implode(',', $glyphList).'|'.$axesKey;
 
         if (isset(self::$cache[$cacheKey])) {
-            // LRU touch — move к end (most recently used).
+            // LRU touch — move to end (most recently used).
             $value = self::$cache[$cacheKey];
             unset(self::$cache[$cacheKey]);
             self::$cache[$cacheKey] = $value;
@@ -99,11 +100,11 @@ final class TtfSubsetter
             return $value;
         }
 
-        // Чтение глобальных параметров TTF.
+        // Read global TTF parameters.
         $sourceBytes = $source->rawBytes();
         $reader = new BinaryReader($sourceBytes);
 
-        // Парсим table directory из source.
+        // Parse table directory from source.
         $tables = $this->readTableDirectory($reader);
 
         $headInfo = $this->readHead($reader, $tables);
@@ -112,13 +113,13 @@ final class TtfSubsetter
         $maxpInfo = $this->readMaxp($reader, $tables);
         $numGlyphs = $maxpInfo['numGlyphs'];
 
-        // Парсим loca offsets.
+        // Parse loca offsets.
         $locaOffsets = $this->readLocaOffsets($reader, $tables, $numGlyphs, $indexToLocFormat);
 
-        // Включаем composite-references транзитивно.
+        // Include composite references transitively.
         $this->addCompositeComponents($sourceBytes, $tables['glyf']['offset'], $locaOffsets, $used);
 
-        // Строим новый glyf + loca.
+        // Build new glyf + loca.
         [$newGlyf, $newLocaOffsets] = $this->buildSubsetGlyf(
             $sourceBytes,
             $tables['glyf']['offset'],
@@ -128,10 +129,10 @@ final class TtfSubsetter
         );
         $newLoca = $this->packLoca($newLocaOffsets, $indexToLocFormat);
 
-        // Эмитим subset TTF. Все tables (кроме glyf/loca) копируются as-is.
+        // Emit subset TTF. All tables (except glyf/loca) are copied as-is.
         $result = $this->buildOutputTtf($sourceBytes, $tables, $newGlyf, $newLoca);
 
-        // Phase 215: store в LRU cache; evict oldest if over limit.
+        // Store in LRU cache; evict oldest if over limit.
         if (count(self::$cache) >= self::CACHE_MAX) {
             // PHP arrays preserve insertion order — array_shift evicts oldest.
             array_shift(self::$cache);
@@ -207,8 +208,8 @@ final class TtfSubsetter
     }
 
     /**
-     * loca содержит numGlyphs+1 offsets (last sentinel marks end of glyf).
-     * Format 0: offsets — uint16, multiplied by 2 для actual byte offset.
+     * loca contains numGlyphs+1 offsets (last sentinel marks end of glyf).
+     * Format 0: offsets — uint16, multiplied by 2 for actual byte offset.
      * Format 1: uint32 (direct byte offset).
      *
      * @param  array<string, array{offset: int, length: int, tag: string}>  $tables
@@ -229,21 +230,21 @@ final class TtfSubsetter
     }
 
     /**
-     * Composite glyph — содержит references на другие glyph'и через
-     * `compositeGlyphHeader.glyphIndex` field. flag bit 0x20 (MORE_COMPONENTS)
-     * означает что следующая component'а пойдёт.
+     * Composite glyph — contains references to other glyphs via the
+     * `compositeGlyphHeader.glyphIndex` field. Flag bit 0x20
+     * (MORE_COMPONENTS) means another component follows.
      *
      * Glyph header (single + composite):
      *   int16 numberOfContours (negative = composite)
      *   int16 × 4 bbox
-     *   Если composite: повторяющиеся entries:
+     *   If composite: repeating entries:
      *     uint16 flags
      *     uint16 glyphIndex
      *     ...args (var size depending on flags)
      *     while flags & 0x20
      *
-     * Мы lazily обходим composite refs и добавляем все referenced glyph'и
-     * в $used. Recursion'но (composite of composite).
+     * We lazily walk composite refs and add all referenced glyphs to
+     * $used. Recursively (composite of composite).
      *
      * @param  list<int>  $locaOffsets
      * @param  array<int, bool>  $used   modified in place
@@ -261,7 +262,7 @@ final class TtfSubsetter
             $start = $glyfBaseOffset + $locaOffsets[$gid];
             $end = $glyfBaseOffset + $locaOffsets[$gid + 1];
             if ($end - $start < 10) {
-                continue; // пустой/simple glyph; нет composite refs
+                continue; // empty/simple glyph; no composite refs
             }
             // numberOfContours at offset 0.
             $nc = unpack('n', substr($sourceBytes, $start, 2))[1];
@@ -269,7 +270,7 @@ final class TtfSubsetter
             if ($nc >= 0) {
                 continue; // simple glyph — no components
             }
-            // Composite — итерация components.
+            // Composite — iterate components.
             $pos = $start + 10; // skip header + bbox
             while (true) {
                 $flags = unpack('n', substr($sourceBytes, $pos, 2))[1];
@@ -280,7 +281,7 @@ final class TtfSubsetter
                     $stack[] = $componentGid;
                 }
                 $pos += 4;
-                // Skip args (variable size; см. OpenType spec для bit-flags layout).
+                // Skip args (variable size; see OpenType spec for bit-flags layout).
                 // ARG_1_AND_2_ARE_WORDS (0x01) → +4 bytes; else +2.
                 $pos += ($flags & 0x01) ? 4 : 2;
                 if ($flags & 0x08) {
@@ -298,7 +299,7 @@ final class TtfSubsetter
     }
 
     /**
-     * Строит новый glyf bytes и corresponding loca offsets.
+     * Build new glyf bytes and corresponding loca offsets.
      *
      * Used glyphs → copy outline bytes from original glyf.
      * Unused → 0-byte entry (loca[i] == loca[i+1]).
@@ -329,11 +330,11 @@ final class TtfSubsetter
                 continue;
             }
             $glyphBytes = substr($sourceBytes, $start, $length);
-            // Phase 134: apply variation deltas если instance задан.
+            // Apply variation deltas if an instance is given.
             if ($variableInstance !== null) {
                 $glyphBytes = $variableInstance->transformGlyph($gid, $glyphBytes);
             }
-            // Pad до 2-byte alignment (TTF requirement для glyf entries).
+            // Pad to 2-byte alignment (TTF requirement for glyf entries).
             if (strlen($glyphBytes) % 2 !== 0) {
                 $glyphBytes .= "\x00";
             }
@@ -346,7 +347,7 @@ final class TtfSubsetter
     }
 
     /**
-     * Packs loca offsets back в binary (format 0 = uint16×2, format 1 = uint32).
+     * Packs loca offsets back to binary (format 0 = uint16×2, format 1 = uint32).
      *
      * @param  list<int>  $offsets
      */
@@ -365,32 +366,33 @@ final class TtfSubsetter
     }
 
     /**
-     * Эмитит final TTF с заменёнными glyf + loca tables.
-     * Все остальные tables копируются bytes-as-is.
+     * Emit final TTF with replaced glyf + loca tables. All other tables
+     * are copied bytes-as-is.
      *
-     * Table directory: каждый entry — 16 bytes (tag + checksum + offset + length).
-     * Tables aligned по 4-byte boundary в файле.
+     * Table directory: each entry is 16 bytes (tag + checksum + offset + length).
+     * Tables are aligned on a 4-byte boundary in the file.
      *
      * @param  array<string, array{offset: int, length: int, tag: string}>  $tables
      */
     private function buildOutputTtf(string $sourceBytes, array $tables, string $newGlyf, string $newLoca): string
     {
-        // Tables, которые PDF reader'у не нужны — мы их не embed'им
-        // и значительно уменьшаем итоговый bundle:
-        //  - GPOS/GSUB/GDEF — kerning/ligatures/glyph classes. PDF reader
-        //    их не применяет (kerning делает caller через TJ-operator).
-        //    Phase 2c+ parse'ит их ВНЕ subset'а, в TextMeasurer time.
-        //  - DSIG — digital signature. Не нужно.
-        //  - kern (legacy) — same как GPOS-kerning, не нужно для PDF.
-        //  - hdmx, VDMX, vhea, vmtx — для horizontal/vertical metrics,
-        //    специфичны для screen rendering. Не нужно PDF reader'у.
+        // Tables not needed by a PDF reader — we do not embed them, which
+        // significantly reduces the final bundle:
+        //  - GPOS/GSUB/GDEF — kerning/ligatures/glyph classes. PDF readers
+        //    do not apply them (kerning is done by the caller via the
+        //    TJ-operator). They are parsed OUTSIDE the subset, at
+        //    TextMeasurer time.
+        //  - DSIG — digital signature. Not needed.
+        //  - kern (legacy) — same as GPOS kerning; not needed for PDF.
+        //  - hdmx, VDMX, vhea, vmtx — horizontal/vertical metrics specific
+        //    to screen rendering. Not needed by PDF readers.
         //
-        // cmap и name оставляем — formally needed для TTF-validity
-        // (некоторые tools требуют, плюс наш собственный parser).
-        // Phase 134: variation tables dropped в subset — outlines frozen
-        // to specific instance (или to default если no variation applied).
-        // PDF readers cannot apply variations dynamically; они expect static
-        // glyph outlines в embedded font.
+        // cmap and name are kept — formally needed for TTF validity
+        // (some tools require them, plus our own parser).
+        // Variation tables are dropped in the subset — outlines are
+        // frozen to the specific instance (or default if no variation
+        // applied). PDF readers cannot apply variations dynamically; they
+        // expect static glyph outlines in the embedded font.
         $dropTables = ['GPOS', 'GSUB', 'GDEF', 'DSIG',
             'kern', 'hdmx', 'VDMX', 'vhea', 'vmtx', 'BASE', 'JSTF',
             'LTSH', 'PCLT', 'gasp', 'FFTM',
@@ -412,13 +414,13 @@ final class TtfSubsetter
 
         $numTables = count($newTableData);
 
-        // Compute searchRange / entrySelector / rangeShift для header.
+        // Compute searchRange / entrySelector / rangeShift for header.
         $entrySelector = (int) floor(log($numTables, 2));
         $searchRange = (1 << $entrySelector) * 16;
         $rangeShift = $numTables * 16 - $searchRange;
 
-        // Заголовок: scaler (4) + numTables (2) + 3 × uint16 = 12 bytes.
-        // Формат N (uint32) + n4 (4 × uint16) = 4 + 8 = 12 bytes total.
+        // Header: scaler (4) + numTables (2) + 3 × uint16 = 12 bytes.
+        // Format N (uint32) + n4 (4 × uint16) = 4 + 8 = 12 bytes total.
         $header = pack('Nn4', 0x00010000, $numTables, $searchRange, $entrySelector, $rangeShift);
 
         // Build table directory + table data.
@@ -436,7 +438,7 @@ final class TtfSubsetter
             $directory .= str_pad($tag, 4, ' ').pack('N3', $checksum, $currentOffset, $length);
 
             $tableData .= $bytes;
-            // Padding до 4-byte alignment.
+            // Padding to 4-byte alignment.
             $pad = (4 - ($length % 4)) % 4;
             if ($pad > 0) {
                 $tableData .= str_repeat("\x00", $pad);
@@ -448,7 +450,7 @@ final class TtfSubsetter
     }
 
     /**
-     * Sum of big-endian uint32 values (zero-padded если нужно).
+     * Sum of big-endian uint32 values (zero-padded if necessary).
      */
     private function tableChecksum(string $bytes): int
     {

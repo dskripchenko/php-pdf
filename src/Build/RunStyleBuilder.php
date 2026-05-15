@@ -7,12 +7,12 @@ namespace Dskripchenko\PhpPdf\Build;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Fluent помощник для построения RunStyle.
+ * Fluent helper for building a RunStyle.
  *
- * Используется через `ParagraphBuilder::styled()` где callback получает
- * RunStyleBuilder для конфигурации произвольного inline-стиля.
+ * Used via `ParagraphBuilder::styled()` where the callback receives a
+ * RunStyleBuilder to configure an arbitrary inline style.
  *
- * Mirror'ит php-docx RunStyleBuilder для API-симметрии.
+ * Mirrors php-docx RunStyleBuilder for API symmetry.
  */
 final class RunStyleBuilder
 {

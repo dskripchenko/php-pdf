@@ -7,28 +7,28 @@ namespace Dskripchenko\PhpPdf\Layout;
 /**
  * Greedy line-breaking algorithm.
  *
- * Алгоритм:
- *   1. Разбиваем text на «слова» (по whitespace, плюс preserve any
- *      explicit `\n` как hard break).
- *   2. Idем word-by-word. Если current_line + " " + word проходит в
- *      maxWidthPt — append. Иначе — break, новая line с word.
- *   3. Слово шире чем maxWidthPt — character-wise break (URLs, длинные
- *      идентификаторы).
+ * Algorithm:
+ *   1. Split text into "words" (by whitespace, preserving any
+ *      explicit `\n` as a hard break).
+ *   2. Iterate word-by-word. If current_line + " " + word fits within
+ *      maxWidthPt — append. Otherwise break, start a new line with word.
+ *   3. A word wider than maxWidthPt — character-wise break (URLs, long
+ *      identifiers).
  *
- * Возвращает list<string> — каждая запись = одна строка для рендера.
+ * Returns list<string> — each entry is one line to render.
  *
- * Не реализовано:
- *  - Knuth-Plass optimal (требует backtracking + boxes-glues-penalties) — v1.3
- *  - Hanging punctuation — v1.3
- *  - Tab-stops — v1.3
+ * Not implemented here:
+ *  - Knuth-Plass optimal (requires backtracking + boxes-glues-penalties)
+ *  - Hanging punctuation
+ *  - Tab-stops
  *
- * Closed в later phases:
- *  - Soft-hyphen (U+00AD) handling → Phase 33
- *  - Justification (text-align: justify) → Phase 15
- *  - Hyphenation (basic syllable rules) → Phase 33
+ * Handled elsewhere:
+ *  - Soft-hyphen (U+00AD) handling
+ *  - Justification (text-align: justify)
+ *  - Hyphenation (basic syllable rules)
  *
- * Соответствует ADR-выбору «typography v0.1: kerning + basic ligatures
- * только; line breaking — greedy».
+ * Matches the ADR choice "typography v0.1: kerning + basic ligatures
+ * only; line breaking — greedy".
  */
 final class LineBreaker
 {
@@ -43,15 +43,15 @@ final class LineBreaker
     public function wrap(string $text): array
     {
         $lines = [];
-        // Honor explicit newlines — каждый "\n" = hard break.
+        // Honor explicit newlines — each "\n" = hard break.
         foreach (explode("\n", $text) as $paragraph) {
             $wrapped = $this->wrapParagraph($paragraph);
             foreach ($wrapped as $line) {
                 $lines[] = $line;
             }
-            // Каждый paragraph закачивается line — even если последняя
-            // line непустая. Empty paragraph эмитит одну empty line
-            // (= blank line в output).
+            // Each paragraph ends with a line — even if the last
+            // line is non-empty. An empty paragraph emits one empty line
+            // (= blank line in output).
             if ($wrapped === []) {
                 $lines[] = '';
             }
@@ -81,16 +81,16 @@ final class LineBreaker
 
                 continue;
             }
-            // Слово не помещается с предыдущим content'ом.
+            // Word does not fit alongside the previous content.
             if ($current !== '') {
                 $lines[] = $current;
                 $current = '';
             }
-            // Если само слово шире maxWidth — character-wise break.
+            // If the word itself is wider than maxWidth — character-wise break.
             if ($this->measurer->widthPt($word) > $this->maxWidthPt) {
                 $broken = $this->breakLongWord($word);
-                // Last fragment остаётся в current; остальные сразу
-                // эмитим как finished lines.
+                // Last fragment stays in current; the rest are emitted
+                // immediately as finished lines.
                 $last = array_pop($broken);
                 foreach ($broken as $piece) {
                     $lines[] = $piece;
@@ -108,8 +108,8 @@ final class LineBreaker
     }
 
     /**
-     * Разбивает слово, которое шире maxWidthPt, на куски character-by-
-     * character. Используется для URL'ов / long identifiers.
+     * Splits a word wider than maxWidthPt into pieces character-by-
+     * character. Used for URLs / long identifiers.
      *
      * @return list<string>
      */

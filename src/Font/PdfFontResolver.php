@@ -7,21 +7,21 @@ namespace Dskripchenko\PhpPdf\Font;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
 
 /**
- * Wraps {@see FontProvider} (которое resolve'ит по PostScript-имени)
- * и предоставляет API «family + bold + italic → PdfFont» с naming
- * convention fallback chain'ом.
+ * Wraps a {@see FontProvider} (which resolves by PostScript name) and
+ * exposes a "family + bold + italic → PdfFont" API with a naming
+ * convention fallback chain.
  *
- * Convention: для family «LiberationSans» variant'ы ищутся как
+ * Convention: for family "LiberationSans" variants are looked up as
  *   LiberationSans-BoldItalic
  *   LiberationSans-Bold
  *   LiberationSans-Italic
  *   LiberationSans-Regular
  *   LiberationSans
  *
- * Fallback chain (если конкретный variant не найден):
+ * Fallback chain (if the specific variant is not found):
  *   BoldItalic → Bold → Italic → Regular
  *
- * Кеширует resolved PdfFont instances по (family, bold, italic).
+ * Caches resolved PdfFont instances by (family, bold, italic).
  */
 final class PdfFontResolver
 {
@@ -52,7 +52,7 @@ final class PdfFontResolver
     }
 
     /**
-     * @return list<string>  Список наименований для последовательной try-resolve.
+     * @return list<string>  List of names to try-resolve sequentially.
      */
     private function variantCandidates(string $family, bool $bold, bool $italic): array
     {

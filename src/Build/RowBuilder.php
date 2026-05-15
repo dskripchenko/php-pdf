@@ -9,10 +9,10 @@ use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Row;
 
 /**
- * Fluent builder для Row таблицы.
+ * Fluent builder for a table Row.
  *
- * `header()` помечает row как `<thead>`-like — Engine повторит её на
- * top'е каждой next page при page-overflow.
+ * `header()` marks the row as `<thead>`-like — the Engine will repeat it
+ * at the top of each subsequent page on page overflow.
  */
 final class RowBuilder
 {
@@ -44,9 +44,9 @@ final class RowBuilder
 
     /**
      * Adds cell. $content:
-     *  - string         — single-paragraph cell с этим text'ом
-     *  - Closure        — CellBuilder для full configuration
-     *  - Cell           — готовый AST-node
+     *  - string         — single-paragraph cell with this text
+     *  - Closure        — CellBuilder for full configuration
+     *  - Cell           — a ready AST node
      */
     public function cell(string|Closure|Cell $content): self
     {
@@ -67,7 +67,7 @@ final class RowBuilder
     }
 
     /**
-     * Convenience: list<string> — n simple cell'ов с этими text'ами.
+     * Convenience: list<string> — n simple cells with these texts.
      *
      * @param  list<string>  $texts
      */

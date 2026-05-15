@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 131: OpenType `fvar` table parser (variable fonts).
+ * OpenType `fvar` table parser (variable fonts).
  *
- * Parses variation axes (tag, min/default/max value, nameID) и named
+ * Parses variation axes (tag, min/default/max value, nameID) and named
  * instances (subfamily nameID + coordinate vector + optional PS nameID).
  *
  * fvar layout per OpenType spec:

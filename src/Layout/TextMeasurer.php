@@ -7,19 +7,19 @@ namespace Dskripchenko\PhpPdf\Layout;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
 
 /**
- * Измеряет визуальную ширину UTF-8 строк в pt для заданного шрифта и размера.
+ * Measures visual width of UTF-8 strings in pt for a given font and size.
  *
- * Phase 2c (kerning): учитываем GPOS pair-adjustments если font имеет
- * kerning table. Без kerning'а (PDF base-14 или старые font'ы без GPOS) —
- * деградация к простому summing'у glyph-advance widths.
+ * With kerning enabled, applies GPOS pair-adjustments when the font has a
+ * kerning table. Without kerning (PDF base-14 or older fonts without GPOS),
+ * degrades to a simple sum of glyph-advance widths.
  *
- * Не покрываем (Phase L):
- *  - GSUB ligature substitutions (Phase 2d даёт fi/fl/ffi)
+ * Not covered here:
+ *  - GSUB ligature substitutions (fi/fl/ffi handled elsewhere)
  *  - Hyphenation
  *  - Complex script shaping (Arabic, Indic)
  *
- * Допустимая ошибка для line-breaking purposes без kerning < 2%; с
- * kerning'ом ≈ 0% для PDF base-14 alike and < 0.5% для embedded TTFs.
+ * Acceptable error for line-breaking purposes is < 2% without kerning;
+ * with kerning it is ~0% for PDF base-14 and < 0.5% for embedded TTFs.
  */
 final class TextMeasurer
 {
@@ -36,7 +36,7 @@ final class TextMeasurer
         foreach ($this->font->utf8ToGlyphs($utf8) as ['gid' => $gid]) {
             $totalUnits += $this->font->widthOfGlyphPdfUnits($gid);
             if ($this->useKerning && $prevGid !== null) {
-                // kerningPdfUnits > 0 для tighter pairs (less width).
+                // kerningPdfUnits > 0 for tighter pairs (less width).
                 $totalUnits -= $this->font->kerningPdfUnits($prevGid, $gid);
             }
             $prevGid = $gid;

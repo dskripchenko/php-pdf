@@ -17,9 +17,9 @@ use Dskripchenko\PhpPdf\Style\CellStyle;
 use Dskripchenko\PhpPdf\Style\VerticalAlignment;
 
 /**
- * Fluent builder для Cell таблицы. Cell содержит произвольные
- * BlockElement'ы — Paragraph/Image/nested Table. CellBuilder проксирует
- * inline-content в ParagraphBuilder когда need'ит add быстрого text'а.
+ * Fluent builder for a table Cell. A Cell contains arbitrary
+ * BlockElements — Paragraph/Image/nested Table. CellBuilder proxies
+ * inline content to ParagraphBuilder when quick text needs to be added.
  */
 final class CellBuilder
 {
@@ -45,7 +45,7 @@ final class CellBuilder
     // ── Content ────────────────────────────────────────────────────
 
     /**
-     * Простой текст как single-run Paragraph.
+     * Plain text as a single-run Paragraph.
      */
     public function text(string $text): self
     {
@@ -55,7 +55,7 @@ final class CellBuilder
     }
 
     /**
-     * Параграф. $content — string | Closure(ParagraphBuilder) | Paragraph.
+     * Paragraph. $content — string | Closure(ParagraphBuilder) | Paragraph.
      */
     public function paragraph(string|Closure|Paragraph $content): self
     {

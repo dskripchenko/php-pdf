@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Barcode;
 
 /**
- * Phase 36-38: QR Code encoder.
+ * QR Code encoder.
  *
  * ISO/IEC 18004:2015.
  *
@@ -14,21 +14,18 @@ namespace Dskripchenko\PhpPdf\Barcode;
  *    - Numeric mode (0-9 only) — 3 chars / 10 bits.
  *    - Alphanumeric (0-9, A-Z, space, $%*+-./:) — 2 chars / 11 bits.
  *    - Byte mode (everything else) — 1 char / 8 bits.
- *    - Kanji mode (Phase 101 closed), Structured Append (Phase 183), ECI (Phase 184).
- *  - Error correction levels L / M / Q / H:
- *    - V1..V4: все 4 levels.
- *    - V5..V10: все 4 ECC levels (L/M/Q/H) с mixed-block layout (Phase 146).
- *  - Versions 1..10.
- *  - Mask pattern 0 (i+j mod 2 = 0) — single pattern, без best-mask
- *    selection.
+ *    - Kanji mode, Structured Append, ECI, FNC1.
+ *  - Error correction levels L / M / Q / H (all versions).
+ *  - Versions 1..10 with mixed-block layout where required.
+ *  - Best-mask selection across all 8 mask patterns by penalty score.
  *
  * Output — 2D bool matrix; true = black module.
  */
 final class QrEncoder
 {
     /**
-     * Byte mode data capacity по [version][ecc-level].
-     * Capacity = data_codewords - overhead_bytes(2 для V1-9, 3 для V10).
+     * Byte mode data capacity by [version][ecc-level].
+     * Capacity = data_codewords - overhead_bytes (2 for V1-9, 3 for V10).
      */
     private const CAPACITY = [
         1 => ['L' => 17, 'M' => 14, 'Q' => 11, 'H' => 7],
@@ -46,13 +43,13 @@ final class QrEncoder
     /**
      * ECC parameters: [data_codewords, total_codewords, ecc_per_block, num_blocks_first_group].
      *
-     * Phase 146: для mixed-block versions (e.g., V5-Q = 2×15 + 2×16), entry has
+     * For mixed-block versions (e.g., V5-Q = 2×15 + 2×16), entry has
      * the SAME 4-element signature but if mixed, a 5th element appears:
      *   [..., num_blocks_first_group, num_blocks_second_group, data_per_block_second]
      * Backward compat: legacy format remains 4-element.
      *
      * Block layout convention:
-     *  - 4-element [data, total, ecc, num]: всех `num` blocks have data/num size each.
+     *  - 4-element [data, total, ecc, num]: all `num` blocks have data/num size each.
      *  - 6-element [data, total, ecc, g1Count, g2Count, g2BlockSize]: group1 blocks
      *    have (data - g2Count*g2BlockSize) / g1Count size each; group2 blocks have
      *    g2BlockSize each. All blocks share same `ecc` per-block count.
@@ -122,7 +119,7 @@ final class QrEncoder
 
     /**
      * Position alignment center coordinates per version (1..10).
-     * V1 не имеет alignment patterns кроме finders.
+     * V1 has no alignment patterns besides finders.
      */
     private const ALIGN_POSITIONS = [
         1 => [],
@@ -153,24 +150,24 @@ final class QrEncoder
     private array $modules;
 
     /**
-     * Phase 183: Structured Append factory. Splits payload across multiple
+     * Structured Append factory. Splits payload across multiple
      * QR symbols. Each symbol gets 20-bit header: mode 0011 + position (4 bits,
      * 0-based) + total (4 bits, 1-based-1) + parity (8 bits = XOR of all data
      * bytes across all segments).
      *
      * Per ISO/IEC 18004 §7.4.7. Up to 16 symbols.
      *
-     * Caller responsible для splitting data + computing global parity:
+     * Caller responsible for splitting data + computing global parity:
      *   $parity = QrEncoder::computeStructuredAppendParity($fullData);
      *   $sym1 = QrEncoder::structuredAppend('part1', 0, 3, $parity);
      *   $sym2 = QrEncoder::structuredAppend('part2', 1, 3, $parity);
      *   $sym3 = QrEncoder::structuredAppend('part3', 2, 3, $parity);
      */
     /**
-     * Phase 227: vCard 3.0 contact info → QR convenience factory.
+     * vCard 3.0 contact info → QR convenience factory.
      *
      * Common QR use case — business card / contact sharing. Most modern
-     * smartphones recognize vCard data в QR и offer "Save Contact" action.
+     * smartphones recognize vCard data in QR and offer "Save Contact" action.
      *
      * Supported fields (all optional):
      *   name (FN), org (ORG), title (TITLE), tel (TEL), email (EMAIL),
@@ -204,16 +201,16 @@ final class QrEncoder
     }
 
     /**
-     * Phase 227: WiFi credentials → QR convenience factory (Joinware format).
+     * WiFi credentials → QR convenience factory (Joinware format).
      *
      * Common QR use case — guest network sharing. Most modern smartphones
-     * recognize this format и offer "Connect to WiFi" action on scan.
+     * recognize this format and offer "Connect to WiFi" action on scan.
      *
      * Format: WIFI:T:<auth>;S:<ssid>;P:<password>;H:<hidden>;;
      *
      * @param  string  $ssid  Network SSID.
-     * @param  string  $password  Network password (empty для open networks).
-     * @param  string  $auth  'WPA' (covers WPA/WPA2/WPA3) или 'WEP' или 'nopass'.
+     * @param  string  $password  Network password (empty for open networks).
+     * @param  string  $auth  'WPA' (covers WPA/WPA2/WPA3), 'WEP', or 'nopass'.
      * @param  bool  $hidden  Hidden SSID flag.
      */
     public static function wifi(
@@ -228,7 +225,7 @@ final class QrEncoder
             '\\' => '\\\\', ',' => '\\,', ';' => '\\;', ':' => '\\:', '"' => '\\"',
         ]);
         if (! in_array($auth, ['WPA', 'WEP', 'nopass'], true)) {
-            throw new \InvalidArgumentException("WiFi auth must be 'WPA', 'WEP' или 'nopass', got '$auth'");
+            throw new \InvalidArgumentException("WiFi auth must be 'WPA', 'WEP', or 'nopass', got '$auth'");
         }
         $payload = sprintf(
             'WIFI:T:%s;S:%s;P:%s;H:%s;;',
@@ -242,8 +239,8 @@ final class QrEncoder
     }
 
     /**
-     * Phase 227: URL convenience factory. Same as direct constructor —
-     * provided для API symmetry с vCard/wifi/sms/email factories.
+     * URL convenience factory. Same as direct constructor —
+     * provided for API symmetry with vCard/wifi/sms/email factories.
      */
     public static function url(string $url, ?QrEccLevel $eccLevel = null): self
     {
@@ -251,7 +248,7 @@ final class QrEncoder
     }
 
     /**
-     * Phase 227: SMS draft → QR convenience factory.
+     * SMS draft → QR convenience factory.
      *
      * Format: SMSTO:<phone>:<message>
      */
@@ -266,7 +263,7 @@ final class QrEncoder
     }
 
     /**
-     * Phase 227: Email draft → QR convenience factory.
+     * Email draft → QR convenience factory.
      *
      * Format: mailto:<address>?subject=<subj>&body=<body> (RFC 6068).
      */
@@ -292,7 +289,7 @@ final class QrEncoder
     }
 
     /**
-     * Phase 227: Geographic coordinates → QR convenience factory.
+     * Geographic coordinates → QR convenience factory.
      *
      * Format: geo:<lat>,<lon>?z=<zoom> (RFC 5870).
      */
@@ -319,7 +316,7 @@ final class QrEncoder
         }
         if ($position < 0 || $position >= $total) {
             throw new \InvalidArgumentException(sprintf(
-                'QR Structured Append position %d not в range 0..%d', $position, $total - 1
+                'QR Structured Append position %d not in range 0..%d', $position, $total - 1
             ));
         }
         if ($parity < 0 || $parity > 255) {
@@ -334,8 +331,8 @@ final class QrEncoder
     }
 
     /**
-     * Phase 183: compute parity for Structured Append — XOR of all data bytes
-     * across all symbol segments в concatenated original order.
+     * Compute parity for Structured Append — XOR of all data bytes
+     * across all symbol segments in concatenated original order.
      */
     public static function computeStructuredAppendParity(string $fullData): int
     {
@@ -353,14 +350,14 @@ final class QrEncoder
     public readonly ?int $eciDesignator;
 
     /**
-     * Phase 211: FNC1 mode flag. Null = no FNC1; 1 = GS1 (Mode 1, marker
-     * только); 2 = AIM (Mode 2, marker + 8-bit Application Indicator —
-     * provided via $fnc1AimIndicator).
+     * FNC1 mode flag. Null = no FNC1; 1 = GS1 (Mode 1, marker only);
+     * 2 = AIM (Mode 2, marker + 8-bit Application Indicator — provided
+     * via $fnc1AimIndicator).
      */
     public readonly ?int $fnc1Mode;
 
     /**
-     * Phase 211: AIM Application Indicator (for Mode 2 only). 8-bit value
+     * AIM Application Indicator (for Mode 2 only). 8-bit value
      * 0..255 per AIM specification.
      */
     public readonly ?int $fnc1AimIndicator;
@@ -386,7 +383,7 @@ final class QrEncoder
             throw new \InvalidArgumentException('QR FNC1 Mode 2 requires fnc1AimIndicator');
         }
         if ($fnc1Mode !== 2 && $fnc1AimIndicator !== null) {
-            throw new \InvalidArgumentException('fnc1AimIndicator только relevant для FNC1 Mode 2');
+            throw new \InvalidArgumentException('fnc1AimIndicator only relevant for FNC1 Mode 2');
         }
         if ($fnc1AimIndicator !== null && ($fnc1AimIndicator < 0 || $fnc1AimIndicator > 255)) {
             throw new \InvalidArgumentException('FNC1 AIM indicator must be 0..255 (8-bit)');
@@ -397,7 +394,7 @@ final class QrEncoder
             throw new \InvalidArgumentException('QR input must be non-empty');
         }
         $this->eccLevel = $eccLevel ?? QrEccLevel::L;
-        // Phase 38: auto-detect mode unless explicitly specified.
+        // Auto-detect mode unless explicitly specified.
         $this->mode = $mode ?? QrEncodingMode::detect($data);
         // Validate input matches chosen mode.
         if ($mode !== null) {
@@ -413,12 +410,12 @@ final class QrEncoder
         }
 
         $eccKey = $this->eccLevel->value;
-        // Phase 101: для Kanji input, char count = bytes / 2.
+        // For Kanji input, char count = bytes / 2.
         $charCount = $this->mode === QrEncodingMode::Kanji
             ? intdiv(strlen($data), 2)
             : strlen($data);
 
-        // Phase 38: capacity check теперь bit-based, не byte-based:
+        // Capacity check is bit-based, not byte-based:
         // total bits available = data_codewords * 8.
         // bits needed = 4 (mode) + charCountBits + dataBitsFor(charCount).
         $version = null;
@@ -428,14 +425,14 @@ final class QrEncoder
             }
             $dataCodewords = $perLevel[$eccKey][0];
             $capacityBits = $dataCodewords * 8;
-            // Phase 183: structured append adds 20-bit header.
+            // Structured append adds 20-bit header.
             $structAppendBits = $this->structuredAppend !== null ? 20 : 0;
-            // Phase 184: ECI adds 4-bit mode + 8/16/24-bit designator.
+            // ECI adds 4-bit mode + 8/16/24-bit designator.
             $eciBits = 0;
             if ($this->eciDesignator !== null) {
                 $eciBits = 4 + ($this->eciDesignator <= 127 ? 8 : ($this->eciDesignator <= 16383 ? 16 : 24));
             }
-            // Phase 211: FNC1 mode 1 = 4 bits; mode 2 = 4 + 8 bits.
+            // FNC1 mode 1 = 4 bits; mode 2 = 4 + 8 bits.
             $fnc1Bits = 0;
             if ($this->fnc1Mode === 1) {
                 $fnc1Bits = 4;
@@ -479,7 +476,7 @@ final class QrEncoder
     }
 
     /**
-     * Maximum data byte capacity для ECC level (max version reached).
+     * Maximum data byte capacity for ECC level (max version reached).
      */
     public static function maxCapacityForLevel(string $level): int
     {
@@ -510,13 +507,13 @@ final class QrEncoder
     // ── Data encoding ────────────────────────────────────────────────────
 
     /**
-     * Encodes data в bit stream: mode indicator + char count + bytes +
+     * Encodes data into bit stream: mode indicator + char count + bytes +
      * terminator + padding.
      */
     private function encodeData(string $data, int $version): string
     {
         $bits = '';
-        // Phase 183: Structured Append header — prepended до regular mode indicator.
+        // Structured Append header — prepended before regular mode indicator.
         // Mode 0011 + position (4 bits) + (total - 1) (4 bits) + parity (8 bits) = 20 bits.
         if ($this->structuredAppend !== null) {
             $bits .= '0011';
@@ -524,7 +521,7 @@ final class QrEncoder
             $bits .= str_pad(decbin($this->structuredAppend['total'] - 1), 4, '0', STR_PAD_LEFT);
             $bits .= str_pad(decbin($this->structuredAppend['parity']), 8, '0', STR_PAD_LEFT);
         }
-        // Phase 184: ECI header — Mode 0111 + designator (8/16/24 bits depending on value).
+        // ECI header — Mode 0111 + designator (8/16/24 bits depending on value).
         if ($this->eciDesignator !== null) {
             $bits .= '0111';
             $eci = $this->eciDesignator;
@@ -536,7 +533,7 @@ final class QrEncoder
                 $bits .= '110'.str_pad(decbin($eci), 21, '0', STR_PAD_LEFT);
             }
         }
-        // Phase 211: FNC1 mode 1 (GS1) = '0101'. Mode 2 (AIM) = '1001' + 8-bit indicator.
+        // FNC1 mode 1 (GS1) = '0101'. Mode 2 (AIM) = '1001' + 8-bit indicator.
         if ($this->fnc1Mode === 1) {
             $bits .= '0101';
         } elseif ($this->fnc1Mode === 2) {
@@ -545,15 +542,15 @@ final class QrEncoder
         }
         // Mode indicator — 4 bits.
         $bits .= str_pad(decbin($this->mode->indicatorBits()), 4, '0', STR_PAD_LEFT);
-        // Character count indicator. Phase 101: для Kanji char count =
-        // bytes / 2 (each Kanji char encoded в 2 Shift_JIS bytes).
+        // Character count indicator. For Kanji char count = bytes / 2
+        // (each Kanji char encoded in 2 Shift_JIS bytes).
         $charCountBits = $this->mode->charCountIndicatorBits($version);
         $charCount = $this->mode === QrEncodingMode::Kanji
             ? intdiv(strlen($data), 2)
             : strlen($data);
         $bits .= str_pad(decbin($charCount), $charCountBits, '0', STR_PAD_LEFT);
 
-        // Phase 38+101: data encoding по mode.
+        // Data encoding per mode.
         $bits .= match ($this->mode) {
             QrEncodingMode::Numeric => self::encodeNumeric($data),
             QrEncodingMode::Alphanumeric => self::encodeAlphanumeric($data),
@@ -570,7 +567,7 @@ final class QrEncoder
         while (strlen($bits) % 8 !== 0) {
             $bits .= '0';
         }
-        // Fill remaining capacity с alternating padding bytes 0xEC, 0x11.
+        // Fill remaining capacity with alternating padding bytes 0xEC, 0x11.
         $padBytes = ['11101100', '00010001'];
         $padIdx = 0;
         while (strlen($bits) < $capacityBits) {
@@ -631,7 +628,7 @@ final class QrEncoder
     }
 
     /**
-     * Phase 101: Kanji mode (Shift_JIS, 13 bits per char).
+     * Kanji mode (Shift_JIS, 13 bits per char).
      *
      * Algorithm per ISO/IEC 18004 §7.4.6:
      *  - Each Kanji char = 2 Shift_JIS bytes.
@@ -708,7 +705,7 @@ final class QrEncoder
                 $x ^= 0x11D;
             }
         }
-        // Wrap exp для удобства (no modulo at lookup).
+        // Wrap exp for convenience (no modulo at lookup).
         for ($i = 255; $i < 512; $i++) {
             $exp[$i] = $exp[$i - 255];
         }
@@ -726,7 +723,7 @@ final class QrEncoder
     }
 
     /**
-     * Generator polynomial для $n ECC codewords.
+     * Generator polynomial for $n ECC codewords.
      *
      * @return list<int>
      */
@@ -747,7 +744,7 @@ final class QrEncoder
     }
 
     /**
-     * Computes ECC codewords для data block.
+     * Computes ECC codewords for data block.
      *
      * @param  list<int>  $data
      * @return list<int>
@@ -771,9 +768,9 @@ final class QrEncoder
     }
 
     /**
-     * Phase 146: split data codewords into blocks per ECC layout.
-     * Returns list<list<int>> (data blocks, possibly с different sizes
-     * для mixed-block versions).
+     * Split data codewords into blocks per ECC layout.
+     * Returns list<list<int>> (data blocks, possibly with different sizes
+     * for mixed-block versions).
      *
      * @param  list<int>  $codewords
      * @return list<list<int>>
@@ -828,7 +825,7 @@ final class QrEncoder
     }
 
     /**
-     * Interleaves data + ECC blocks по spec.
+     * Interleaves data + ECC blocks per spec.
      *
      * Mixed-block: shorter blocks contribute fewer columns when interleaving
      * data. ECC blocks all have same length so straightforward.
@@ -874,8 +871,8 @@ final class QrEncoder
     {
         $size = $this->size;
         $matrix = array_fill(0, $size, array_fill(0, $size, false));
-        // Reserved flags: true = function pattern, не должно overwrit'иться
-        // data placement'ом.
+        // Reserved flags: true = function pattern, must not be overwritten
+        // by data placement.
         $reserved = array_fill(0, $size, array_fill(0, $size, false));
 
         // 1. Finder patterns (3 corners — TL, TR, BL).
@@ -883,7 +880,7 @@ final class QrEncoder
         $this->placeFinder($matrix, $reserved, $size - 7, 0);
         $this->placeFinder($matrix, $reserved, 0, $size - 7);
 
-        // 2. Separators (white 1-module rings вокруг finders) — already
+        // 2. Separators (white 1-module rings around finders) — already
         //    handled by reserved+false default.
         $this->reserveSeparators($reserved, $size);
 
@@ -896,12 +893,12 @@ final class QrEncoder
             $reserved[$i][6] = true;
         }
 
-        // 4. Alignment patterns (для V2+).
+        // 4. Alignment patterns (for V2+).
         $positions = self::ALIGN_POSITIONS[$version];
         $n = count($positions);
         for ($r = 0; $r < $n; $r++) {
             for ($c = 0; $c < $n; $c++) {
-                // Skip углы где уже есть finder pattern.
+                // Skip corners where a finder pattern already exists.
                 if (($r === 0 && $c === 0) ||
                     ($r === 0 && $c === $n - 1) ||
                     ($r === $n - 1 && $c === 0)) {
@@ -916,12 +913,12 @@ final class QrEncoder
         $matrix[$darkY][8] = true;
         $reserved[$darkY][8] = true;
 
-        // 6. Reserve format info regions (15 bits around TL finder + по 7
-        //    bits возле TR/BL finder'ов).
+        // 6. Reserve format info regions (15 bits around TL finder + 7
+        //    bits near each of the TR/BL finders).
         $this->reserveFormatInfo($reserved, $size);
 
-        // Phase 195: Version info pattern (V7+). 18 bits BCH(18,6) encoded,
-        // placed в two 3×6 regions near TR + BL finders. Per ISO 18004 §8.10.
+        // Version info pattern (V7+). 18 bits BCH(18,6) encoded,
+        // placed in two 3×6 regions near TR + BL finders. Per ISO 18004 §8.10.
         if ($version >= 7) {
             $this->placeVersionInfo($matrix, $reserved, $version, $size);
         }
@@ -929,7 +926,7 @@ final class QrEncoder
         // 7. Place data bits using zigzag pattern.
         $this->placeData($matrix, $reserved, $codewords);
 
-        // Phase 105: try all 8 mask patterns, pick min penalty.
+        // Try all 8 mask patterns, pick min penalty.
         $bestMask = 0;
         $bestPenalty = PHP_INT_MAX;
         $bestMatrix = $matrix;
@@ -952,7 +949,7 @@ final class QrEncoder
     public readonly int $selectedMask;
 
     /**
-     * Phase 105: Apply mask pattern N к non-reserved modules.
+     * Apply mask pattern N to non-reserved modules.
      *
      * @param  array<int, array<int, bool>>  $matrix
      * @param  array<int, array<int, bool>>  $reserved
@@ -983,11 +980,11 @@ final class QrEncoder
     }
 
     /**
-     * Phase 105: penalty score per ISO/IEC 18004 §7.8.3. Sum 4 rules:
-     *  N1 = 3 + (run - 5) for run ≥ 5 consecutive same-color в row/col.
+     * Penalty score per ISO/IEC 18004 §7.8.3. Sum 4 rules:
+     *  N1 = 3 + (run - 5) for run ≥ 5 consecutive same-color in row/col.
      *  N2 = 3 per 2×2 block of same color.
      *  N3 = 40 per finder-pattern-like sequence (1:1:3:1:1).
-     *  N4 = 10 × steps_of_5pct от 50% dark.
+     *  N4 = 10 × steps_of_5pct from 50% dark.
      *
      * @param  list<list<bool>>  $matrix
      */
@@ -1199,8 +1196,8 @@ final class QrEncoder
                         $matrix[$y][$x] = $bits[$bitIdx] === '1';
                         $bitIdx++;
                     }
-                    // Reserved=false означает данные. Mark теперь reserved,
-                    // чтобы mask только применился к data.
+                    // Reserved=false means data. Mark as reserved so mask
+                    // is only applied to data.
                     // (Mark applied separately.)
                 }
             }
@@ -1210,17 +1207,17 @@ final class QrEncoder
 
     /**
      * Format info: ECC L = 01, mask = 000. 5 bits → BCH(15,5) → 15 bits;
-     * XOR с mask 101010000010010 (spec).
+     * XOR with mask 101010000010010 (spec).
      *
      * @param  array<int, array<int, bool>>  $matrix
      */
     /**
-     * Phase 195: Version info pattern для V7+ (ISO 18004 §8.10).
+     * Version info pattern for V7+ (ISO 18004 §8.10).
      *
      * 18 bits = 6 bits version (7..40) + 12 bits BCH(18,6,3) ECC.
      * Generator polynomial: 0x1F25 = x^12 + x^11 + x^10 + x^9 + x^8 + x^5 + x^2 + 1.
      *
-     * Placed в two 3×6 regions:
+     * Placed in two 3×6 regions:
      *  - Top-right: cols size-11..size-9, rows 0..5
      *  - Bottom-left: cols 0..5, rows size-11..size-9
      *
@@ -1239,7 +1236,7 @@ final class QrEncoder
         }
         $versionBits = ($version << 12) | $remainder;
 
-        // Place 18 bits в top-right region: cols [size-11..size-9] × rows [0..5].
+        // Place 18 bits in top-right region: cols [size-11..size-9] × rows [0..5].
         // Bit order: bit 0 = (col=size-11, row=0), bit 1 = (col=size-10, row=0),
         // bit 2 = (col=size-9, row=0), bit 3 = (col=size-11, row=1), etc.
         // Actually spec: bit i placed at (row = i / 3, col = size - 11 + i % 3).
@@ -1259,7 +1256,7 @@ final class QrEncoder
     private function writeFormatInfo(array &$matrix, int $size, int $mask = 0): void
     {
         // ECC level (2 bits) + mask (3 bits) = 5 bits.
-        // L=01, M=00, Q=11, H=10 — left-shifted в high 2 bits.
+        // L=01, M=00, Q=11, H=10 — left-shifted into high 2 bits.
         $data = ($this->eccLevel->formatBits() << 3) | ($mask & 0b111);
         // BCH(15,5) — divide by generator 0b10100110111.
         $bits = $data << 10;
@@ -1270,20 +1267,20 @@ final class QrEncoder
         }
         $format = (($data << 10) | $bits) ^ 0b101010000010010;
 
-        // Write 15 bits в two locations (TL и TR/BL).
+        // Write 15 bits in two locations (TL and TR/BL).
         $bitArr = [];
         for ($i = 14; $i >= 0; $i--) {
             $bitArr[] = (($format >> $i) & 1) === 1;
         }
 
-        // TL: bits 0..5 в col 8 rows 0..5 (skip row 6),
-        //     bit 6 в col 8 row 7, bits 7..8 в col 8 row 8 и row 7? Spec:
+        // TL: bits 0..5 in col 8 rows 0..5 (skip row 6),
+        //     bit 6 in col 8 row 7, bits 7..8 in col 8 row 8 and row 7? Spec:
         // Spec exact mapping:
         // bits 0..7: TL — col 8 + TR row 8.
         // bits 8..14: TL — row 8 + BL col 8.
-        // Здесь делаю по spec mapping ISO/IEC 18004 §8.9 Table 23.
+        // Mapping per ISO/IEC 18004 §8.9 Table 23.
 
-        // TL row 8 cols (right to left от col 8 to col 0, skip col 6):
+        // TL row 8 cols (right to left from col 8 to col 0, skip col 6):
         // bit 0 -> (8, 0), bit 1 -> (8, 1), ..., bit 5 -> (8, 5),
         // bit 6 -> (8, 7), bit 7 -> (8, 8), bit 8 -> (7, 8),
         // bit 9 -> (5, 8), bit 10 -> (4, 8), ..., bit 14 -> (0, 8).

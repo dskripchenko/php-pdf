@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Layout;
 
 /**
- * Phase 218: Knuth-Plass optimal line breaking.
+ * Knuth-Plass optimal line breaking.
  *
- * Использует box-glue-penalty model с dynamic programming для нахождения
- * globally-optimal набора break points минимизирующих "demerits" (badness²
+ * Uses the box-glue-penalty model with dynamic programming to find a
+ * globally-optimal set of break points that minimize "demerits" (badness²
  * over all lines).
  *
  * Vs greedy `LineBreaker`:
- *  - Greedy: fit как можно больше слов в каждой line по очереди. Может
- *    оставить плохую last line.
- *  - K-P: optimize sum badness² across все lines глобально. Даёт
+ *  - Greedy: fit as many words as possible into each line in turn. May
+ *    leave a poor last line.
+ *  - K-P: optimize sum badness² across all lines globally. Produces
  *    typographically uniform spacing.
  *
  * Algorithm (Knuth, Plass — "Breaking paragraphs into lines", 1981):
@@ -26,17 +26,18 @@ namespace Dskripchenko\PhpPdf\Layout;
  *     r = (target - L) / Y  if L < target (stretching)
  *     r = (L - target) / Z  if L > target (shrinking, negative r)
  *     r = 0                 if L == target
- *     Skip if r > 10 (too loose) или r < -1 (cannot shrink enough).
+ *     Skip if r > 10 (too loose) or r < -1 (cannot shrink enough).
  *  4. Badness = 100·|r|³. Demerits = (1 + badness)².
  *  5. Last-line exception: r = 0 if line is last paragraph line (no penalty
  *     for short ragged-right finish).
  *  6. Backward pass: reconstruct break points from f[n] → 0.
  *
- * Fallback: если для всей parameter sequence нет admissible break-set
- * (e.g., word wider than maxWidth), graceful degrade к greedy LineBreaker.
+ * Fallback: if no admissible break-set exists for the whole parameter
+ * sequence (e.g., word wider than maxWidth), gracefully degrade to greedy
+ * LineBreaker.
  *
  * Not implemented:
- *  - Hyphenation penalty items (мы не делаем hyphenation)
+ *  - Hyphenation penalty items (hyphenation is not performed)
  *  - Loose/tight class transitions
  *  - Looseness parameter (force longer/shorter paragraphs)
  */
@@ -88,7 +89,7 @@ final class KnuthPlassLineBreaker
             return [''];
         }
         if ($n === 1) {
-            // Single word — может быть wider than line, fallback к greedy.
+            // Single word — may be wider than the line, fallback to greedy.
             if ($this->measurer->widthPt($words[0]) > $this->maxWidthPt) {
                 return $this->greedyFallback($paragraph);
             }
@@ -106,8 +107,8 @@ final class KnuthPlassLineBreaker
             $widths[] = $width;
         }
 
-        // Если есть слово шире line — K-P не сможет найти feasible break-set;
-        // fallback к greedy для character-wise breaking.
+        // If there is a word wider than the line, K-P cannot find a feasible
+        // break-set; fallback to greedy for character-wise breaking.
         if ($hasOversizeWord) {
             return $this->greedyFallback($paragraph);
         }
@@ -122,7 +123,7 @@ final class KnuthPlassLineBreaker
         $f[0] = 0.0;
         $trail = array_fill(0, $n + 1, -1);
 
-        // Prefix sums для быстрого расчёта boxWidth.
+        // Prefix sums for fast boxWidth computation.
         $prefixWidth = [0.0];
         $sum = 0.0;
         foreach ($widths as $w) {
@@ -166,7 +167,7 @@ final class KnuthPlassLineBreaker
         }
 
         if ($f[$n] === INF) {
-            // No feasible break-set — fallback к greedy.
+            // No feasible break-set — fallback to greedy.
             return $this->greedyFallback($paragraph);
         }
 
@@ -195,10 +196,10 @@ final class KnuthPlassLineBreaker
     }
 
     /**
-     * Compute Knuth-Plass adjustment ratio для line с natural width $L,
-     * $numSpaces glue items с per-space stretch/shrink, и flag whether
-     * last paragraph line. Returns null если infeasible (too wide cannot
-     * shrink, too narrow cannot stretch beyond ratio>10).
+     * Compute Knuth-Plass adjustment ratio for a line with natural width $L,
+     * $numSpaces glue items with per-space stretch/shrink, and a flag for
+     * whether this is the last paragraph line. Returns null if infeasible
+     * (too wide cannot shrink, too narrow cannot stretch beyond ratio>10).
      */
     private function adjustmentRatio(
         float $natural,

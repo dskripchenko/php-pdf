@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 134: Simple glyph parser + serializer для variable font outlines.
+ * Simple glyph parser + serializer for variable font outlines.
  *
  * Per OpenType spec §5.3.3, simple glyph format:
  *
- *   int16 numberOfContours (>=0 для simple)
+ *   int16 numberOfContours (>=0 for simple)
  *   int16 xMin, yMin, xMax, yMax
  *   uint16 endPtsOfContours[numberOfContours]
  *   uint16 instructionLength
  *   uint8 instructions[instructionLength]
  *   uint8 flags[]  (variable length, run-length encoded)
- *   xCoordinates[]  (delta from previous, signed; 1 или 2 bytes per flags)
+ *   xCoordinates[]  (delta from previous, signed; 1 or 2 bytes per flags)
  *   yCoordinates[]  (same)
  *
  * Flags (per point):
@@ -27,8 +27,8 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  *   bit 5 (0x20) Y_IS_SAME_OR_POSITIVE
  *   bit 6 (0x40) OVERLAP_SIMPLE
  *
- * Composite glyphs (numberOfContours < 0) НЕ обрабатываются в этой phase
- * — outline возвращается as-is.
+ * Composite glyphs (numberOfContours < 0) are NOT handled here — the
+ * outline is returned as-is.
  */
 final class SimpleGlyph
 {
@@ -65,7 +65,7 @@ final class SimpleGlyph
     ) {}
 
     /**
-     * Parse simple glyph from raw bytes. Returns null если composite or empty.
+     * Parse simple glyph from raw bytes. Returns null if composite or empty.
      */
     public static function parse(string $bytes): ?self
     {
@@ -149,7 +149,7 @@ final class SimpleGlyph
     }
 
     /**
-     * Serialize back к TTF simple glyph bytes. Recomputes bbox.
+     * Serialize back to TTF simple glyph bytes. Recomputes bbox.
      *
      * @param  list<int>  $xCoords  override x coords (if applying deltas)
      * @param  list<int>  $yCoords  override y coords
@@ -174,7 +174,7 @@ final class SimpleGlyph
         }
         $out .= pack('n', strlen($this->instructions)) . $this->instructions;
 
-        // Encode flags (no run-length compression в этом порте для simplicity).
+        // Encode flags (no run-length compression in this port for simplicity).
         // Also encode x/y delta bytes.
         $xPart = '';
         $yPart = '';

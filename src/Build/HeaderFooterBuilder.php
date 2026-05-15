@@ -14,9 +14,9 @@ use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Builder для header / footer / любого блочного содержимого верхнего
- * уровня — subset DocumentBuilder'а без pageSetup и без header/footer/
- * watermark методов (чтобы не было recursion).
+ * Builder for header / footer / any top-level block content — a subset of
+ * DocumentBuilder without pageSetup and without header/footer/watermark
+ * methods (to avoid recursion).
  *
  * Pattern:
  *   ->header(fn(HeaderFooterBuilder $h) => $h

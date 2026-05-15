@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Font\Ttf;
 
 /**
- * Phase 132: `avar` table parser — non-linear axis value mapping.
+ * `avar` table parser — non-linear axis value mapping.
  *
  * Per OpenType spec §3.2: avar maps from "default" normalized space
  * (linear -1..+1 between min/default/max) to "actual" normalized space
@@ -63,7 +63,7 @@ final class AvarReader
     }
 
     /**
-     * Apply avar mapping for axis $axisIdx к normalized coord $coord.
+     * Apply avar mapping for axis $axisIdx to normalized coord $coord.
      * Piecewise-linear interpolation between mapping points.
      */
     public function map(int $axisIdx, float $coord): float
