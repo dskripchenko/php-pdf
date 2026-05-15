@@ -211,6 +211,8 @@ final class HtmlParser
             // Phase 229: HTML5 semantic block groupings.
             'header', 'footer', 'nav', 'aside', 'main',
             'figure', 'figcaption',
+            // Phase 230: legacy block.
+            'center',
         ], true);
     }
 
@@ -231,10 +233,27 @@ final class HtmlParser
             'ul' => $this->parseList($node, ordered: false),
             'ol' => $this->parseList($node, ordered: true),
             'table' => $this->parseTable($node),
+            // Phase 230: legacy <center> — convert к Paragraph с Alignment::Center.
+            'center' => $this->parseCenterBlock($node),
             // 'dl' и semantic containers handled inline в walkBlocks
             // (multi-block flatten).
             default => null,
         };
+    }
+
+    /**
+     * Phase 230: <center> legacy element — emit как centered Paragraph.
+     */
+    private function parseCenterBlock(\DOMElement $node): Paragraph
+    {
+        $inlines = [];
+        foreach ($node->childNodes as $child) {
+            $inlines = array_merge($inlines, $this->walkInlines($child));
+        }
+
+        return new Paragraph($inlines, style: new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
+            alignment: \Dskripchenko\PhpPdf\Style\Alignment::Center,
+        ));
     }
 
     /**
@@ -552,9 +571,80 @@ final class HtmlParser
             return $this->parseInlineAnchor($node);
         }
 
+        // Phase 230: <font> legacy tag — color/face/size attributes.
+        if ($tag === 'font') {
+            return $this->parseFontTag($node);
+        }
+
         // Styled inline tags.
         $newStyle = $this->styleForTag($this->currentStyle(), $tag);
         $newStyle = $this->applyInlineCssStyle($newStyle, $node);
+
+        $this->styleStack[] = $newStyle;
+        try {
+            $result = [];
+            foreach ($node->childNodes as $child) {
+                $result = array_merge($result, $this->walkInlines($child));
+            }
+
+            return $result;
+        } finally {
+            array_pop($this->styleStack);
+        }
+    }
+
+    /**
+     * Phase 230: legacy <font color="..." face="..." size="..."> tag.
+     *
+     * HTML `size` attribute is 1-7 mapping к relative sizes; we map к
+     * absolute pt sizes:
+     *   1 → 8pt, 2 → 10pt, 3 → 12pt (default), 4 → 14pt,
+     *   5 → 18pt, 6 → 24pt, 7 → 36pt.
+     *
+     * @return list<InlineElement>
+     */
+    private function parseFontTag(\DOMElement $node): array
+    {
+        $current = $this->currentStyle();
+        $color = $current->color;
+        $fontFamily = $current->fontFamily;
+        $size = $current->sizePt;
+
+        $attrColor = $node->getAttribute('color');
+        if ($attrColor !== '') {
+            $parsed = $this->parseColor($attrColor);
+            if ($parsed !== null) {
+                $color = $parsed;
+            }
+        }
+
+        $attrFace = $node->getAttribute('face');
+        if ($attrFace !== '') {
+            $fontFamily = trim(explode(',', $attrFace)[0], " \"'");
+        }
+
+        $attrSize = $node->getAttribute('size');
+        if ($attrSize !== '') {
+            $sizeMap = [1 => 8.0, 2 => 10.0, 3 => 12.0, 4 => 14.0, 5 => 18.0, 6 => 24.0, 7 => 36.0];
+            $intSize = (int) $attrSize;
+            if (isset($sizeMap[$intSize])) {
+                $size = $sizeMap[$intSize];
+            }
+        }
+
+        $newStyle = new RunStyle(
+            sizePt: $size,
+            color: $color,
+            backgroundColor: $current->backgroundColor,
+            fontFamily: $fontFamily,
+            bold: $current->bold,
+            italic: $current->italic,
+            underline: $current->underline,
+            strikethrough: $current->strikethrough,
+            superscript: $current->superscript,
+            subscript: $current->subscript,
+            letterSpacingPt: $current->letterSpacingPt,
+        );
 
         $this->styleStack[] = $newStyle;
         try {
