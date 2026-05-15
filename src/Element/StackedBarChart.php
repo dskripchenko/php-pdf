@@ -7,13 +7,12 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 54: Stacked bar chart.
+ * Stacked bar chart. Each category bar is the cumulative sum of all
+ * series values; segments are colored by series. Useful for composition
+ * / contribution visualisation.
  *
- * Каждый category bar = cumulative sum всех series values; segments
- * colored по series. Useful для composition / contribution visualization.
- *
- * Schema identical к GroupedBarChart, но render отличается: instead of
- * side-by-side bars per category, segments stacked vertically.
+ * Shares schema with GroupedBarChart; rendering stacks segments
+ * vertically instead of placing bars side-by-side.
  */
 final readonly class StackedBarChart implements BlockElement
 {

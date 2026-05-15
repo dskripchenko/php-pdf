@@ -7,20 +7,12 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 45: Line chart primitive.
+ * Single-series line chart through (label, value) data points. Rendered
+ * with native PDF paths — strokeLine for axes, an m/l sequence for the
+ * polyline, optional filled circles (~2pt radius) at data points.
  *
- * Single-series line through (label, value) data points. Rendered native
- * PDF paths: strokeLine для axes, m/l sequence для polyline; optional
- * filled circles (~2pt radius) at data points.
- *
- * Не реализовано:
- *  - X-axis numeric scale (currently labels evenly spaced).
- *
- * Closed в later phases:
- *  - Multi-series → Phase 51 (MultiLineChart)
- *  - Spline interpolation → Phase 98 (smoothed=true)
- *  - Y-axis custom range → Phase 68 (yMin/yMax)
- *  - Grid lines → Phase 64 (showGridLines=true)
+ * Set `smoothed: true` for Catmull-Rom spline interpolation. See
+ * MultiLineChart for multi-series support.
  */
 final readonly class LineChart implements BlockElement
 {

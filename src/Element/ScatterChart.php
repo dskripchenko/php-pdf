@@ -7,14 +7,15 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 55: Scatter chart — 2D points without connecting lines.
+ * Scatter chart — 2D point cloud with no connecting lines.
  *
- * Каждая series renders как marker dots с auto-scaled x/y axes.
+ * Each series renders as marker dots; both x and y axes are auto-scaled
+ * to the data range.
  *
- * Schema:
+ * Example schema:
  *   series = [
- *     ['name': 'Group A', 'color': '4287f5',
- *      'points': [['x': 1.0, 'y': 5.0], ...]],
+ *     ['name' => 'Group A', 'color' => '4287f5',
+ *      'points' => [['x' => 1.0, 'y' => 5.0], ...]],
  *     ...
  *   ]
  */

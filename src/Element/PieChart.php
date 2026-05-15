@@ -7,26 +7,25 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 45: Pie chart primitive.
+ * Pie chart. Sectors are rendered as cubic Bezier arcs (sub-arcs ≤ 90°),
+ * producing true curves rather than polygons. Optional features:
+ *  - Exploded slices via `slice.explode` (radial offset)
+ *  - Perimeter labels with leader lines (`showPerimeterLabels: true`)
  *
- * Phase 166: sectors rendered как cubic Bezier arcs (true curve, не polygon).
- * Phase 167: optional exploded slices (radial offset для emphasis).
- *
- * Не реализовано:
- *  - Slice labels по периметру — v1.3 backlog.
- *  - 3D effects — out of scope (PDF static format).
- *
- * Closed в later phases:
- *  - Donut variant → Phase 55 (DonutChart)
- *  - True Bezier arc rendering → Phase 166
- *  - Exploded slices → Phase 167
+ * See DonutChart for the variant with a transparent center.
  */
 final readonly class PieChart implements BlockElement
 {
     /**
      * @param  list<array{label: string, value: float, color?: string, explode?: bool|float}>  $slices
-     *   slice.explode: true → standard ~8% radius offset; float → custom offset
-     *   как fraction of radius (0.05 = 5%, 0.2 = 20%).
+     *   `explode: true` applies a standard ~8% radius offset; a float gives
+     *   a custom fraction of radius (0.05 = 5%, 0.2 = 20%).
+     * @param  bool  $showPerimeterLabels  Draw labels on the perimeter with
+     *                                     leader lines instead of (or in
+     *                                     addition to) the sidebar legend.
+     * @param  float $minLabelAngleDeg  Skip perimeter labels for slices with
+     *                                  angle below this threshold (avoids
+     *                                  overlap on small slices).
      */
     public function __construct(
         public array $slices,
@@ -38,9 +37,6 @@ final readonly class PieChart implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 6.0,
         public float $spaceAfterPt = 6.0,
-        // Phase 168: показывать labels на perimeter с leader-lines (вместо
-        // или в дополнение к sidebar legend). Минимальный угол для label —
-        // small slices < $minLabelAngleDeg skip'ятся (избегаем overlap).
         public bool $showPerimeterLabels = false,
         public float $perimeterLabelSizePt = 8.0,
         public float $minLabelAngleDeg = 8.0,

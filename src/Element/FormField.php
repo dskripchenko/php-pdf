@@ -5,24 +5,24 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Phase 43+46: AcroForm interactive form field.
+ * AcroForm interactive form field.
  *
  * Supported types:
  *  - text (single-line)
- *  - text-multiline (Tx с Multiline flag)
- *  - password (Tx с Password flag, masked input)
+ *  - text-multiline
+ *  - password (masked input)
  *  - checkbox
- *  - radio-group (single AST → multiple widgets sharing same /T)
- *  - combo (Ch с Combo flag — dropdown)
- *  - list (Ch без Combo — listbox)
+ *  - radio-group (single AST node produces multiple widgets sharing the same /T)
+ *  - combo (dropdown)
+ *  - list (listbox)
+ *  - signature (signature placeholder for PKCS#7)
+ *  - submit / reset / push buttons
  *
- * Не реализовано:
- *  - Custom appearance streams (полагаемся на reader default rendering) —
- *    out of scope; PDF readers handle widget rendering universally.
+ * JavaScript additional actions (validate, calculate, format, keystroke)
+ * are emitted as /AA entries; readers without JavaScript support skip them.
  *
- * Closed в later phases:
- *  - Signature fields (/Sig placeholder + PKCS#7 signing) → Phase 56/108
- *  - JavaScript calculation/validation/format/keystroke actions → Phase 67
+ * Appearance streams are not generated — readers handle widget rendering
+ * by themselves using the field type and dictionary.
  */
 final readonly class FormField implements BlockElement
 {
@@ -56,10 +56,22 @@ final readonly class FormField implements BlockElement
     ];
 
     /**
-     * @param  list<string>  $options  Choices для combo/list/radio-group.
-     *                                   Каждая string — export value/label.
-     *                                   Для radio — также используется как
-     *                                   visual button label.
+     * @param  list<string>  $options  Choices for combo / list / radio-group.
+     *                                  Each entry is both export value and
+     *                                  display label (for radio: also the
+     *                                  visual button label).
+     * @param  ?string  $validateScript  JavaScript for the /V (Validate) event;
+     *                                    return false to reject input.
+     * @param  ?string  $calculateScript JavaScript for /C (Calculate) — derive
+     *                                    value from other fields.
+     * @param  ?string  $formatScript    JavaScript for /F (Format) — modify
+     *                                    display value.
+     * @param  ?string  $keystrokeScript JavaScript for /K (Keystroke) —
+     *                                    per-keypress filter.
+     * @param  ?string  $buttonCaption   Button label (push/submit/reset);
+     *                                    defaults to the type label.
+     * @param  ?string  $submitUrl       Submit endpoint URL for TYPE_SUBMIT_BUTTON.
+     * @param  ?string  $clickScript     /A click action JavaScript.
      */
     public function __construct(
         public string $name,
@@ -73,22 +85,12 @@ final readonly class FormField implements BlockElement
         public bool $required = false,
         public bool $readOnly = false,
         public array $options = [],
-        // Phase 67: AcroForm JavaScript additional actions (/AA dict).
-        // Each — optional script run on event:
-        //  - validateScript: run on /V (Validate) — return false to reject input.
-        //  - calculateScript: run on /C (Calculate) — derive value from другими fields.
-        //  - formatScript: run on /F (Format) — modify display value.
-        //  - keystrokeScript: run on /K (Keystroke) — per-keypress filter.
         public ?string $validateScript = null,
         public ?string $calculateScript = null,
         public ?string $formatScript = null,
         public ?string $keystrokeScript = null,
-        // Phase 83: button-specific.
-        // Caption: button label (для push/submit/reset — defaults к type label).
         public ?string $buttonCaption = null,
-        // SubmitURL — для TYPE_SUBMIT_BUTTON, target endpoint.
         public ?string $submitUrl = null,
-        // /A click action JavaScript (alternative или supplement to submit/reset).
         public ?string $clickScript = null,
     ) {
         if (! in_array($type, self::SUPPORTED_TYPES, true)) {

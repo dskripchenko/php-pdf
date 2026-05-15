@@ -7,20 +7,11 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 44: Bar chart primitive.
- *
- * Single-series vertical или horizontal bar chart. Rendered native PDF
- * paths (fillRect для bars, strokeLine для axes, showText для labels).
- *
- * Не реализовано:
- *  - Animation / interactivity (PDF-format limitation, out of scope).
- *
- * Closed в later phases:
- *  - Multi-series → Phase 51 (GroupedBarChart), Phase 54 (StackedBarChart)
- *  - Custom axis ranges → Phase 68 (yMin/yMax)
- *  - Grid lines → Phase 64 (showGridLines=true)
- *  - X-axis label rotation → Phase 140 (xLabelRotationDeg)
- *  - LineChart/PieChart → Phase 45
+ * Single-series vertical or horizontal bar chart. Rendered with native
+ * PDF operators — fillRect for bars, strokeLine for axes, showText for
+ * labels. Supports optional grid lines, custom axis ranges (yMin/yMax),
+ * and rotated X-axis labels. See GroupedBarChart / StackedBarChart for
+ * multi-series.
  */
 final readonly class BarChart implements BlockElement
 {

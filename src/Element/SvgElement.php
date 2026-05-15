@@ -7,33 +7,22 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 52: SVG element — embeds vector graphics в PDF.
+ * Vector graphics block — embeds SVG markup into the PDF.
  *
- * Supported SVG primitives:
- *  - <rect x y width height fill stroke stroke-width>
- *  - <line x1 y1 x2 y2 stroke stroke-width>
- *  - <circle cx cy r fill stroke stroke-width>
- *  - <ellipse cx cy rx ry fill stroke stroke-width>
- *  - <polygon points fill stroke stroke-width>
- *  - <polyline points stroke stroke-width>
- *  - <path d="M...L...Z"> (only M/L/Z; no curves, no arcs)
- *  - <text x y font-size>...</text> (basic)
+ * Supported primitives:
+ *  - Shapes: rect, line, circle, ellipse, polygon, polyline
+ *  - Paths: M/L/Z, C/S/Q/T curves, H/V, A arcs (full path syntax)
+ *  - Text: `<text>` with positioning and styling
+ *  - Transforms: translate, scale, rotate, matrix, gradientTransform
+ *  - Gradients: linearGradient, radialGradient (multi-stop with stitching)
+ *  - Reuse: `<defs>` and `<use>` references
+ *  - Inline `<style>` CSS for class-based styling
  *
- * Attributes:
- *  - fill / stroke: hex colors (#rgb, #rrggbb), 'none', named (subset).
- *  - stroke-width: numeric.
- *  - opacity / fill-opacity / stroke-opacity: ignored для simplicity.
+ * Attributes: fill / stroke as hex (#rgb, #rrggbb), 'none', or named
+ * colors; stroke-width numeric; full opacity support via ExtGState.
  *
- * NOT supported:
- *  - Path C/S/Q/T/A (curves and arcs).
- *  - Transforms (translate / rotate / scale / matrix).
- *  - Groups (<g>) — children processed flatly без inheritance.
- *  - <defs>, <use>, gradients, patterns, masks, filters.
- *  - CSS styles (<style>) — только inline attributes.
- *  - viewBox transform (используется raw coords).
- *
- * Source coordinates: SVG Y-axis grows down; output transformed к PDF
- * (Y grows up).
+ * Coordinates: SVG Y axis grows down; output is transformed to PDF
+ * convention (Y grows up).
  */
 final readonly class SvgElement implements BlockElement
 {

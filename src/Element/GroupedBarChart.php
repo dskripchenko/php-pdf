@@ -7,15 +7,13 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 51: Multi-series grouped bar chart.
+ * Multi-series grouped bar chart. Each label has N bars side-by-side,
+ * one per series. A legend in the top-right shows series names and colors.
  *
- * Each label has N bars side-by-side (one per series). Legend rendered
- * top-right showing series names + colors.
- *
- * Schema:
- *   bars = [['label': 'Q1', 'values': [100, 200, 150]], ...]
- *   seriesNames = ['Sales', 'Costs', 'Profit']
- *   seriesColors = ['4287f5', 'f56242', '42f55a']  (optional)
+ * Example schema:
+ *   bars         = [['label' => 'Q1', 'values' => [100, 200, 150]], ...]
+ *   seriesNames  = ['Sales', 'Costs', 'Profit']
+ *   seriesColors = ['4287f5', 'f56242', '42f55a']   // optional
  */
 final readonly class GroupedBarChart implements BlockElement
 {

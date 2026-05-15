@@ -5,25 +5,22 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Element;
 
 /**
- * Phase 39: Multi-column layout block.
+ * Multi-column layout block.
  *
- * Содержит body blocks которые рендерятся в N columns. Поток column-first:
- * content заполняет column 0 до bottom, переходит в column 1, ..., при
- * заполнении last column происходит page break и поток продолжается
- * с column 0 на новой page.
+ * Body blocks flow column-first: content fills column 0 down to the
+ * bottom, continues in column 1, and so on. When the last column is
+ * full the layout breaks to a new page and continues at column 0.
  *
- * Nesting: ColumnSet нельзя nest'ить — внутри columns должны быть
- * regular blocks (Paragraph, Table, List, ...).
- *
- * После ColumnSet cursor возвращается в single-column mode под лежащим
- * содержимым последней column (max(используемая y) по всем columns).
+ * ColumnSet cannot be nested — inner content must be regular blocks
+ * (Paragraph, Table, ListNode, ...). After the ColumnSet ends, single-
+ * column flow resumes from the lowest used Y across all columns.
  */
 final readonly class ColumnSet implements BlockElement
 {
     /**
      * @param  list<BlockElement>  $body
-     * @param  int  $columnCount  Number of columns (2..6 typical).
-     * @param  float  $columnGapPt  Horizontal gap между columns.
+     * @param  int  $columnCount   Number of columns (2-6 typical).
+     * @param  float  $columnGapPt Horizontal gap between columns.
      */
     public function __construct(
         public array $body,

@@ -7,10 +7,10 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 55: Donut chart — pie chart с inner hole.
+ * Donut chart — pie chart with a transparent central hole.
  *
- * Inner radius determined через $innerRatio (0..1; default 0.5 = half radius).
- * Schema identical к PieChart.
+ * Inner radius is controlled by `$innerRatio` (0..1; default 0.5 = half
+ * radius). Slice schema is identical to PieChart.
  */
 final readonly class DonutChart implements BlockElement
 {

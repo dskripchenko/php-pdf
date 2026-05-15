@@ -7,32 +7,25 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 69: Math expression — minimal LaTeX-like subset.
+ * Mathematical expression — LaTeX-like subset.
  *
  * Supported syntax:
- *  - `a^{b}` или `a^b` — superscript.
- *  - `a_{b}` или `a_b` — subscript.
- *  - `\frac{n}{d}` — fraction (numerator over denominator).
- *  - `\sqrt{x}` — square root.
- *  - Greek letters: `\alpha`, `\beta`, `\gamma`, `\delta`, `\pi`, `\theta`,
- *    `\Sigma`, `\Omega` и т.д. → Unicode chars.
- *  - Operators: `\cdot`, `\times`, `\div`, `\pm`, `\leq`, `\geq`,
- *    `\neq`, `\approx`, `\infty`, `\sum`, `\int`.
+ *  - `a^{b}` / `a^b`     — superscript
+ *  - `a_{b}` / `a_b`     — subscript
+ *  - `\frac{n}{d}`       — fraction
+ *  - `\sqrt{x}`          — square root
+ *  - Greek letters: `\alpha`, `\beta`, `\pi`, `\theta`, `\Sigma`, ...
+ *  - Operators: `\cdot`, `\times`, `\div`, `\pm`, `\leq`, `\geq`, `\neq`,
+ *    `\approx`, `\infty`, `\sum`, `\int`
+ *  - Big operators with limits, multi-line equations
+ *  - Matrices / arrays: `matrix`, `pmatrix`, `bmatrix`, `vmatrix`
+ *  - LaTeX environments: `\begin{align}...\end{align}` (and `aligned`,
+ *    `gather`, `eqnarray`, `cases`, matrix variants)
  *
- * Не реализовано:
- *  - Custom font / styling — v1.3 backlog.
- *  - LaTeX environments (begin{} / end{}) — v1.3 backlog.
- *
- * Closed в later phases:
- *  - Multi-line equations → Phase 96
- *  - Matrices / arrays (matrix, pmatrix, bmatrix, vmatrix) → Phase 75
- *  - Big operators с limits → Phase 80
- *  - Nested fractions внутри superscripts → Phase 172 (was already
- *    working through recursive render of frac node within sup arg)
- *
- * Rendered как block с centered alignment по умолчанию. Font derived
- * from default Engine font; sup/sub use 70% size + baseline shift
- * (consistent с Phase 26 inline sup/sub).
+ * Rendered as a block, default centered. Subscripts and superscripts use
+ * 70% font size with a baseline shift. Custom font family resolves
+ * through the engine's FontProvider; null falls back to the engine
+ * default font.
  */
 final readonly class MathExpression implements BlockElement
 {
@@ -42,8 +35,6 @@ final readonly class MathExpression implements BlockElement
         public Alignment $alignment = Alignment::Center,
         public float $spaceBeforePt = 4.0,
         public float $spaceAfterPt = 4.0,
-        // Phase 173: custom font family. null = use Engine default font.
-        // String = font family name resolved через FontProvider.
         public ?string $fontFamily = null,
     ) {
         if ($tex === '') {

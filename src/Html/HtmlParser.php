@@ -23,41 +23,44 @@ use Dskripchenko\PhpPdf\Style\ListFormat;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
 /**
- * Phase 219: HTML/CSS → AST parser.
+ * HTML5 → AST parser. Backs `Document::fromHtml()`.
  *
- * Parses simple HTML5 (без external CSS, без <script>) в php-pdf AST:
- *  - Block tags: p, div, h1-h6, hr, ul/ol/li, table/tr/td/th
- *  - Inline tags: span, b/strong, i/em, u, s/strike/del, sup/sub, br, img, a
- *  - Inline CSS (style="...") attributes: color, background-color,
+ * Supports:
+ *  - Block tags: p, div, section, article, h1-h6, hr, ul/ol/li,
+ *    table/tr/td/th (incl. thead/tbody/tfoot wrappers, caption),
+ *    blockquote, pre, header, footer, nav, aside, main, figure,
+ *    figcaption, address, details/summary, dl/dt/dd, center
+ *  - Inline tags: span, b/strong, i/em, u, s/strike/del, sup, sub, br,
+ *    wbr, img, picture, a, font, svg, code, kbd, samp, tt, var, mark,
+ *    small, big, ins, cite, dfn, q, abbr
+ *  - Inline CSS via `style` attribute: color, background-color,
  *    font-size, font-family, font-weight, font-style, text-decoration,
- *    letter-spacing
+ *    text-transform, letter-spacing
+ *  - Block CSS: text-align, margin, padding (shorthand + per-side),
+ *    line-height, text-indent, border (shorthand + per-side)
  *
- * NOT supported:
- *  - External CSS (<link rel="stylesheet">), <style> blocks
- *  - Complex selectors, @media queries, CSS Grid/Flexbox
- *  - JavaScript, forms, iframes, audio/video
- *  - position: absolute/fixed, floats
- *
- * Для users wanting <style>/class support — preprocess HTML через
- * external CssInliner (e.g., tijsverkoyen/css-to-inline-styles) к
- * convert все к inline style attributes first.
+ * Not supported: external CSS, `<style>` blocks, complex selectors,
+ * `@media` queries, JavaScript, forms, position: absolute/fixed, floats.
+ * For class-based or `<style>` block styling, preprocess HTML through an
+ * external CSS inliner (e.g. tijsverkoyen/css-to-inline-styles) to
+ * convert everything to inline `style` attributes first.
  */
 final class HtmlParser
 {
     /**
-     * Stack текущего inline style — push'нут при entering styled tag,
-     * pop'нут при exit. Style inherits down the tree.
+     * Inline style stack — pushed on entering a styled tag, popped on
+     * exit. Styles cascade down the tree.
      *
      * @var list<RunStyle>
      */
     private array $styleStack = [];
 
-    /** Hyperlink href в currently-open <a> context (or null). */
+    /** Href of the currently-open `<a>` context, or null. */
     private ?string $linkHref = null;
 
     /**
-     * Phase 234: text-transform stack. Each entry: 'none' | 'uppercase' |
-     * 'lowercase' | 'capitalize'. Applied к Run text при создании.
+     * Text-transform stack: 'none' / 'uppercase' / 'lowercase' /
+     * 'capitalize'. Applied to text content as it is collected into Runs.
      *
      * @var list<string>
      */

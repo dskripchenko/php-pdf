@@ -9,19 +9,14 @@ use Dskripchenko\PhpPdf\Barcode\QrEncodingMode;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 32: Barcode block element.
+ * Block-level barcode element.
  *
- * Рендерится как набор чёрных вертикальных bars + опциональный human-readable
- * text caption под кодом.
+ * Renders as a set of black bars (or a 2D module grid) with an optional
+ * human-readable caption underneath.
  *
- *  - $value — данные для encode'а. Validation/encoding делает encoder.
- *  - $format — BarcodeFormat (пока только Code128).
- *  - $widthPt — общая ширина barcode'а (без quiet zones). Если null —
- *    auto: modules × 1pt (rough default; обычно нужен tweak).
- *  - $heightPt — высота bars. Default = 40pt.
- *  - $showText — рендерить caption ниже bars.
- *  - $textSizePt — размер caption (default 8pt).
- *  - $alignment — горизонтальное выравнивание блока в content area.
+ * `$widthPt` overrides the auto-computed width (modules × 1pt by default).
+ * `$eccLevel` and `$qrMode` apply only to QR codes; linear barcodes
+ * ignore them.
  */
 final readonly class Barcode implements BlockElement
 {
@@ -35,9 +30,7 @@ final readonly class Barcode implements BlockElement
         public Alignment $alignment = Alignment::Start,
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 0,
-        // Phase 37: ECC level для 2D barcodes (QR). Linear barcodes ignore.
         public ?QrEccLevel $eccLevel = null,
-        // Phase 38: explicit encoding mode для QR (null = auto-detect).
         public ?QrEncodingMode $qrMode = null,
     ) {}
 }

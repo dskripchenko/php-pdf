@@ -7,15 +7,15 @@ namespace Dskripchenko\PhpPdf\Element;
 use Dskripchenko\PhpPdf\Style\Alignment;
 
 /**
- * Phase 60: Area chart — line с filled region между line и baseline.
+ * Area chart — a line chart with the region between the line and the
+ * baseline filled. Shares multi-series schema with MultiLineChart.
  *
  * Modes:
- *  - $stacked = false: каждая series filled независимо от baseline (y=0);
- *    series могут перекрывать друг друга — recommend single series mode.
- *  - $stacked = true: series stacked top of previous; total height = sum
- *    всех values at each x.
- *
- * Schema identical к MultiLineChart.
+ *  - `stacked: false` — each series filled independently from the
+ *    baseline (y=0). Series may overlap, so single-series usage is
+ *    recommended.
+ *  - `stacked: true` — series stacked on top of the previous. Total
+ *    height at each x is the sum of all series values.
  */
 final readonly class AreaChart implements BlockElement
 {
