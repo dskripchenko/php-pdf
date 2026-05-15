@@ -101,6 +101,60 @@ final class AztecEncoder
     private array $matrix;
 
     /**
+     * Phase 238: Aztec ECI marker via FLG(n) escape (ISO 24778 §6.5).
+     *
+     * Inserts ECI escape at start of encoded data stream signaling к decoder
+     * что following content uses non-default character encoding (e.g.,
+     * ECI 26 = UTF-8, ECI 25 = UCS-2 Big-Endian).
+     *
+     * Bit sequence (from default Upper start mode):
+     *  - U→M latch (5 bits = 11101)
+     *  - M→P latch (5 bits = 11110)
+     *  - FLG codeword 0 в Punct (5 bits = 00000)
+     *  - 3-bit n value (length of decimal ECI value, 1-6)
+     *  - n × 4-bit digit codewords (codes 2-11 for '0'-'9')
+     *  - P→U latch (5 bits = 11111) — return к Upper для data encoding
+     *
+     * @param  int  $eciValue  ECI value 0..999999 (max 6 decimal digits)
+     */
+    public static function withEci(int $eciValue, string $data, int $minEccPercent = 23): self
+    {
+        if ($eciValue < 0 || $eciValue > 999999) {
+            throw new \InvalidArgumentException('Aztec ECI value must be 0..999999');
+        }
+
+        return new self($data, $minEccPercent, eciValue: $eciValue);
+    }
+
+    /**
+     * Build FLG(n) ECI header bits — see withEci() docblock for sequence spec.
+     */
+    private static function buildEciHeader(int $eciValue): string
+    {
+        $eciStr = (string) $eciValue;
+        $n = strlen($eciStr);
+
+        $bits = '';
+        // U→M latch (Upper code 29 = 5 bits).
+        $bits .= str_pad(decbin(29), 5, '0', STR_PAD_LEFT);
+        // M→P latch (Mixed code 30 = 5 bits).
+        $bits .= str_pad(decbin(30), 5, '0', STR_PAD_LEFT);
+        // FLG codeword 0 (Punct code 0 = 5 bits).
+        $bits .= str_pad(decbin(0), 5, '0', STR_PAD_LEFT);
+        // 3-bit n value (length of ECI digits, 1-6).
+        $bits .= str_pad(decbin($n), 3, '0', STR_PAD_LEFT);
+        // n × 4-bit digit codewords (digit '0'-'9' = code 2-11 в Digit mode).
+        for ($i = 0; $i < $n; $i++) {
+            $digit = (int) $eciStr[$i];
+            $bits .= str_pad(decbin(2 + $digit), 4, '0', STR_PAD_LEFT);
+        }
+        // P→U latch (Punct code 31 = 5 bits) — return к Upper for data encoding.
+        $bits .= str_pad(decbin(31), 5, '0', STR_PAD_LEFT);
+
+        return $bits;
+    }
+
+    /**
      * Phase 221: Aztec Structured Append (ISO 24778 §8.4).
      *
      * Builds multi-symbol concatenated set. Header prefixed к data:
@@ -150,14 +204,28 @@ final class AztecEncoder
         return new self($header.$data, $minEccPercent);
     }
 
-    public function __construct(public readonly string $data, int $minEccPercent = 23)
-    {
+    /**
+     * Phase 238: ECI prefix bits emitted via FLG(n) escape (ISO 24778 §6.5).
+     * Null = no ECI. Set via `withEci()` static factory.
+     */
+    public readonly ?int $eciValue;
+
+    public function __construct(
+        public readonly string $data,
+        int $minEccPercent = 23,
+        ?int $eciValue = null,
+    ) {
         if ($data === '') {
             throw new \InvalidArgumentException('Aztec input must be non-empty');
         }
+        $this->eciValue = $eciValue;
 
         // 1. High-level encode → bit string.
         $bits = self::encodeToBits($data);
+        // Phase 238: prepend FLG(n) ECI header если задан.
+        if ($eciValue !== null) {
+            $bits = self::buildEciHeader($eciValue).$bits;
+        }
 
         // 2. Pick smallest size accommodating data + ECC.
         //    Iteration order per ZXing: Compact L=1..4, then Full L=4..32.
