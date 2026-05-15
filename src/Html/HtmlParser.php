@@ -127,6 +127,32 @@ final class HtmlParser
                     $blocks[] = new Paragraph($pendingInlines);
                     $pendingInlines = [];
                 }
+                // Phase 229: semantic containers (header/footer/nav/aside/main/
+                // figure/figcaption/article/section).
+                // Если contains block-level children → flatten through.
+                // Если only inline content → treat as Paragraph.
+                $tag = strtolower($node->nodeName);
+                if (in_array($tag, ['header', 'footer', 'nav', 'aside', 'main',
+                    'figure', 'figcaption', 'article', 'section'], true)) {
+                    if ($this->hasBlockChild($node)) {
+                        foreach ($this->walkBlocks($node) as $b) {
+                            $blocks[] = $b;
+                        }
+                    } else {
+                        // Inline-only — wrap в Paragraph.
+                        $blocks[] = $this->parseParagraph($node);
+                    }
+
+                    continue;
+                }
+                if ($tag === 'dl') {
+                    foreach ($this->parseDefinitionListItems($node) as $b) {
+                        $blocks[] = $b;
+                    }
+
+                    continue;
+                }
+
                 $block = $this->parseBlock($node);
                 if ($block !== null) {
                     $blocks[] = $block;
@@ -155,6 +181,21 @@ final class HtmlParser
         return $blocks;
     }
 
+    /**
+     * Phase 229: detect if container has any block-level child.
+     * Used for transparent-flatten decision на semantic containers.
+     */
+    private function hasBlockChild(\DOMNode $node): bool
+    {
+        foreach ($node->childNodes as $child) {
+            if ($this->isBlockTag($child)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function isBlockTag(\DOMNode $node): bool
     {
         if (! $node instanceof \DOMElement) {
@@ -165,8 +206,11 @@ final class HtmlParser
         return in_array($tag, [
             'p', 'div', 'section', 'article',
             'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'hr', 'ul', 'ol', 'table',
+            'hr', 'ul', 'ol', 'dl', 'table',
             'blockquote', 'pre',
+            // Phase 229: HTML5 semantic block groupings.
+            'header', 'footer', 'nav', 'aside', 'main',
+            'figure', 'figcaption',
         ], true);
     }
 
@@ -187,8 +231,54 @@ final class HtmlParser
             'ul' => $this->parseList($node, ordered: false),
             'ol' => $this->parseList($node, ordered: true),
             'table' => $this->parseTable($node),
+            // 'dl' и semantic containers handled inline в walkBlocks
+            // (multi-block flatten).
             default => null,
         };
+    }
+
+    /**
+     * Phase 229: definition list — DT (term) bold paragraphs, DD (definition)
+     * indented paragraphs. Returns flattened sequence для inclusion в
+     * parent's block list.
+     *
+     * @return list<BlockElement>
+     */
+    private function parseDefinitionListItems(\DOMElement $node): array
+    {
+        $blocks = [];
+        foreach ($node->childNodes as $child) {
+            if (! $child instanceof \DOMElement) {
+                continue;
+            }
+            $tag = strtolower($child->nodeName);
+            if ($tag === 'dt') {
+                $inlines = [];
+                foreach ($child->childNodes as $inner) {
+                    $inlines = array_merge($inlines, $this->walkInlines($inner));
+                }
+                $boldedInlines = array_map(
+                    fn ($i) => $i instanceof Run
+                        ? new Run($i->text, $i->style->withBold())
+                        : $i,
+                    $inlines,
+                );
+                $blocks[] = new Paragraph($boldedInlines);
+            } elseif ($tag === 'dd') {
+                $inlines = [];
+                foreach ($child->childNodes as $inner) {
+                    $inlines = array_merge($inlines, $this->walkInlines($inner));
+                }
+                $blocks[] = new Paragraph(
+                    $inlines,
+                    style: new \Dskripchenko\PhpPdf\Style\ParagraphStyle(
+                        indentLeftPt: 24.0,
+                    ),
+                );
+            }
+        }
+
+        return $blocks;
     }
 
     private function parseParagraph(\DOMElement $node): Paragraph
