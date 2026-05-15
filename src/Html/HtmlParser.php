@@ -577,12 +577,69 @@ final class HtmlParser
     private function styleForTag(RunStyle $current, string $tag): RunStyle
     {
         return match ($tag) {
+            // Phase 219: basic semantic styling.
             'b', 'strong' => $current->withBold(),
             'i', 'em' => $current->withItalic(),
             'u' => $current->withUnderline(),
             's', 'strike', 'del' => $current->withStrikethrough(),
             'sup' => $current->withSuperscript(),
             'sub' => $current->withSubscript(),
+            // Phase 228: extended semantic inline tags.
+            'code', 'kbd', 'samp', 'tt', 'var' => new RunStyle(
+                sizePt: $current->sizePt,
+                color: $current->color,
+                backgroundColor: $current->backgroundColor,
+                fontFamily: 'Courier', // monospace family
+                bold: $current->bold,
+                italic: $tag === 'var' ? true : $current->italic,
+                underline: $current->underline,
+                strikethrough: $current->strikethrough,
+                superscript: $current->superscript,
+                subscript: $current->subscript,
+                letterSpacingPt: $current->letterSpacingPt,
+            ),
+            'mark' => new RunStyle(
+                sizePt: $current->sizePt,
+                color: $current->color,
+                backgroundColor: 'ffff00', // yellow highlight per HTML5 spec
+                fontFamily: $current->fontFamily,
+                bold: $current->bold,
+                italic: $current->italic,
+                underline: $current->underline,
+                strikethrough: $current->strikethrough,
+                superscript: $current->superscript,
+                subscript: $current->subscript,
+                letterSpacingPt: $current->letterSpacingPt,
+            ),
+            'small' => new RunStyle(
+                sizePt: ($current->sizePt ?? 12.0) * 0.83, // ~10pt от 12pt base
+                color: $current->color,
+                backgroundColor: $current->backgroundColor,
+                fontFamily: $current->fontFamily,
+                bold: $current->bold,
+                italic: $current->italic,
+                underline: $current->underline,
+                strikethrough: $current->strikethrough,
+                superscript: $current->superscript,
+                subscript: $current->subscript,
+                letterSpacingPt: $current->letterSpacingPt,
+            ),
+            'big' => new RunStyle(
+                sizePt: ($current->sizePt ?? 12.0) * 1.2, // ~14.4pt от 12pt base
+                color: $current->color,
+                backgroundColor: $current->backgroundColor,
+                fontFamily: $current->fontFamily,
+                bold: $current->bold,
+                italic: $current->italic,
+                underline: $current->underline,
+                strikethrough: $current->strikethrough,
+                superscript: $current->superscript,
+                subscript: $current->subscript,
+                letterSpacingPt: $current->letterSpacingPt,
+            ),
+            'ins' => $current->withUnderline(), // inserted text — underlined
+            'cite', 'dfn', 'q' => $current->withItalic(), // citations/definitions/inline-quotes
+            'abbr' => $current->withUnderline(), // abbreviation — dotted underline (we use plain)
             default => $current,
         };
     }
