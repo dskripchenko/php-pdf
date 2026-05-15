@@ -168,6 +168,9 @@ final class Document
     /** Phase 47: PDF/A-1b configuration. */
     private ?PdfAConfig $pdfA = null;
 
+    /** Phase 225: PDF/X print conformance config (mutually exclusive с pdfA). */
+    private ?PdfXConfig $pdfX = null;
+
     /** Phase 48: Tagged PDF mode (accessibility). */
     private bool $tagged = false;
 
@@ -380,12 +383,50 @@ final class Document
         if ($this->encryption !== null) {
             throw new \LogicException('PDF/A disallows encryption — call enablePdfA() перед encrypt() либо не вызывайте encrypt().');
         }
+        if ($this->pdfX !== null) {
+            throw new \LogicException('Cannot combine PDF/A и PDF/X — choose one variant.');
+        }
         $this->pdfA = $config;
         $this->pdfVersion = '1.4';
         // Phase 190: PDF/A-1a (and PDF/A-2a, 3a) require Tagged PDF structure.
         // Auto-enable tagging если conformance = 'A'.
         if ($config->conformance === PdfAConfig::CONFORMANCE_A && ! $this->tagged) {
             $this->enableTagged();
+        }
+
+        return $this;
+    }
+
+    /**
+     * Phase 225: enable PDF/X-1a/X-3/X-4 print conformance.
+     *
+     * Emits OutputIntent с /S /GTS_PDFX, /Trapped key в /Info, и XMP
+     * metadata с pdfx: namespace markers.
+     *
+     * Caller responsible для content-level compliance:
+     * - All fonts embedded (default behavior)
+     * - No transparency для X-1a/X-3 variants
+     * - CMYK colorspace для X-1a (we render RGB by default — X-1a not
+     *   strictly compliant без CMYK conversion)
+     *
+     * Mutually exclusive с PDF/A и encryption.
+     */
+    public function enablePdfX(PdfXConfig $config): self
+    {
+        if ($this->encryption !== null) {
+            throw new \LogicException('PDF/X disallows encryption.');
+        }
+        if ($this->pdfA !== null) {
+            throw new \LogicException('Cannot combine PDF/X и PDF/A — choose one variant.');
+        }
+        $this->pdfX = $config;
+        // PDF/X-4 requires PDF 1.6+; X-1a/X-3 require PDF 1.4+.
+        if ($config->variant === PdfXConfig::VARIANT_X4) {
+            if (version_compare($this->pdfVersion, '1.6', '<')) {
+                $this->pdfVersion = '1.6';
+            }
+        } elseif (version_compare($this->pdfVersion, '1.4', '<')) {
+            $this->pdfVersion = '1.4';
         }
 
         return $this;
@@ -1409,6 +1450,39 @@ final class Document
             );
         }
 
+        // Phase 225: PDF/X — Metadata stream + OutputIntent с /S /GTS_PDFX.
+        if ($this->pdfX !== null) {
+            $xmp = $this->pdfX->xmpMetadata();
+            $metadataId = $writer->addObject(sprintf(
+                "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
+                strlen($xmp), $xmp,
+            ));
+            $iccBytes = $this->pdfX->iccProfileBytes();
+            $iccCompressed = (string) gzcompress($iccBytes, 6);
+            $iccId = $writer->addObject(sprintf(
+                "<< /N 3 /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                strlen($iccCompressed), $iccCompressed,
+            ));
+            $outputIntentBody = sprintf(
+                '<< /Type /OutputIntent /S /GTS_PDFX '
+                .'/OutputConditionIdentifier %s '
+                .'/OutputCondition %s '
+                .'/RegistryName %s '
+                .'/Info %s '
+                .'/DestOutputProfile %d 0 R >>',
+                $this->pdfString($this->pdfX->outputConditionIdentifier),
+                $this->pdfString($this->pdfX->outputCondition),
+                $this->pdfString($this->pdfX->registryName),
+                $this->pdfString($this->pdfX->iccProfileName),
+                $iccId,
+            );
+            $outputIntentId = $writer->addObject($outputIntentBody);
+            $pdfARef = sprintf(
+                ' /Metadata %d 0 R /OutputIntents [%d 0 R]',
+                $metadataId, $outputIntentId,
+            );
+        }
+
         // 6. Catalog.
         // Phase 84: optional /OpenAction, /PageMode, /PageLayout.
         $openActionRef = '';
@@ -1573,6 +1647,17 @@ final class Document
         $entries = [];
         foreach ($meta as $key => $value) {
             $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
+        }
+        // Phase 225: PDF/X requires /Trapped key в /Info.
+        if ($this->pdfX !== null) {
+            $entries[] = '/Trapped /'.$this->pdfX->trapped;
+            // Title from PdfXConfig если не set в metadata.
+            if (! isset($this->metadata['Title']) && $this->pdfX->title !== '') {
+                $entries[] = '/Title '.$this->pdfString($this->pdfX->title);
+            }
+            if (! isset($this->metadata['Author']) && $this->pdfX->author !== '') {
+                $entries[] = '/Author '.$this->pdfString($this->pdfX->author);
+            }
         }
         $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
         $writer->setInfo($infoId);

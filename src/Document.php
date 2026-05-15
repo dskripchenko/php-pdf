@@ -85,6 +85,11 @@ final readonly class Document
          * (auto-enables Tagged PDF при conformance='A').
          */
         public ?\Dskripchenko\PhpPdf\Pdf\PdfAConfig $pdfA = null,
+        /**
+         * Phase 225: declarative PDF/X-1a/X-3/X-4 print conformance.
+         * Mutually exclusive с pdfA + encryption.
+         */
+        public ?\Dskripchenko\PhpPdf\Pdf\PdfXConfig $pdfX = null,
     ) {}
 
     /**
@@ -267,6 +272,10 @@ final readonly class Document
         // throws при wrong order).
         if ($this->pdfA !== null) {
             $pdf->enablePdfA($this->pdfA);
+        }
+        // Phase 225: PDF/X — same rule, must apply до encryption.
+        if ($this->pdfX !== null) {
+            $pdf->enablePdfX($this->pdfX);
         }
         if ($this->encryption !== null) {
             $pdf->encrypt(
