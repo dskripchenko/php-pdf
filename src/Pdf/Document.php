@@ -8,27 +8,21 @@ use Dskripchenko\PhpPdf\Style\Orientation;
 use Dskripchenko\PhpPdf\Style\PaperSize;
 
 /**
- * High-level PDF document — entry point Phase 1 API.
+ * High-level PDF document — primary entry point.
  *
- * Скрывает low-level Writer/ContentStream детали: client просто
- * добавляет pages, рисует на них, и эмитит bytes:
+ * Hides low-level Writer/ContentStream details: client adds pages, draws on
+ * them, and emits bytes.
  *
  *   $doc = Document::new(PaperSize::A4);
  *   $page = $doc->addPage();
  *   $page->showText('Hello, world!', 72, 720, StandardFont::TimesRoman, 12);
  *   $bytes = $doc->toBytes();
  *
- * Document отвечает за:
- *  - Создание Writer и orchestrating его low-level API
- *  - Регистрацию unique fonts/images (deduplication через identity)
- *  - Эмиссию Catalog + Pages tree + per-page Page object + Content stream
- *  - Cross-reference table + trailer + EOF
- *
- * Phase 1 НЕ включает (планируется в более поздних phase'ах):
- *  - Text layout / wrapping / line breaking (Phase 3)
- *  - Headers/footers/watermarks (Phase 8)
- *  - Multi-page paragraphs с auto page break (Phase 3+5)
- *  - Bookmarks/outline (Phase 7)
+ * Document is responsible for:
+ *  - Creating the Writer and orchestrating its low-level API.
+ *  - Registering unique fonts/images (deduplicated by identity/content hash).
+ *  - Emitting Catalog + Pages tree + per-page Page object + content stream.
+ *  - Cross-reference table + trailer + EOF.
  */
 final class Document
 {
@@ -36,15 +30,15 @@ final class Document
     private array $pages = [];
 
     /**
-     * Named destinations для internal-links и bookmarks.
+     * Named destinations for internal links and bookmarks.
      *
      * @var array<string, array{page: Page, x: float, y: float}>
      */
     private array $namedDestinations = [];
 
     /**
-     * Outline (bookmarks panel) entries в flat list. Tree-структура
-     * восстанавливается в toBytes() по level'у.
+     * Outline (bookmarks panel) entries as a flat list. Tree structure is
+     * reconstructed in toBytes() based on level.
      *
      * @var list<array{level: int, title: string, page: Page, x: float, y: float}>
      */
@@ -52,28 +46,28 @@ final class Document
 
     private string $pdfVersion = '1.7';
 
-    /** Phase 208: emit xref как XRef stream object (PDF 1.5+) instead of classic table. */
+    /** Emit xref as XRef stream object (PDF 1.5+) instead of classic table. */
     private bool $useXrefStream = false;
 
-    /** Phase 214: pack non-stream objects в Object Stream (PDF 1.5+). */
+    /** Pack non-stream objects into an Object Stream (PDF 1.5+). */
     private bool $useObjectStreams = false;
 
-    /** Phase 220: page count threshold для switching из flat → balanced tree. */
+    /** Page count threshold for switching from flat → balanced tree. */
     private const PAGE_TREE_THRESHOLD = 32;
 
-    /** Phase 220: max children per /Pages node (PDF spec recommends ≤ 16-20). */
+    /** Max children per /Pages node (PDF spec recommends ≤ 16-20). */
     private const PAGE_TREE_FANOUT = 16;
 
     /**
-     * Phase 220: build balanced Page Tree structure.
+     * Build a balanced Page Tree structure.
      *
-     * PDF spec §7.7.3.3 рекомендует balanced /Pages tree для efficient reader
-     * navigation. Flat tree (default) acceptable but performant tree noticeably
-     * faster для documents > 100 pages.
+     * PDF spec §7.7.3.3 recommends a balanced /Pages tree for efficient
+     * reader navigation. A flat tree (default) is acceptable, but a
+     * balanced tree is noticeably faster for documents > 100 pages.
      *
-     * Strategy: single intermediate level с adaptive chunk size. Up к
-     * FANOUT² ≈ 256 pages fits с chunkSize=FANOUT (16). Larger documents
-     * use larger chunks к keep root /Kids ≤ FANOUT.
+     * Strategy: single intermediate level with adaptive chunk size. Up to
+     * FANOUT² ≈ 256 pages fits with chunkSize=FANOUT (16); larger documents
+     * use larger chunks to keep root /Kids ≤ FANOUT.
      *
      * @param  list<int>  $pageIds
      * @param  resource|null  $unused  unused (kept for signature consistency)
@@ -92,7 +86,7 @@ final class Document
             ];
         }
 
-        // Adaptive chunk size — каждый chunk gets ~FANOUT pages но root /Kids ≤ FANOUT.
+        // Adaptive chunk size — each chunk gets ~FANOUT pages but root /Kids ≤ FANOUT.
         $fanout = self::PAGE_TREE_FANOUT;
         $chunkSize = max($fanout, (int) ceil($n / $fanout));
 
@@ -124,59 +118,59 @@ final class Document
     }
 
     /**
-     * @var array<string, string>  metadata fields (Title, Author, Subject,
-     *                              Keywords, Creator, Producer). Values
-     *                              shown в PDF reader's "Document Properties"
-     *                              dialog. Все optional; emit'ятся в /Info
-     *                              dict если хотя бы одно задано.
+     * Metadata fields (Title, Author, Subject, Keywords, Creator, Producer).
+     * Shown in the reader's "Document Properties" dialog. All optional;
+     * emitted in /Info dict whenever at least one entry is set.
+     *
+     * @var array<string, string>
      */
     private array $metadata = [];
 
     /**
-     * Phase 41: optional encryption config. Если задан — emit /Encrypt
-     * в trailer + encrypt все stream content на per-object level.
+     * Optional encryption config. When set, emit /Encrypt in trailer and
+     * encrypt all stream content per object.
      */
     private ?Encryption $encryption = null;
 
-    /** Phase 108: PKCS#7 signing config (PDF signed at toBytes). */
+    /** Optional PKCS#7 signing config (applied during toBytes). */
     private ?SignatureConfig $signatureConfig = null;
 
-    /** @var list<PdfLayer> Phase 112: Optional Content Groups (layers). */
+    /** @var list<PdfLayer> Optional Content Groups (layers). */
     private array $layers = [];
 
-    /** @var array<string, string> Phase 119: Document-level /AA actions (event → JS). */
+    /** @var array<string, string> Document-level /AA actions (event → JS). */
     private array $documentActions = [];
 
-    /** Phase 108: reserved sig dict ID, set transient during emit(). */
+    /** Reserved signature dict ID, set transiently during emit(). */
     private ?int $signatureDictId = null;
 
-    /** Phase 108: tracks whether /V was already attached to one widget. */
+    /** Tracks whether /V was already attached to one signature widget. */
     private bool $signatureFieldLinked = false;
 
-    /** Phase 123: reserved Helvetica font ID for AcroForm AppearanceStreams. */
+    /** Reserved Helvetica font ID for AcroForm appearance streams. */
     private ?int $appearanceFontId = null;
 
-    /** Phase 123: reserved ZapfDingbats font ID for checkbox/radio glyphs. */
+    /** Reserved ZapfDingbats font ID for checkbox/radio glyphs. */
     private ?int $appearanceZapfId = null;
 
-    /** @var list<int> Phase 43: form field object IDs (filled во время toBytes). */
+    /** @var list<int> Form field object IDs collected during toBytes. */
     private array $collectedFormFieldIds = [];
 
-    /** @var list<int> Phase 97: field IDs с /AA /C calculate scripts (для AcroForm /CO). */
+    /** @var list<int> Field IDs with /AA /C calculate scripts (for AcroForm /CO). */
     private array $calculatedFieldIds = [];
 
-    /** Phase 47: PDF/A-1b configuration. */
+    /** PDF/A configuration (mutually exclusive with PDF/X and encryption). */
     private ?PdfAConfig $pdfA = null;
 
-    /** Phase 225: PDF/X print conformance config (mutually exclusive с pdfA). */
+    /** PDF/X print conformance config (mutually exclusive with PDF/A). */
     private ?PdfXConfig $pdfX = null;
 
-    /** Phase 48: Tagged PDF mode (accessibility). */
+    /** Tagged PDF mode (accessibility). */
     private bool $tagged = false;
 
     /**
-     * Phase 84: Open action — applied when document is opened.
-     * Options:
+     * Open action — applied when the document is opened.
+     * Modes:
      *  - 'fit-page' — zoom to fit entire page.
      *  - 'fit-width' — zoom to fit page width.
      *  - 'actual-size' — 100%.
@@ -187,39 +181,39 @@ final class Document
     private ?array $openAction = null;
 
     /**
-     * Phase 84: Page display mode на open.
-     * Options: 'use-none' (default), 'use-outlines', 'use-thumbs',
-     *          'use-oc' (optional content), 'full-screen'.
+     * Page display mode on open.
+     * Values: 'use-none' (default), 'use-outlines', 'use-thumbs',
+     *         'use-oc' (optional content), 'full-screen'.
      */
     private ?string $pageMode = null;
 
     /**
-     * Phase 84: Page layout mode.
-     * Options: 'single-page' (default), 'one-column', 'two-column-left',
-     *          'two-column-right', 'two-page-left', 'two-page-right'.
+     * Page layout mode.
+     * Values: 'single-page' (default), 'one-column', 'two-column-left',
+     *         'two-column-right', 'two-page-left', 'two-page-right'.
      */
     private ?string $pageLayout = null;
 
     /**
-     * Phase 88: /ViewerPreferences entries.
+     * /ViewerPreferences entries.
      *
      * @var array<string, mixed>
      */
     private array $viewerPreferences = [];
 
-    /** Phase 89: BCP 47 language tag для /Lang в Catalog. */
+    /** BCP 47 language tag for /Lang in Catalog. */
     private ?string $lang = null;
 
     /**
-     * Phase 93: Custom struct role aliases. Maps non-standard struct type
-     * names к standard PDF/UA roles.
+     * Custom struct role aliases — maps non-standard struct type names
+     * to standard PDF/UA roles.
      *
-     * @var array<string, string>  custom → standard.
+     * @var array<string, string>  custom → standard
      */
     private array $structRoleMap = [];
 
     /**
-     * Phase 93: Configure role map для custom struct types.
+     * Configure role map for custom struct types.
      *
      * @param  array<string, string>  $roleMap
      */
@@ -238,11 +232,10 @@ final class Document
     }
 
     /**
-     * Phase 88: Configure viewer preferences. Keys: hideToolbar,
-     * hideMenubar, hideWindowUI, fitWindow, centerWindow,
-     * displayDocTitle (bool); direction ('L2R'|'R2L'); printScaling
-     * ('None'|'AppDefault'); duplex ('Simplex'|'DuplexFlipShortEdge'|
-     * 'DuplexFlipLongEdge').
+     * Configure viewer preferences. Keys: hideToolbar, hideMenubar,
+     * hideWindowUI, fitWindow, centerWindow, displayDocTitle (bool);
+     * direction ('L2R'|'R2L'); printScaling ('None'|'AppDefault');
+     * duplex ('Simplex'|'DuplexFlipShortEdge'|'DuplexFlipLongEdge').
      *
      * @param  array<string, mixed>  $prefs
      */
@@ -254,14 +247,14 @@ final class Document
     }
 
     /**
-     * Phase 87: Page label ranges per ISO 32000-1 §12.4.2.
+     * Page label ranges per ISO 32000-1 §12.4.2.
      *
      * @var list<array{startPage: int, style?: string, prefix?: string, firstNumber?: int}>
      */
     private array $pageLabelRanges = [];
 
     /**
-     * Phase 87: Configure page label numbering style per page range.
+     * Configure page label numbering style per page range.
      * Styles: 'decimal' (1, 2, 3), 'upper-roman' (I, II, III),
      * 'lower-roman' (i, ii, iii), 'upper-alpha' (A, B, C),
      * 'lower-alpha' (a, b, c).
@@ -276,7 +269,7 @@ final class Document
     }
 
     /**
-     * Phase 84: Set open action — zoom + page on document open.
+     * Set the open action — zoom + page on document open.
      */
     public function setOpenAction(string $mode = 'fit-page', int $pageIndex = 1, ?float $x = null, ?float $y = null, ?float $zoom = null): self
     {
@@ -304,15 +297,15 @@ final class Document
     }
 
     /**
-     * Phase 49: Embedded files (attachments).
+     * Embedded files (attachments).
      *
      * @var list<array{name: string, bytes: string, mimeType: ?string, description: ?string}>
      */
     private array $embeddedFiles = [];
 
     /**
-     * Phase 49: Attach file к PDF. File doesn't show in content; available
-     * via reader's attachments panel (Acrobat Reader, Foxit etc.).
+     * Attach a file to the PDF. The file does not appear in page content;
+     * it is shown in the reader's attachments panel (Acrobat, Foxit, etc.).
      */
     public function attachFile(string $name, string $bytes, ?string $mimeType = null, ?string $description = null): self
     {
@@ -327,30 +320,33 @@ final class Document
     }
 
     /**
+     * Struct elements collected during rendering — emitted in StructTreeRoot/K.
+     *
      * @var list<array{type: string, mcid: int, page: Page, altText?: ?string}>
-     *   Struct elements collected при rendering — emitted в StructTreeRoot/K.
      */
     private array $structElements = [];
 
     /**
-     * Phase 151: structElement index → /StructParent number tree key for tagged
-     * Link annotations. Used to wire /Link annot back к its StructElem in ParentTree.
+     * structElement index → /StructParent number tree key for tagged Link
+     * annotations. Used to wire the /Link annot back to its StructElem in
+     * the ParentTree.
      *
      * @var array<int, int>
      */
     private array $structParentLinkKeys = [];
 
     /**
-     * Phase 48: Enable Tagged PDF (accessibility).
+     * Enable Tagged PDF (accessibility).
      *
-     * Adds /MarkInfo /Marked true + /StructTreeRoot к Catalog. Each rendered
-     * paragraph wrapped в BDC /P << /MCID N >> ... EMC content marking.
-     * Structure tree contains один /Document root → flat list of /P children.
+     * Adds /MarkInfo /Marked true + /StructTreeRoot to the Catalog. Each
+     * rendered paragraph is wrapped in BDC /P << /MCID N >> ... EMC content
+     * marking. The structure tree contains a single /Document root with a
+     * flat list of /P children.
      *
      * NOT full PDF/UA compliance:
-     *  - Все блоки tagged как /P (нет H1/H2/Table/Caption distinction).
-     *  - Alt text для images / figure не emit'ится.
-     *  - Reading order сохраняется но не explicit'но через /StructParents.
+     *  - All blocks are tagged as /P (no H1/H2/Table/Caption distinction).
+     *  - Alt text for images / figures is not emitted.
+     *  - Reading order is preserved but not explicit via /StructParents.
      */
     public function enableTagged(): self
     {
@@ -365,7 +361,7 @@ final class Document
     }
 
     /**
-     * @internal Engine использует для registration struct elements.
+     * @internal Used by the Engine to register struct elements.
      */
     public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null): void
     {
@@ -375,21 +371,19 @@ final class Document
     }
 
     /**
-     * Phase 47: Enable PDF/A-1b compliance mode.
-     * Phase 190: PDF/A-1a (accessibility) variant — requires Tagged PDF.
+     * Enable PDF/A compliance. Conformance 'A' (accessibility) auto-enables
+     * Tagged PDF.
      */
     public function enablePdfA(PdfAConfig $config): self
     {
         if ($this->encryption !== null) {
-            throw new \LogicException('PDF/A disallows encryption — call enablePdfA() перед encrypt() либо не вызывайте encrypt().');
+            throw new \LogicException('PDF/A disallows encryption — call enablePdfA() before encrypt(), or omit encrypt().');
         }
         if ($this->pdfX !== null) {
-            throw new \LogicException('Cannot combine PDF/A и PDF/X — choose one variant.');
+            throw new \LogicException('Cannot combine PDF/A and PDF/X — choose one variant.');
         }
         $this->pdfA = $config;
         $this->pdfVersion = '1.4';
-        // Phase 190: PDF/A-1a (and PDF/A-2a, 3a) require Tagged PDF structure.
-        // Auto-enable tagging если conformance = 'A'.
         if ($config->conformance === PdfAConfig::CONFORMANCE_A && ! $this->tagged) {
             $this->enableTagged();
         }
@@ -398,18 +392,18 @@ final class Document
     }
 
     /**
-     * Phase 225: enable PDF/X-1a/X-3/X-4 print conformance.
+     * Enable PDF/X-1a/X-3/X-4 print conformance.
      *
-     * Emits OutputIntent с /S /GTS_PDFX, /Trapped key в /Info, и XMP
-     * metadata с pdfx: namespace markers.
+     * Emits OutputIntent with /S /GTS_PDFX, /Trapped key in /Info, and XMP
+     * metadata with pdfx: namespace markers.
      *
-     * Caller responsible для content-level compliance:
-     * - All fonts embedded (default behavior)
-     * - No transparency для X-1a/X-3 variants
-     * - CMYK colorspace для X-1a (we render RGB by default — X-1a not
-     *   strictly compliant без CMYK conversion)
+     * The caller is responsible for content-level compliance:
+     *  - All fonts embedded (default behaviour).
+     *  - No transparency for X-1a/X-3 variants.
+     *  - CMYK colorspace for X-1a (we render RGB by default — X-1a is not
+     *    strictly compliant without CMYK conversion).
      *
-     * Mutually exclusive с PDF/A и encryption.
+     * Mutually exclusive with PDF/A and encryption.
      */
     public function enablePdfX(PdfXConfig $config): self
     {
@@ -417,7 +411,7 @@ final class Document
             throw new \LogicException('PDF/X disallows encryption.');
         }
         if ($this->pdfA !== null) {
-            throw new \LogicException('Cannot combine PDF/X и PDF/A — choose one variant.');
+            throw new \LogicException('Cannot combine PDF/X and PDF/A — choose one variant.');
         }
         $this->pdfX = $config;
         // PDF/X-4 requires PDF 1.6+; X-1a/X-3 require PDF 1.4+.
@@ -433,10 +427,11 @@ final class Document
     }
 
     /**
-     * Phase 41-42: enable PDF encryption.
+     * Enable PDF encryption.
      *
-     * RC4-128 (V2 R3) — default, supported widely включая старые readers.
-     * AES-128 (V4 R4) — modern, deprecates RC4. Requires openssl ext.
+     * RC4-128 (V2 R3) — default, widely supported including legacy readers.
+     * AES-128 (V4 R4) — modern, supersedes RC4. Requires the openssl ext.
+     * AES-256 (V5 R5/R6) — PDF 1.7 ExtLvl 8 / PDF 2.0 (ISO 32000-2).
      */
     public function encrypt(
         string $userPassword,
@@ -445,17 +440,17 @@ final class Document
         EncryptionAlgorithm $algorithm = EncryptionAlgorithm::Rc4_128,
     ): self {
         if ($this->pdfA !== null) {
-            throw new \LogicException('PDF/A-1b disallows encryption');
+            throw new \LogicException('PDF/A disallows encryption');
         }
         $this->encryption = new Encryption($userPassword, $ownerPassword, $permissions, $algorithm);
-        // PDF 1.6 required для AES-128; 1.7 для AES-256 V5.
+        // PDF 1.6 required for AES-128; 1.7 for AES-256 V5.
         if ($algorithm === EncryptionAlgorithm::Aes_128 && version_compare($this->pdfVersion, '1.6', '<')) {
             $this->pdfVersion = '1.6';
         }
         if ($algorithm === EncryptionAlgorithm::Aes_256 && version_compare($this->pdfVersion, '1.7', '<')) {
             $this->pdfVersion = '1.7';
         }
-        // Phase 106: R6 — PDF 2.0 (ISO 32000-2). Bump version unconditionally.
+        // R6 — PDF 2.0 (ISO 32000-2). Bump version unconditionally.
         if ($algorithm === EncryptionAlgorithm::Aes_256_R6) {
             $this->pdfVersion = '2.0';
         }
@@ -464,15 +459,15 @@ final class Document
     }
 
     /**
-     * Phase 108: enable PKCS#7 detached signing.
+     * Enable PKCS#7 detached signing.
      *
-     * Requires at least one form field of type 'signature' to be added
-     * (will receive /V referencing the actual signature dictionary).
+     * Requires at least one form field of type 'signature' to be added —
+     * it will receive /V referencing the signature dictionary.
      *
      * The PDF bytes are patched in toBytes() after assembly:
      *   1. /ByteRange [a b c d] computed from actual /Contents position.
-     *   2. Bytes outside /Contents hashed + signed via openssl_pkcs7_sign.
-     *   3. /Contents placeholder filled с hex-encoded DER PKCS#7 envelope.
+     *   2. Bytes outside /Contents are hashed and signed via openssl_pkcs7_sign.
+     *   3. /Contents placeholder filled with hex-encoded DER PKCS#7 envelope.
      */
     public function sign(SignatureConfig $config): self
     {
@@ -482,8 +477,8 @@ final class Document
     }
 
     /**
-     * Phase 112: register a layer (Optional Content Group). Returned
-     * instance is passed к Page::beginLayer() to mark content.
+     * Register a layer (Optional Content Group). The returned instance is
+     * passed to Page::beginLayer() to mark content.
      */
     public function addLayer(string $name, bool $defaultVisible = true, string $intent = 'View'): PdfLayer
     {
@@ -494,14 +489,15 @@ final class Document
     }
 
     /**
-     * Phase 119: register a document-level Additional Action.
+     * Register a document-level Additional Action.
      *
      * Events (PDF spec §12.6.3 Table 197):
      *  - WillClose (WC), WillSave (WS), DidSave (DS),
      *    WillPrint (WP), DidPrint (DP).
-     *  Note: DocumentOpen — use {@see setOpenAction()} (separate /OpenAction entry).
      *
-     * Emits /AA << /WC <<...>> /WS <<...>> ... >> в Catalog.
+     * For document-open use {@see setOpenAction()} (separate /OpenAction entry).
+     *
+     * Emits /AA << /WC <<...>> /WS <<...>> ... >> in Catalog.
      */
     public function setDocumentAction(string $event, string $script): self
     {
@@ -532,9 +528,9 @@ final class Document
         public Orientation $defaultOrientation = Orientation::Portrait,
         public ?array $defaultCustomDimensionsPt = null,
         /**
-         * Если true — content streams сжимаются через FlateDecode (~3-5×
-         * меньше для text-heavy документов). Default = true; set false
-         * для debug-просмотра raw streams.
+         * When true, content streams are compressed via FlateDecode (~3-5×
+         * smaller for text-heavy documents). Set false for debug inspection
+         * of raw streams.
          */
         public bool $compressStreams = true,
     ) {}
@@ -559,13 +555,13 @@ final class Document
     }
 
     /**
-     * Phase 208: enable XRef stream cross-reference table (PDF 1.5+).
+     * Enable XRef stream cross-reference table (PDF 1.5+).
      *
-     * Replaces classic `xref...trailer` keywords с binary-packed FlateDecode
-     * object — ~50% smaller metadata footprint. Auto-bumps PDF version к 1.5+
-     * если currently below. Не compatible с PKCS#7 signing (signing path
-     * keeps classic xref для simpler /ByteRange handling — when both are
-     * configured, classic xref wins).
+     * Replaces the classic `xref...trailer` keywords with a binary-packed
+     * FlateDecode object — ~50% smaller metadata footprint. Auto-bumps PDF
+     * version to 1.5+ if currently below. Incompatible with PKCS#7 signing
+     * (the signing path keeps classic xref for simpler /ByteRange handling;
+     * when both are configured, classic xref wins).
      */
     public function useXrefStream(bool $enabled = true): self
     {
@@ -578,16 +574,16 @@ final class Document
     }
 
     /**
-     * Phase 214: enable Object Streams (PDF 1.5+) — pack uncompressed dict
-     * objects (catalog, page tree, info, font dicts без streams, etc.) в
-     * один FlateDecode-compressed stream. Saves ~15-30% output size на
-     * documents с many small objects.
+     * Enable Object Streams (PDF 1.5+) — pack uncompressed dict objects
+     * (catalog, page tree, info, non-stream font dicts, etc.) into one
+     * FlateDecode-compressed stream. Saves ~15-30% output size on documents
+     * with many small objects.
      *
-     * Implies XRef streams (type-2 entries для compressed objects need new
-     * xref encoding). Auto-enables `useXrefStream` если не set. Bumps PDF
-     * version к 1.5+.
+     * Implies XRef streams (type-2 entries for compressed objects require
+     * the new xref encoding). Auto-enables useXrefStream if not set and
+     * bumps PDF version to 1.5+.
      *
-     * Auto-disabled при encryption или PKCS#7 signing.
+     * Auto-disabled when encryption or PKCS#7 signing is configured.
      */
     public function useObjectStreams(bool $enabled = true): self
     {
@@ -603,9 +599,9 @@ final class Document
     }
 
     /**
-     * Устанавливает PDF metadata (/Info dict). Все параметры optional.
-     * Только заданные fields эмитятся (не-null). CreationDate авто-
-     * заполняется если не передан.
+     * Set PDF metadata (/Info dict). All parameters are optional; only the
+     * non-null fields are emitted. CreationDate is auto-populated if not
+     * provided.
      */
     public function metadata(
         ?string $title = null,
@@ -648,10 +644,9 @@ final class Document
     }
 
     /**
-     * Добавляет новую page. Если paperSize/orientation не переданы —
-     * используется document-level default.
-     */
-    /**
+     * Add a new page. When paperSize/orientation are omitted, the document-
+     * level defaults are used.
+     *
      * @param  array{0: float, 1: float}|null  $customDimensionsPt
      */
     public function addPage(
@@ -683,10 +678,8 @@ final class Document
     }
 
     /**
-     * Регистрирует named destination — позиция (x, y) на $page будет
-     * jump target'ом для internal-link'ов с этим именем.
-     *
-     * Last-write wins: если name уже есть, перезаписывает.
+     * Register a named destination — position (x, y) on $page becomes the
+     * jump target for internal links with this name. Last-write wins.
      */
     public function registerDestination(string $name, Page $page, float $x, float $y): self
     {
@@ -704,9 +697,9 @@ final class Document
     }
 
     /**
-     * Регистрирует outline entry для bookmarks-panel viewer'а.
-     * $level (1..N) определяет вложенность: level 1 = top-level,
-     * level 2 = ребёнок последнего level-1, и т.д.
+     * Register an outline entry for the bookmarks panel. $level (1..N)
+     * determines nesting: level 1 = top-level, level 2 = child of the
+     * latest level-1 entry, and so on.
      */
     public function registerOutlineEntry(
         int $level, string $title, Page $page, float $x, float $y,
@@ -728,7 +721,7 @@ final class Document
     }
 
     /**
-     * Сериализует document в PDF bytes.
+     * Serialize the document to PDF bytes.
      */
     public function toBytes(): string
     {
@@ -736,19 +729,19 @@ final class Document
     }
 
     /**
-     * Phase 129: build configured Writer (ready to emit). Extracted из
-     * toBytes() для shared use с toStream().
+     * Build a configured Writer ready to emit. Shared between toBytes()
+     * and toStream().
      */
     private function buildWriter(): Writer
     {
         if ($this->pages === []) {
-            // Empty document — add blank A4 page чтобы PDF был валидным
-            // (PDF спецификация требует ≥ 1 page в page tree).
+            // Empty document — add a blank page so the PDF is valid
+            // (the spec requires ≥ 1 page in the page tree).
             $this->addPage();
         }
 
-        // Phase 208: xref streams auto-disabled при PKCS#7 signing — that
-        // path patches /ByteRange + /Contents в classic xref layout.
+        // XRef streams auto-disabled with PKCS#7 signing — the signing path
+        // patches /ByteRange + /Contents in classic xref layout.
         $useXref = $this->useXrefStream && $this->signatureConfig === null;
         $useObjStm = $this->useObjectStreams
             && $useXref
@@ -760,29 +753,28 @@ final class Document
             useObjectStreams: $useObjStm,
         );
 
-        // 1. Резервируем top-level IDs.
+        // 1. Reserve top-level IDs.
         $catalogId = $writer->reserveObject();
         $pagesId = $writer->reserveObject();
 
-        // Phase 108: reserve signature dictionary ID upfront so widget /V
-        // can reference it during field emission.
+        // Reserve signature dictionary ID upfront so widget /V can
+        // reference it during field emission.
         $this->signatureDictId = null;
         $this->signatureFieldLinked = false;
         if ($this->signatureConfig !== null) {
             $this->signatureDictId = $writer->reserveObject();
         }
 
-        // Phase 123: reset appearance font IDs — assigned lazy in buildAppearance*.
+        // Reset appearance font IDs — assigned lazily in buildAppearance*.
         $this->appearanceFontId = null;
         $this->appearanceZapfId = null;
 
-        // 2. Регистрируем все unique fonts/images через identity-dedupe.
-        //    Standard fonts: один PDF object per unique StandardFont enum.
-        //    Embedded fonts: один объект-граф per PdfFont instance.
-        //    Images: один XObject per PdfImage instance.
+        // 2. Register all unique fonts/images via identity dedup.
+        //    Standard fonts: one PDF object per unique StandardFont enum.
+        //    Embedded fonts: one object graph per PdfFont instance.
+        //    Images: one XObject per PdfImage instance.
 
-        // Phase 112: emit OCG objects upfront so page Properties references
-        // them by ID.
+        // Emit OCG objects upfront so page Properties references them by ID.
         /** @var \SplObjectStorage<PdfLayer, int> */
         $layerObjectIds = new \SplObjectStorage;
         foreach ($this->layers as $layer) {
@@ -800,8 +792,8 @@ final class Document
             }
         }
 
-        // Embedded PdfFonts — Pdf font dispatches self-registration.
-        // PdfFont сам идемпотентен (double registerWith returns same id).
+        // Embedded PdfFonts — each PdfFont dispatches its own registration
+        // and is idempotent (double registerWith returns the same id).
         // Map PdfFont instance → object ID.
         /** @var \SplObjectStorage<PdfFont, int> */
         $embeddedFontObjectIds = new \SplObjectStorage;
@@ -813,8 +805,8 @@ final class Document
             }
         }
 
-        // Images. Phase 29: dedup by content hash (not just instance).
-        // Same file loaded twice → одна XObject запись.
+        // Images. Dedup by content hash (not just instance); the same file
+        // loaded twice produces a single XObject.
         /** @var \SplObjectStorage<\Dskripchenko\PhpPdf\Image\PdfImage, int> */
         $imageObjectIds = new \SplObjectStorage;
         /** @var array<string, int> hash → existing object ID */
@@ -836,9 +828,9 @@ final class Document
             }
         }
 
-        // Phase 107: Form XObjects — shared content streams referenced by
-        // /Do. Identity-dedup per instance (same PdfFormXObject used on
-        // multiple pages → один XObject в output).
+        // Form XObjects — shared content streams referenced by /Do.
+        // Identity-dedup per instance (same PdfFormXObject used on
+        // multiple pages → single XObject in output).
         /** @var \SplObjectStorage<PdfFormXObject, int> */
         $formXObjectIds = new \SplObjectStorage;
         foreach ($this->pages as $page) {
@@ -867,26 +859,26 @@ final class Document
             }
         }
 
-        // 3. Reserve page IDs upfront (needed для internal-link Dest references,
-        //    т.к. annotation объекты могут ссылаться на pages до их emission).
+        // 3. Reserve page IDs upfront (needed for internal-link Dest
+        //    references — annotation objects may reference pages before
+        //    those pages are emitted).
         $pageIds = [];
         foreach ($this->pages as $i => $page) {
             $pageIds[$i] = $writer->reserveObject();
         }
 
-        // Карта Page-instance → object ID (для annotation /Dest references).
+        // Map Page instance → object ID (for annotation /Dest references).
         $pageObjectIdMap = new \SplObjectStorage;
         foreach ($this->pages as $i => $page) {
             $pageObjectIdMap[$page] = $pageIds[$i];
         }
 
-        // Phase 220: balanced Page Tree для документов с many pages.
-        // Threshold 32: < 32 pages = flat tree (current behavior); else
-        // chunked intermediate level. Each page's /Parent points к its
-        // immediate intermediate /Pages node.
+        // Balanced Page Tree for documents with many pages. Threshold 32:
+        // < 32 pages = flat tree; otherwise chunked intermediate level.
+        // Each page's /Parent points to its immediate /Pages node.
         $pageTree = $this->buildPageTree($pageIds, $pagesId, $writer);
 
-        // 4. Создаём Page objects + content streams + annotations.
+        // 4. Build Page objects + content streams + annotations.
         foreach ($this->pages as $i => $page) {
             $contentStreamBody = $page->buildContentStream();
             if ($this->compressStreams && $contentStreamBody !== '') {
@@ -904,7 +896,7 @@ final class Document
                 ));
             }
 
-            // Build Page /Resources dict для использованных fonts/images.
+            // Build Page /Resources dict for the fonts/images used.
             $resourcesFont = '';
             foreach ($page->standardFonts() as $name => $sf) {
                 $resourcesFont .= sprintf(' /%s %d 0 R', $name, $standardFontObjectIds[$sf->value]);
@@ -916,21 +908,21 @@ final class Document
             foreach ($page->images() as $name => $img) {
                 $resourcesXObj .= sprintf(' /%s %d 0 R', $name, $imageObjectIds[$img]);
             }
-            // Phase 107: Form XObjects share /XObject namespace на page.
+            // Form XObjects share /XObject namespace on the page.
             foreach ($page->formXObjects() as $name => $form) {
                 $resourcesXObj .= sprintf(' /%s %d 0 R', $name, $formXObjectIds[$form]);
             }
 
-            // Phase 31: ExtGState objects (opacity и др.). Каждая ExtGState
-            // — separate PDF object, referenced from page /Resources.
+            // ExtGState objects (opacity, etc.). Each ExtGState is a
+            // separate PDF object, referenced from page /Resources.
             $resourcesExtGState = '';
             foreach ($page->extGStates() as $name => $gs) {
                 $gsId = $writer->addObject($gs->toDictBody());
                 $resourcesExtGState .= sprintf(' /%s %d 0 R', $name, $gsId);
             }
 
-            // Phase 82+90: Pattern objects — emit Function (Type 2 либо
-            // Type 3 stitching с sub-functions) + Shading + Pattern.
+            // Pattern objects — emit Function (Type 2 or Type 3 stitching
+            // with sub-functions) + Shading + Pattern.
             $resourcesPattern = '';
             foreach ($page->patterns() as $name => $pattern) {
                 $fn = $pattern->shading->function;
@@ -947,8 +939,8 @@ final class Document
                 $patternId = $writer->addObject($pattern->toDictBody($shadingId));
                 $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $patternId);
             }
-            // Phase 111: Tiling Patterns (Type 1) — stream-bearing pattern
-            // objects emitted в same /Pattern resource namespace.
+            // Tiling Patterns (Type 1) — stream-bearing pattern objects
+            // emitted in the same /Pattern resource namespace.
             foreach ($page->tilingPatterns() as $name => $tp) {
                 $body = $tp->contentStream;
                 if ($this->compressStreams && $body !== '') {
@@ -970,7 +962,7 @@ final class Document
                 $resourcesPattern .= sprintf(' /%s %d 0 R', $name, $tpId);
             }
 
-            // Phase 112: /Properties для Optional Content references (`/OC /name BDC`).
+            // /Properties for Optional Content references (`/OC /name BDC`).
             $resourcesProperties = '';
             foreach ($page->layerProperties() as $name => $layer) {
                 if (! isset($layerObjectIds[$layer])) {
@@ -1008,8 +1000,8 @@ final class Document
                     $this->fmt($ann['x2']), $this->fmt($ann['y2']),
                 );
 
-                // Phase 151: reserve /StructParent number for tagged links —
-                // counter starts after page indices. Annotation dict includes
+                // Reserve /StructParent number for tagged links — counter
+                // starts after page indices. The annotation dict includes
                 // /StructParent N; ParentTree maps N → struct elem ID.
                 $structParentPart = '';
                 $structParentKey = -1;
@@ -1057,9 +1049,9 @@ final class Document
                 $linkAnnotId = $writer->addObject($body);
                 $annotIds[] = $linkAnnotId;
 
-                // Phase 72/151: tagged PDF — register /Link struct element
-                // referencing this annotation через /OBJR; reserve ParentTree
-                // entry under reserved StructParent key.
+                // Tagged PDF — register /Link struct element referencing
+                // this annotation via /OBJR; reserve a ParentTree entry
+                // under the reserved StructParent key.
                 if ($this->tagged) {
                     $structIdx = count($this->structElements);
                     $this->structElements[] = [
@@ -1071,12 +1063,12 @@ final class Document
                     $this->structParentLinkKeys[$structIdx] = $structParentKey;
                 }
             }
-            // Phase 109: markup annotations (Text/Highlight/Underline/StrikeOut/FreeText).
+            // Markup annotations (Text/Highlight/Underline/StrikeOut/FreeText).
             foreach ($page->markupAnnotations() as $ann) {
                 $annotIds[] = $writer->addObject($this->buildMarkupAnnotation($ann));
             }
-            // Phase 43+46+67: AcroForm widgets — emit widget annotations +
-            // optional /AA JavaScript actions + collect field object IDs.
+            // AcroForm widgets — emit widget annotations + optional /AA
+            // JavaScript actions + collect field object IDs.
             foreach ($page->formFields() as $field) {
                 $tooltipPart = $field['tooltip'] !== null
                     ? ' /TU '.$this->pdfString($field['tooltip'])
@@ -1095,7 +1087,7 @@ final class Document
                     continue;
                 }
 
-                // Phase 67: emit JavaScript action objects + /AA dict ref.
+                // Emit JavaScript action objects + /AA dict ref.
                 $aaPart = $this->emitFieldActions($writer, $field);
 
                 $body = $this->buildSimpleFieldObject($writer, $field, $pageIds[$i], $namePart, $tooltipPart, $aaPart);
@@ -1103,7 +1095,7 @@ final class Document
                 $annotIds[] = $fieldId;
                 $this->collectedFormFieldIds[] = $fieldId;
 
-                // Phase 97: track fields с calculate scripts.
+                // Track fields with calculate scripts.
                 if (! empty($field['calculateScript'])) {
                     $this->calculatedFieldIds[] = $fieldId;
                 }
@@ -1112,7 +1104,7 @@ final class Document
                 ? ''
                 : ' /Annots ['.implode(' ', array_map(fn ($id) => "$id 0 R", $annotIds)).']';
 
-            // Phase 85: page transitions + auto-advance.
+            // Page transitions + auto-advance.
             $transRef = '';
             $trans = $page->transition();
             if ($trans !== null) {
@@ -1134,11 +1126,11 @@ final class Document
                 $durRef = ' /Dur '.$this->fmt($dur);
             }
 
-            // Phase 92: /StructParents key linking page к /ParentTree entry.
+            // /StructParents key linking page to /ParentTree entry.
             $structParentsRef = $this->tagged ? " /StructParents $i" : '';
-            // Phase 94: page rotation /Rotate.
+            // Page rotation /Rotate.
             $rotateRef = $page->rotation() !== 0 ? ' /Rotate '.$page->rotation() : '';
-            // Phase 110: optional page boxes (/CropBox /BleedBox /TrimBox /ArtBox).
+            // Optional page boxes (/CropBox /BleedBox /TrimBox /ArtBox).
             $boxRef = '';
             foreach ([
                 'CropBox' => $page->cropBox(),
@@ -1156,7 +1148,7 @@ final class Document
                 }
             }
 
-            // Phase 115: Page-level /AA Additional Actions (open/close JavaScript).
+            // Page-level /AA Additional Actions (open/close JavaScript).
             $aaRef = '';
             $openScript = $page->openActionScript();
             $closeScript = $page->closeActionScript();
@@ -1173,9 +1165,9 @@ final class Document
                 $aaRef = ' /AA << ' . implode(' ', $aaParts) . ' >>';
             }
 
-            // Phase 220: /Parent points к immediate parent (root или intermediate).
+            // /Parent points to the immediate parent (root or intermediate).
             $parentId = $pageTree['parentOf'][$i];
-            // Phase 226: optional /Tabs entry для form field tab navigation.
+            // Optional /Tabs entry for form field tab navigation.
             $tabsRef = $page->tabOrder() !== null ? ' /Tabs /'.$page->tabOrder() : '';
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
@@ -1196,7 +1188,7 @@ final class Document
             ));
         }
 
-        // Phase 220: emit intermediate /Pages nodes (если balanced tree).
+        // Emit intermediate /Pages nodes (only when using a balanced tree).
         foreach ($pageTree['intermediates'] as $node) {
             $kidsList = implode(' ', array_map(fn ($id) => "$id 0 R", $node['kids']));
             $writer->setObject($node['id'], sprintf(
@@ -1205,9 +1197,9 @@ final class Document
             ));
         }
 
-        // Named destinations — emit /Names tree если есть.
+        // Named destinations — emit /Names tree if any are registered.
         $namesRef = '';
-        $namesEntries = []; // parts собираемые для root /Names dict.
+        $namesEntries = []; // parts collected for root /Names dict.
         if ($this->namedDestinations !== []) {
             $entries = [];
             $names = array_keys($this->namedDestinations);
@@ -1227,10 +1219,10 @@ final class Document
             $namesEntries[] = "/Dests $destsId 0 R";
         }
 
-        // Phase 49: Embedded files (attachments) — /EmbeddedFiles в Names tree.
+        // Embedded files (attachments) — /EmbeddedFiles in Names tree.
         if ($this->embeddedFiles !== []) {
             $efEntries = [];
-            // Sort by name для deterministic output.
+            // Sort by name for deterministic output.
             $sortedFiles = $this->embeddedFiles;
             usort($sortedFiles, fn ($a, $b) => strcmp($a['name'], $b['name']));
             foreach ($sortedFiles as $file) {
@@ -1270,25 +1262,25 @@ final class Document
             $namesRef = ' /Names '.$namesId.' 0 R';
         }
 
-        // Outline tree — bookmarks panel viewer.
+        // Outline tree — bookmarks panel.
         $outlinesRef = '';
         if ($this->outlineEntries !== []) {
             $outlinesId = $this->emitOutlineTree($writer, $pageObjectIdMap);
             $outlinesRef = ' /Outlines '.$outlinesId.' 0 R /PageMode /UseOutlines';
         }
 
-        // 5. Pages tree (after все pages созданы — знаем все IDs).
-        // Phase 220: root /Kids — либо list of pages (flat), либо list of
-        // intermediate /Pages nodes (balanced).
+        // 5. Pages tree (after all pages emitted — all IDs are known).
+        // Root /Kids — either list of pages (flat) or list of intermediate
+        // /Pages nodes (balanced).
         $rootKidsRefs = implode(' ', array_map(fn ($id) => "$id 0 R", $pageTree['rootKids']));
         $writer->setObject($pagesId, sprintf(
             '<< /Type /Pages /Kids [%s] /Count %d >>',
             $rootKidsRefs, count($pageIds),
         ));
 
-        // Phase 43+97+99: AcroForm reference в Catalog.
-        // /CO — calc field order (Phase 97).
-        // /DA + /DR — default appearance string + font resources (Phase 99).
+        // AcroForm reference in Catalog.
+        // /CO — calc field order.
+        // /DA + /DR — default appearance string + font resources.
         $acroFormRef = '';
         if ($this->collectedFormFieldIds !== []) {
             $fieldsArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->collectedFormFieldIds));
@@ -1297,13 +1289,13 @@ final class Document
                 $coArray = implode(' ', array_map(fn ($id) => "$id 0 R", $this->calculatedFieldIds));
                 $coRef = " /CO [$coArray]";
             }
-            // Phase 99: default appearance — Helvetica 11pt black.
-            // Phase 123: reuse appearance font ID if already emitted by
-            // appearance-stream builders to avoid duplicate Helvetica objects.
+            // Default appearance — Helvetica 11pt black. Reuses the
+            // appearance font ID if already emitted by appearance-stream
+            // builders to avoid duplicate Helvetica objects.
             $defaultFontId = $this->ensureAppearanceFont($writer);
             $daPart = ' /DA (/Helv 11 Tf 0 g)';
             $drPart = sprintf(' /DR << /Font << /Helv %d 0 R >> >>', $defaultFontId);
-            // Phase 108: /SigFlags 3 (SignaturesExist | AppendOnly) when signing.
+            // /SigFlags 3 (SignaturesExist | AppendOnly) when signing.
             $sigFlagsPart = ($this->signatureConfig !== null && $this->signatureFieldLinked)
                 ? ' /SigFlags 3'
                 : '';
@@ -1314,8 +1306,8 @@ final class Document
             $acroFormRef = " /AcroForm $acroFormId 0 R";
         }
 
-        // Phase 108: emit signature dictionary body + hook writer для post-emit
-        // patching. Validates at least one signature widget received /V.
+        // Emit signature dictionary body + hook writer for post-emit
+        // patching. Validates that at least one signature widget received /V.
         if ($this->signatureConfig !== null) {
             if (! $this->signatureFieldLinked) {
                 throw new \LogicException(
@@ -1328,13 +1320,12 @@ final class Document
             $writer->setSignature($cfg, $this->signatureDictId);
         }
 
-        // Phase 48: Tagged PDF — StructTreeRoot + StructElem children +
-        // MarkInfo dict.
+        // Tagged PDF — StructTreeRoot + StructElem children + MarkInfo dict.
         $taggedRef = '';
         if ($this->tagged && $this->structElements !== []) {
             $structRootId = $writer->reserveObject();
             $childIds = [];
-            // Phase 92: track struct element IDs per page для /ParentTree.
+            // Track struct element IDs per page for /ParentTree.
             $structElemsPerPage = [];
             foreach ($this->structElements as $elem) {
                 $pageId = $pageObjectIdMap[$elem['page']] ?? null;
@@ -1369,16 +1360,16 @@ final class Document
             }
             $kidsArray = '['.implode(' ', array_map(fn ($id) => "$id 0 R", $childIds)).']';
 
-            // Phase 92: emit /ParentTree (number tree) — per-page arrays
-            // listing struct elements rendered на каждой page.
+            // Emit /ParentTree (number tree) — per-page arrays listing
+            // struct elements rendered on each page.
             ksort($structElemsPerPage);
             $parentTreeNums = [];
             foreach ($structElemsPerPage as $pageIdx => $elemIds) {
                 $refs = implode(' ', array_map(fn ($id) => "$id 0 R", $elemIds));
                 $parentTreeNums[] = "$pageIdx [$refs]";
             }
-            // Phase 151: per-Link /StructParent entries — map key к single
-            // struct elem reference (NOT an array; OBJR convention).
+            // Per-Link /StructParent entries — map key to single struct
+            // elem reference (NOT an array; OBJR convention).
             $maxParentKey = count($this->pages);
             foreach ($this->structParentLinkKeys as $structIdx => $key) {
                 $elemId = $childIds[$structIdx] ?? null;
@@ -1393,7 +1384,7 @@ final class Document
                 '<< /Nums ['.implode(' ', $parentTreeNums).'] >>',
             );
 
-            // Phase 93: optional /RoleMap dict.
+            // Optional /RoleMap dict.
             $roleMapRef = '';
             if ($this->structRoleMap !== []) {
                 $entries = [];
@@ -1417,17 +1408,17 @@ final class Document
             );
         }
 
-        // Phase 47: PDF/A-1b — Metadata stream + OutputIntent + /Lang.
+        // PDF/A — Metadata stream + OutputIntent + /Lang.
         $pdfARef = '';
         if ($this->pdfA !== null) {
             $xmp = $this->pdfA->xmpMetadata();
-            // Metadata stream — НЕ filtered, НЕ encrypted.
+            // Metadata stream — not filtered, not encrypted.
             $metadataId = $writer->addObject(sprintf(
                 "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
                 strlen($xmp),
                 $xmp,
             ));
-            // ICC profile embedded — Flate-compressed stream с /N 3 (RGB).
+            // Embedded ICC profile — Flate-compressed stream with /N 3 (RGB).
             $iccBytes = $this->pdfA->iccProfileBytes();
             $iccCompressed = (string) gzcompress($iccBytes, 6);
             $iccId = $writer->addObject(sprintf(
@@ -1453,7 +1444,7 @@ final class Document
             );
         }
 
-        // Phase 225: PDF/X — Metadata stream + OutputIntent с /S /GTS_PDFX.
+        // PDF/X — Metadata stream + OutputIntent with /S /GTS_PDFX.
         if ($this->pdfX !== null) {
             $xmp = $this->pdfX->xmpMetadata();
             $metadataId = $writer->addObject(sprintf(
@@ -1487,7 +1478,7 @@ final class Document
         }
 
         // 6. Catalog.
-        // Phase 84: optional /OpenAction, /PageMode, /PageLayout.
+        // Optional /OpenAction, /PageMode, /PageLayout.
         $openActionRef = '';
         if ($this->openAction !== null) {
             $pIdx = max(0, $this->openAction['page'] - 1);
@@ -1530,7 +1521,7 @@ final class Document
             };
         }
 
-        // Phase 87: /PageLabels number tree.
+        // /PageLabels number tree.
         $pageLabelsRef = '';
         if ($this->pageLabelRanges !== []) {
             $styleMap = [
@@ -1558,7 +1549,7 @@ final class Document
             $pageLabelsRef = ' /PageLabels << /Nums ['.implode(' ', $numsEntries).'] >>';
         }
 
-        // Phase 88: /ViewerPreferences dict.
+        // /ViewerPreferences dict.
         $viewerPrefsRef = '';
         if ($this->viewerPreferences !== []) {
             $entries = [];
@@ -1586,7 +1577,7 @@ final class Document
             }
         }
 
-        // Phase 89: /Lang entry в Catalog (PDF/UA requirement).
+        // /Lang entry in Catalog (PDF/UA requirement).
         $langRef = '';
         if ($this->lang !== null && $this->lang !== '') {
             // Avoid double-emission if PDF/A mode already injects /Lang.
@@ -1595,7 +1586,7 @@ final class Document
             }
         }
 
-        // Phase 119: Document-level /AA additional actions (Will*/Did*).
+        // Document-level /AA additional actions (Will*/Did*).
         $documentAARef = '';
         if ($this->documentActions !== []) {
             $aaParts = [];
@@ -1608,7 +1599,7 @@ final class Document
             $documentAARef = ' /AA << ' . implode(' ', $aaParts) . ' >>';
         }
 
-        // Phase 112: /OCProperties для Optional Content Groups (layers).
+        // /OCProperties for Optional Content Groups (layers).
         $ocPropertiesRef = '';
         if ($this->layers !== []) {
             $ocgArray = [];
@@ -1640,9 +1631,8 @@ final class Document
 
         $writer->setRoot($catalogId);
 
-        // Phase 20+213: /Info dictionary всегда emitted с default Producer +
-        // CreationDate (PDF reader convention — most readers expect Info dict
-        // в Properties dialog).
+        // /Info dictionary is always emitted with default Producer +
+        // CreationDate (most readers expect Info dict in Properties dialog).
         $meta = $this->metadata + [
             'Producer' => 'dskripchenko/php-pdf',
             'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
@@ -1651,10 +1641,10 @@ final class Document
         foreach ($meta as $key => $value) {
             $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
         }
-        // Phase 225: PDF/X requires /Trapped key в /Info.
+        // PDF/X requires /Trapped key in /Info.
         if ($this->pdfX !== null) {
             $entries[] = '/Trapped /'.$this->pdfX->trapped;
-            // Title from PdfXConfig если не set в metadata.
+            // Title from PdfXConfig if not set in metadata.
             if (! isset($this->metadata['Title']) && $this->pdfX->title !== '') {
                 $entries[] = '/Title '.$this->pdfString($this->pdfX->title);
             }
@@ -1665,14 +1655,14 @@ final class Document
         $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
         $writer->setInfo($infoId);
 
-        // Phase 41-42: emit /Encrypt object и hook encryption в writer.
+        // Emit /Encrypt object and hook encryption into the writer.
         if ($this->encryption !== null) {
             $enc = $this->encryption;
             $oHex = bin2hex($enc->oValue);
             $uHex = bin2hex($enc->uValue);
             if ($enc->algorithm === EncryptionAlgorithm::Aes_256
                 || $enc->algorithm === EncryptionAlgorithm::Aes_256_R6) {
-                // V5 R5 (Adobe Supplement) или V5 R6 (PDF 2.0) + Crypt Filter AESV3.
+                // V5 R5 (Adobe Supplement) or V5 R6 (PDF 2.0) + AESV3 Crypt Filter.
                 $revision = $enc->algorithm === EncryptionAlgorithm::Aes_256_R6 ? 6 : 5;
                 $oeHex = bin2hex($enc->oeValue);
                 $ueHex = bin2hex($enc->ueValue);
@@ -1685,7 +1675,7 @@ final class Document
                     $revision, $oHex, $uHex, $oeHex, $ueHex, $permsHex, $enc->permissions,
                 );
             } elseif ($enc->algorithm === EncryptionAlgorithm::Aes_128) {
-                // V4 R4 + Crypt Filter AESV2.
+                // V4 R4 + AESV2 Crypt Filter.
                 $encryptBody = sprintf(
                     '<< /Filter /Standard /V 4 /R 4 /Length 128 '
                     .'/CF << /StdCF << /CFM /AESV2 /Length 16 /AuthEvent /DocOpen >> >> '
@@ -1711,10 +1701,9 @@ final class Document
     }
 
     /**
-     * Сериализует в файл. Возвращает количество записанных байт.
-     *
-     * Phase 129: использует streaming Writer::toStream для избежания
-     * full-document копии в string memory.
+     * Serialize the document to a file. Returns the number of bytes written.
+     * Uses streaming Writer::toStream to avoid a full-document copy in
+     * string memory.
      */
     public function toFile(string $path): int
     {
@@ -1730,14 +1719,15 @@ final class Document
     }
 
     /**
-     * Phase 129: Streaming PDF output к external stream resource.
+     * Streaming PDF output to an external stream resource.
      *
-     * Use case: large PDFs (тысячи страниц), HTTP response без full
-     * document in memory, file output без double buffering.
+     * Use cases: large PDFs (thousands of pages), HTTP responses without
+     * holding the full document in memory, file output without double
+     * buffering.
      *
-     * Currently emits final-document к stream (objects accumulated в
-     * memory as before, но final assembly streamed). Полный per-object
-     * streaming требует deeper API rewrite — отложен.
+     * Currently emits the final document to the stream — objects are still
+     * accumulated in memory but the final assembly is streamed. Full
+     * per-object streaming requires a deeper API rewrite.
      *
      * @param  resource  $stream
      * @return int  bytes written
@@ -1750,11 +1740,11 @@ final class Document
     }
 
     /**
-     * Эмитит outline tree (bookmarks panel). Берёт flat $outlineEntries
-     * и строит nested структуру по level'у через stack:
-     *  - Level 1 → child of Outlines root
-     *  - Level N+1 → child of last level-N entry
-     *  - Skip-levels (1→3) treated as 1→2 (no virtual filler)
+     * Emit the outline tree (bookmarks panel). Takes the flat
+     * $outlineEntries and builds a nested structure by level via a stack:
+     *  - Level 1 → child of Outlines root.
+     *  - Level N+1 → child of last level-N entry.
+     *  - Skip-levels (1→3) treated as 1→2 (no virtual filler).
      *
      * @param  \SplObjectStorage<Page, int>  $pageObjectIdMap
      */
@@ -1762,15 +1752,15 @@ final class Document
     {
         $count = count($this->outlineEntries);
 
-        // Phase 1: reserve IDs.
+        // Step 1: reserve IDs.
         $entryIds = [];
         for ($i = 0; $i < $count; $i++) {
             $entryIds[$i] = $writer->reserveObject();
         }
         $outlinesId = $writer->reserveObject();
 
-        // Phase 2: compute hierarchy.
-        // parents[i] = index of parent entry, or null если top-level.
+        // Step 2: compute hierarchy.
+        // parents[i] = index of parent entry, or null for top-level.
         // children[parentIdx] = list<childIdx>.
         $parents = [];
         $children = [];
@@ -1793,7 +1783,7 @@ final class Document
         }
         $topLevel = $children[-1] ?? [];
 
-        // Phase 3: emit each entry.
+        // Step 3: emit each entry.
         foreach ($this->outlineEntries as $i => $entry) {
             $parentIdx = $parents[$i];
             $parentRef = $parentIdx === null
@@ -1838,7 +1828,7 @@ final class Document
                 $parts[] = '/Last '.$lastChildRef;
                 $parts[] = '/Count '.$countDesc;
             }
-            // Phase 100: optional /C (color RGB) + /F (style flags).
+            // Optional /C (color RGB) + /F (style flags).
             if (! empty($entry['color'])) {
                 [$r, $g, $b] = $this->hexToRgb01((string) $entry['color']);
                 $parts[] = sprintf('/C [%s %s %s]',
@@ -1857,7 +1847,7 @@ final class Document
             $writer->setObject($entryIds[$i], '<< '.implode(' ', $parts).' >>');
         }
 
-        // Phase 4: emit Outlines root.
+        // Step 4: emit Outlines root.
         $topCount = count($topLevel);
         $totalDesc = 0;
         foreach ($topLevel as $idx) {
@@ -1875,7 +1865,7 @@ final class Document
     }
 
     /**
-     * Recursive count of descendants для /Count field outline entry.
+     * Recursive count of descendants for the outline entry /Count field.
      *
      * @param  array<int, list<int>>  $children
      */
@@ -1891,8 +1881,8 @@ final class Document
     }
 
     /**
-     * Phase 67: emit JavaScript action objects + return /AA dict string.
-     * Returns empty string если no actions defined.
+     * Emit JavaScript action objects and return the /AA dict string.
+     * Returns an empty string if no actions are defined.
      *
      * @param  array<string, mixed>  $field
      */
@@ -1925,7 +1915,7 @@ final class Document
     }
 
     /**
-     * Phase 43+46: build single-widget AcroForm field object body.
+     * Build the object body for a single-widget AcroForm field.
      *
      * @param  array<string, mixed>  $field
      */
@@ -1961,7 +1951,7 @@ final class Document
                 ? ' /V '.$this->pdfString($field['defaultValue'])
                     .' /DV '.$this->pdfString($field['defaultValue'])
                 : '';
-            // Phase 123: appearance stream rendering the field value.
+            // Appearance stream rendering the field value.
             $apId = $this->buildTextFieldAppearance(
                 $writer,
                 (float) $field['w'], (float) $field['h'],
@@ -1981,7 +1971,7 @@ final class Document
                 || strcasecmp($field['defaultValue'], 'yes') === 0
                 || $field['defaultValue'] === '1';
             $vPart = $isChecked ? ' /V /Yes /DV /Yes' : ' /V /Off /DV /Off';
-            // Phase 123: AP dict with both states (Yes + Off).
+            // AP dict with both states (Yes + Off).
             $yesId = $this->buildCheckboxAppearance($writer, (float) $field['w'], (float) $field['h'], checked: true);
             $offId = $this->buildCheckboxAppearance($writer, (float) $field['w'], (float) $field['h'], checked: false);
             $apRef = sprintf(' /AP << /N << /Yes %d 0 R /Off %d 0 R >> >>', $yesId, $offId);
@@ -1995,15 +1985,15 @@ final class Document
             );
         }
         if ($type === 'signature') {
-            // Phase 108: signature widget references signature dictionary
-            // через /V; only first signature widget receives /V (subsequent
+            // Signature widget references signature dictionary via /V;
+            // only the first signature widget receives /V (subsequent
             // widgets remain unsigned placeholders).
             $vPart = '';
             if ($this->signatureDictId !== null && ! $this->signatureFieldLinked) {
                 $vPart = sprintf(' /V %d 0 R', $this->signatureDictId);
                 $this->signatureFieldLinked = true;
             }
-            // Phase 123: minimal appearance (blank box with optional caption).
+            // Minimal appearance (blank box with optional caption).
             $apId = $this->buildSignatureAppearance($writer, (float) $field['w'], (float) $field['h']);
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
@@ -2014,7 +2004,7 @@ final class Document
             );
         }
         if ($type === 'submit' || $type === 'reset' || $type === 'push') {
-            // Phase 83: button с pushbutton flag (bit 17 = 65536).
+            // Button with pushbutton flag (bit 17 = 65536).
             $flags |= 65536;
             $caption = $field['buttonCaption'] ?? ucfirst($type);
             $mkPart = ' /MK << /CA '.$this->pdfString($caption).' >>';
@@ -2034,7 +2024,7 @@ final class Document
                     $this->pdfString($field['clickScript']),
                 );
             }
-            // Phase 123: appearance — bordered rectangle с caption.
+            // Appearance — bordered rectangle with caption.
             $apId = $this->buildButtonAppearance(
                 $writer, (float) $field['w'], (float) $field['h'], (string) $caption,
             );
@@ -2053,7 +2043,7 @@ final class Document
                 ? ' /V '.$this->pdfString($field['defaultValue'])
                     .' /DV '.$this->pdfString($field['defaultValue'])
                 : '';
-            // Phase 123: appearance shows the selected value (single line).
+            // Appearance shows the selected value (single line).
             $apId = $this->buildTextFieldAppearance(
                 $writer, (float) $field['w'], (float) $field['h'],
                 (string) $field['defaultValue'], multiline: false,
@@ -2070,14 +2060,14 @@ final class Document
     }
 
     /**
-     * Phase 46: emit radio-group parent + N child Widget annotations.
+     * Emit radio-group parent + N child Widget annotations.
      *
      * @param  array<string, mixed>  $field
      * @return array{0: int, 1: list<int>}  [parentObjId, childObjIds]
      */
     private function emitRadioGroupFields(Writer $writer, int $pageId, array $field, string $namePart, string $tooltipPart): array
     {
-        // Reserve parent ID upfront — children reference его через /Parent.
+        // Reserve parent ID upfront — children reference it via /Parent.
         $parentId = $writer->reserveObject();
 
         // Flags: Radio bit 16 (val 32768) + NoToggleToOff bit 15 (val 16384).
@@ -2099,10 +2089,10 @@ final class Document
                 $this->fmt($widget['x'] + $widget['w']),
                 $this->fmt($widget['y'] + $widget['h']),
             );
-            // Child widget — pure annotation, /T inherited от parent.
-            // /AS = export value (escaped как name); /Off если не selected.
+            // Child widget — pure annotation, /T inherited from parent.
+            // /AS = export value (escaped as a name); /Off if not selected.
             $exportName = '/'.preg_replace('@[^A-Za-z0-9_-]@', '_', $optionLabel);
-            // Phase 123: appearance — selected (filled circle) + Off (empty).
+            // Appearance — selected (filled circle) + Off (empty).
             $onId = $this->buildRadioAppearance($writer, (float) $widget['w'], (float) $widget['h'], selected: true);
             $offId = $this->buildRadioAppearance($writer, (float) $widget['w'], (float) $widget['h'], selected: false);
             $exportKey = ltrim($exportName, '/');
@@ -2130,7 +2120,7 @@ final class Document
     }
 
     /**
-     * Phase 100: parse hex #rrggbb / #rgb → list<float> в [0..1].
+     * Parse hex #rrggbb / #rgb → list<float> in [0..1].
      *
      * @return array{0: float, 1: float, 2: float}
      */
@@ -2152,8 +2142,8 @@ final class Document
     }
 
     /**
-     * Phase 49: PDF name objects only allow specific chars. Mime types
-     * с '/' нужно конвертировать в hash-escaped form (#2F).
+     * PDF name objects only allow specific chars. Mime types containing
+     * '/' must be converted into hash-escaped form (#2F).
      */
     private function sanitizeMimeName(string $mime): string
     {
@@ -2171,8 +2161,8 @@ final class Document
     }
 
     /**
-     * Escape string for PDF literal: wrap в `()`, escape `(`, `)`, `\`.
-     * Используется для URI и name values в Names tree.
+     * Escape a string for a PDF literal: wrap in `()`, escape `(`, `)`, `\`.
+     * Used for URIs and name values in the Names tree.
      */
     private function pdfString(string $s): string
     {
@@ -2180,7 +2170,7 @@ final class Document
     }
 
     /**
-     * Phase 123: lazy-init Helvetica font object для appearance streams.
+     * Lazy-init Helvetica font object for appearance streams.
      */
     private function ensureAppearanceFont(Writer $writer): int
     {
@@ -2195,7 +2185,7 @@ final class Document
     }
 
     /**
-     * Phase 123: lazy-init ZapfDingbats font для checkbox/radio glyphs.
+     * Lazy-init ZapfDingbats font for checkbox/radio glyphs.
      */
     private function ensureAppearanceZapfFont(Writer $writer): int
     {
@@ -2209,7 +2199,7 @@ final class Document
     }
 
     /**
-     * Phase 123: emit a Form XObject as appearance stream.
+     * Emit a Form XObject as an appearance stream.
      */
     private function emitAppearanceStream(Writer $writer, float $w, float $h, string $content, string $resources): int
     {
@@ -2231,7 +2221,7 @@ final class Document
     }
 
     /**
-     * Phase 123: build text field appearance Form XObject.
+     * Build the text-field appearance Form XObject.
      */
     private function buildTextFieldAppearance(Writer $writer, float $w, float $h, string $text, bool $multiline): int
     {
@@ -2239,7 +2229,7 @@ final class Document
         $resources = sprintf('<< /Font << /Helv %d 0 R >> >>', $fontId);
 
         $fontSize = 11.0;
-        // Vertical center for single-line; top-aligned для multiline.
+        // Vertical center for single-line; top-aligned for multiline.
         $padding = 2.0;
         $textY = $multiline
             ? ($h - $fontSize - $padding)
@@ -2251,7 +2241,7 @@ final class Document
                 $this->fmt($padding), $this->fmt($textY),
                 $this->pdfString($text),
             );
-        // q .. Q wrap + clip к bbox.
+        // q .. Q wrap + clip to bbox.
         $content = sprintf(
             "q\n0 0 %s %s re W n\n%sQ\n",
             $this->fmt($w), $this->fmt($h), $textPdf,
@@ -2261,8 +2251,8 @@ final class Document
     }
 
     /**
-     * Phase 123: build checkbox appearance Form XObject — uses ZapfDingbats
-     * check mark glyph для checked state.
+     * Build the checkbox appearance Form XObject — uses the ZapfDingbats
+     * check-mark glyph for the checked state.
      */
     private function buildCheckboxAppearance(Writer $writer, float $w, float $h, bool $checked): int
     {
@@ -2292,15 +2282,15 @@ final class Document
     }
 
     /**
-     * Phase 123: build push/submit/reset button appearance — bordered grey
-     * box с centered caption.
+     * Build push/submit/reset button appearance — bordered grey box with
+     * a centered caption.
      */
     private function buildButtonAppearance(Writer $writer, float $w, float $h, string $caption): int
     {
         $fontId = $this->ensureAppearanceFont($writer);
         $resources = sprintf('<< /Font << /Helv %d 0 R >> >>', $fontId);
         $fontSize = 11.0;
-        // Approximate caption width — Helvetica avg ~5pt per char @ 11pt.
+        // Approximate caption width — Helvetica avg. ~5pt per char @ 11pt.
         $captionWidth = strlen($caption) * $fontSize * 0.5;
         $tx = max(2.0, ($w - $captionWidth) / 2.0);
         $ty = ($h - $fontSize) / 2.0 + 1.0;
@@ -2317,7 +2307,7 @@ final class Document
     }
 
     /**
-     * Phase 123: build signature widget appearance — empty bordered box.
+     * Build signature widget appearance — empty bordered box.
      */
     private function buildSignatureAppearance(Writer $writer, float $w, float $h): int
     {
@@ -2330,7 +2320,7 @@ final class Document
     }
 
     /**
-     * Phase 123: build radio button appearance (selected = filled circle,
+     * Build radio-button appearance (selected = filled circle,
      * unselected = empty circle).
      */
     private function buildRadioAppearance(Writer $writer, float $w, float $h, bool $selected): int
@@ -2400,8 +2390,9 @@ final class Document
     }
 
     /**
-     * Phase 109: build markup annotation body (Text/Highlight/Underline/
-     * StrikeOut/FreeText).
+     * Build markup annotation body
+     * (Text/Highlight/Underline/StrikeOut/FreeText/Square/Circle/Line/
+     * Stamp/Ink/Polygon/PolyLine).
      *
      * @param  array<string, mixed>  $ann
      */
@@ -2440,9 +2431,10 @@ final class Document
                     'underline' => 'Underline',
                     'strikeout' => 'StrikeOut',
                 };
-                // QuadPoints — 8 numbers per quad: (x1 y1) bot-left, (x2 y2) bot-right,
-                // (x3 y3) top-left, (x4 y4) top-right (PDF spec §12.5.6.10 ordering varies
-                // by vendor; this matches Acrobat default).
+                // QuadPoints — 8 numbers per quad: (x1 y1) bot-left,
+                // (x2 y2) bot-right, (x3 y3) top-left, (x4 y4) top-right
+                // (PDF spec §12.5.6.10 ordering varies by vendor; this
+                // matches the Acrobat default).
                 $qp = sprintf(
                     '[%s %s %s %s %s %s %s %s]',
                     $this->fmt((float) $ann['x1']), $this->fmt((float) $ann['y2']),
@@ -2457,7 +2449,7 @@ final class Document
                 );
             case 'freetext':
                 $fontSize = (float) ($ann['fontSize'] ?? 11.0);
-                // /DA — default appearance string. Color: use /C если задан, else black.
+                // /DA — default appearance string. Color: use /C if set, else black.
                 $daColor = '0 g';
                 if (! empty($ann['color'])) {
                     $color = $ann['color'];
@@ -2547,9 +2539,9 @@ final class Document
     }
 
     /**
-     * Phase 108: build PKCS#7 signature dictionary body с placeholders
-     * для /ByteRange (4×10-digit zero fields, padded с spaces) и /Contents
-     * (16384 hex zeros = room для 8KB DER PKCS#7 envelope).
+     * Build the PKCS#7 signature dictionary body with placeholders for
+     * /ByteRange (4 × 10-digit zero fields, padded with spaces) and
+     * /Contents (16384 hex zeros — room for an ~8KB DER PKCS#7 envelope).
      */
     private function buildSignatureDictBody(SignatureConfig $cfg): string
     {
@@ -2568,10 +2560,10 @@ final class Document
         }
         $signedAt = ' /M ' . $this->pdfString($cfg->pdfSignedAt());
 
-        // ByteRange: 4 entries padded к 10 digits each + единичный pad
-        // space, чтобы post-emit substr_replace fit обновлённые values.
+        // ByteRange: 4 entries padded to 10 digits each plus one extra pad
+        // space, so a post-emit substr_replace can fit the updated values.
         $byteRange = '/ByteRange [0          0          0          0         ]';
-        // Contents: 16384 hex zeros (room для ~8KB PKCS#7 DER blob).
+        // Contents: 16384 hex zeros (room for ~8KB PKCS#7 DER blob).
         $contents = '/Contents <' . str_repeat('0', 16384) . '>';
 
         return sprintf(
@@ -2583,8 +2575,8 @@ final class Document
 
     /**
      * For /Dest references — use bytestring form `(name)` consistently
-     * с Names tree (matches ISO 32000-1 §12.3.2.3 — destinations referenced
-     * by name resolve через /Names).
+     * with the Names tree (matches ISO 32000-1 §12.3.2.3 — destinations
+     * referenced by name resolve via /Names).
      */
     private function pdfNameString(string $name): string
     {
@@ -2592,8 +2584,8 @@ final class Document
     }
 
     /**
-     * Format float без trailing zeros, без locale-зависимого decimal-
-     * separator'а.
+     * Format a float without trailing zeros and with a locale-independent
+     * decimal separator.
      */
     private function fmt(float $n): string
     {
