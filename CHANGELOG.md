@@ -2,7 +2,7 @@
 
 История phases. Активный backlog: [ROADMAP.md](ROADMAP.md).
 
-## v1.6.0-dev (unreleased) — Phases 214-231
+## v1.6.0-dev (unreleased) — Phases 214-233
 
 Major dev cycle: HTML input + PDF output optimization + layout enhancements
 + barcode coverage + API ergonomics + print conformance.
@@ -24,6 +24,10 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
 - Phase 231: Heading auto-anchor — `<h1 id="...">` becomes named
   destination для internal hyperlinks, plus Heading::autoAnchor() slug
   derivation.
+- Phase 232: text-indent + border CSS (shorthand + per-side с styles
+  solid/double/dashed/dotted/none и full color parsing).
+- Phase 233: `<table><caption>` support — emitted as centered bold
+  paragraph preceding the Table block.
 
 ### Output optimization
 - Phase 214: Object Streams (PDF 1.5+) — pack uncompressed dict objects
@@ -62,7 +66,7 @@ Major dev cycle: HTML input + PDF output optimization + layout enhancements
   VO + `Pdf\Document::enablePdfX()` + Document constructor `pdfX` param.
   Emits /S /GTS_PDFX OutputIntent + /Trapped key + pdfx: XMP markers.
 
-**Tests:** 1683 → 1909 (+226 new tests across 18-phase batch).
+**Tests:** 1683 → 1929 (+246 new tests across 20-phase batch).
 
 ## v1.5.0 — 2026-05-14
 
