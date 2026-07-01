@@ -17,6 +17,9 @@ final class ReaderDocument
     /** @var array<int,mixed> objnum → resolved value */
     private array $cache = [];
 
+    /** @var array<int,array{data:string, offsets:array<int,int>, first:int}> objstm number → parsed header */
+    private array $objStmCache = [];
+
     private function __construct(
         private readonly string $data,
         private readonly XrefTable $xref,
@@ -44,14 +47,62 @@ final class ReaderDocument
         }
 
         $offset = $this->xref->offsetOf($number);
-        if ($offset === null) {
+        if ($offset !== null) {
+            $parsed = (new ObjectParser(new Lexer($this->data, $offset)))->parseIndirectObject();
+            return $this->cache[$number] = $parsed['value'];
+        }
+
+        $loc = $this->xref->compressedOf($number);
+        if ($loc !== null) {
+            return $this->cache[$number] = $this->getCompressedObject($number, $loc[0], $loc[1]);
+        }
+
+        return PdfNull::instance();
+    }
+
+    /**
+     * Resolve an object stored inside an object stream (§7.5.7).
+     *
+     * @param int $streamNumber the containing /ObjStm object
+     * @param int $index        the object's position within that stream
+     */
+    private function getCompressedObject(int $number, int $streamNumber, int $index): mixed
+    {
+        $header = $this->objStmCache[$streamNumber] ?? null;
+        if ($header === null) {
+            $stream = $this->getObject($streamNumber);
+            if (!$stream instanceof PdfStream) {
+                return PdfNull::instance();
+            }
+            $data = $this->streamData($stream);
+            $n = $this->deref($stream->dict->get('N'));
+            $first = $this->deref($stream->dict->get('First'));
+            if (!is_int($n) || !is_int($first)) {
+                return PdfNull::instance();
+            }
+
+            // Header: N pairs of (object-number, relative-offset).
+            $lexer = new Lexer($data, 0);
+            $offsets = [];
+            for ($i = 0; $i < $n; $i++) {
+                $numTok = $lexer->nextToken();
+                $offTok = $lexer->nextToken();
+                if ($numTok->type !== TokenType::Number || $offTok->type !== TokenType::Number) {
+                    break;
+                }
+                $offsets[$i] = (int) $offTok->value;
+            }
+
+            $header = ['data' => $data, 'offsets' => $offsets, 'first' => $first];
+            $this->objStmCache[$streamNumber] = $header;
+        }
+
+        if (!array_key_exists($index, $header['offsets'])) {
             return PdfNull::instance();
         }
 
-        $parser = new ObjectParser(new Lexer($this->data, $offset));
-        $parsed = $parser->parseIndirectObject();
-
-        return $this->cache[$number] = $parsed['value'];
+        $start = $header['first'] + $header['offsets'][$index];
+        return (new ObjectParser(new Lexer($header['data'], $start)))->parseValue();
     }
 
     /**

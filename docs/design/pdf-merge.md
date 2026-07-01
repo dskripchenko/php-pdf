@@ -111,7 +111,7 @@ Even though the goal is both operations, they share the reader and `append` is s
 - [x] **P1 — Lexer + ObjectParser.** Tokenize and parse every object type; unit tests on literal fixtures. — `6ad7bd7`, 14 tests.
 - [x] **P2 — Xref (classic) + trailer + Root + lazy resolver.** Read our own `php-pdf` output; assert `pageCount()`. — 5 tests, reads own output.
 - [x] **P3 — Filters.** FlateDecode (+predictors), LZW, ASCII85/Hex, RunLength; decode round-trip tests. — 8 tests; image filters terminal-passthrough.
-- [ ] **P4 — Xref streams + object streams.** Full support for our own object-stream/xref-stream output.
+- [x] **P4 — Xref streams + object streams.** Full support for our own object-stream/xref-stream output. — 5 tests; hybrid /XRefStm + newest-wins masking.
 - [ ] **P5 — Xref recovery scan.** Rebuild index from `N G obj` on corrupt/missing xref.
 - [ ] **P6 — PageTree flatten.** Inherit Resources/MediaBox/CropBox/Rotate; expose per-page metadata.
 - [ ] **P7 — Decryptor.** RC4 + AESV2/V3 over `Pdf\Encryption`; empty + supplied password.
