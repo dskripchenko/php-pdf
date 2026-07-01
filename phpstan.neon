@@ -1,0 +1,11 @@
+parameters:
+    level: 6
+    paths:
+        - src
+    # Pre-existing findings across the (large) core are frozen in the baseline
+    # below and tracked as debt to burn down. All new or changed code must be
+    # clean at this level — do not add baseline entries for new code.
+    treatPhpDocTypesAsCertain: false
+
+includes:
+    - phpstan-baseline.neon
