@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="120" viewBox="0 0 440 120" fill="none" role="img" aria-label="php-pdf">
+  <style>
+    .wm { font-family: Arial, Helvetica, sans-serif; font-weight: 800; }
+    .lbl { font-family: Arial, Helvetica, sans-serif; font-weight: 700; }
+  </style>
+  <!-- page -->
+  <path d="M30 20 H70 L88 38 V96 Q88 100 84 100 H34 Q30 100 30 96 V24 Q30 20 34 20 Z" fill="#0d1117" stroke="#e6edf3" stroke-width="4"/>
+  <!-- folded corner -->
+  <path d="M70 20 V38 H88 Z" fill="#e6edf3"/>
+  <!-- content lines -->
+  <rect x="40" y="42" width="26" height="5" rx="2.5" fill="#3d444d"/>
+  <rect x="40" y="53" width="38" height="5" rx="2.5" fill="#3d444d"/>
+  <!-- PDF label -->
+  <rect x="38" y="70" width="44" height="20" rx="4" fill="#E03C31"/>
+  <text class="lbl" x="60" y="84.5" font-size="13" fill="#ffffff" text-anchor="middle">PDF</text>
+  <!-- wordmark -->
+  <text class="wm" x="108" y="74" font-size="46" fill="#e6edf3">php-pdf</text>
+</svg>

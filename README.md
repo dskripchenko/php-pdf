@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo-light.svg" alt="php-pdf" width="360">
+  </picture>
+</p>
+
 # dskripchenko/php-pdf
 
 > Pure-PHP, **MIT-licensed** PDF generator. A drop-in alternative for
