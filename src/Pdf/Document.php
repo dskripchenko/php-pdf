@@ -30,6 +30,15 @@ final class Document
     private array $pages = [];
 
     /**
+     * Imported foreign pages registered as Form XObjects (FPDI-style), keyed by
+     * the form instance. Each holds the foreign resource-closure objects (local
+     * id → value tree) and the form's /Resources value tree referencing them.
+     *
+     * @var \SplObjectStorage<PdfFormXObject, array{objects: array<int,mixed>, resources: \Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary}>
+     */
+    private \SplObjectStorage $importedForms;
+
+    /**
      * Named destinations for internal links and bookmarks.
      *
      * @var array<string, array{page: Page, x: float, y: float}>
@@ -533,7 +542,52 @@ final class Document
          * of raw streams.
          */
         public bool $compressStreams = true,
-    ) {}
+    ) {
+        $this->importedForms = new \SplObjectStorage();
+    }
+
+    /**
+     * Register a Form XObject imported from an existing PDF page, together with
+     * its foreign resource closure. Called by the import layer
+     * ({@see \Dskripchenko\PhpPdf\Pdf\Merge\PageImporter}); the objects are
+     * emitted — with references renumbered into this document — when the form
+     * is written. The returned form is used via {@see Page::useFormXObject()}.
+     *
+     * @param array<int,mixed> $localObjects local id → parsed value tree
+     */
+    public function registerImportedForm(
+        PdfFormXObject $form,
+        array $localObjects,
+        \Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary $resources,
+    ): void {
+        $this->importedForms[$form] = ['objects' => $localObjects, 'resources' => $resources];
+    }
+
+    /**
+     * Emit an imported form's foreign resource-closure objects into the writer
+     * (references renumbered) and return its serialized /Resources body.
+     * Non-imported forms get an empty resource dictionary.
+     */
+    private function emitImportedFormResources(PdfFormXObject $form, Writer $writer): string
+    {
+        if (!isset($this->importedForms[$form])) {
+            return '<< >>';
+        }
+        $import = $this->importedForms[$form];
+
+        $map = [];
+        foreach (array_keys($import['objects']) as $localId) {
+            $map[$localId] = $writer->reserveObject();
+        }
+        $serializer = new \Dskripchenko\PhpPdf\Pdf\Reader\PdfValueSerializer(
+            static fn (int $n): int => $map[$n] ?? $n,
+        );
+        foreach ($import['objects'] as $localId => $value) {
+            $writer->setObject($map[$localId], $serializer->encode($value));
+        }
+
+        return $serializer->encode($import['resources']);
+    }
 
     public static function new(
         PaperSize $defaultPaperSize = PaperSize::A4,
@@ -838,19 +892,22 @@ final class Document
                 if (isset($formXObjectIds[$form])) {
                     continue;
                 }
+                $resourcesBody = $this->emitImportedFormResources($form, $writer);
                 $body = $form->contentStream;
                 if ($this->compressStreams && $body !== '') {
                     $compressed = (string) gzcompress($body, 6);
                     $formId = $writer->addObject(sprintf(
-                        "<< %s /Resources << >> /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                        "<< %s /Resources %s /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
                         $form->dictHead(),
+                        $resourcesBody,
                         strlen($compressed),
                         $compressed,
                     ));
                 } else {
                     $formId = $writer->addObject(sprintf(
-                        "<< %s /Resources << >> /Length %d >>\nstream\n%s\nendstream",
+                        "<< %s /Resources %s /Length %d >>\nstream\n%s\nendstream",
                         $form->dictHead(),
+                        $resourcesBody,
                         strlen($body),
                         $body,
                     ));

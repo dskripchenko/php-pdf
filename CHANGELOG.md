@@ -23,6 +23,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`PdfSource::fromFile()` / `fromBytes()`, optional password).
 - `PdfMerger::stamp()` — embed a source page onto output pages as a Form
   XObject with `Placement::fit()/stretch()/at()`; rotation baked via `/Matrix`.
+- `PageImporter::intoDocument()` (FPDI-style) — import an existing PDF page
+  into a freshly generated `Pdf\Document` as a Form XObject, so new php-pdf
+  content can be drawn over/under it. `Document::registerImportedForm()`
+  injects the foreign resource closure into the writer with references
+  renumbered; `PdfValueSerializer` re-emits value trees with a ref map.
 - `PdfMerger` carries page annotations and the document outline (bookmarks)
   by default, remapping internal links and named destinations to the new
   pages (dangling ones dropped, external URI links kept). Opt out with

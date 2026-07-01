@@ -118,6 +118,35 @@ PdfMerger::create()
 
 Form-field widgets (AcroForm) and popup annotations are not carried.
 
+## Importing a page into a generated document (FPDI-style)
+
+`stamp()` combines existing PDFs. To place an imported page inside a document
+you build with php-pdf — drawing your own text, watermarks, or graphics over or
+under it — use `PageImporter::intoDocument()`. The imported page becomes a Form
+XObject you position with `Page::useFormXObject()`:
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Document;
+use Dskripchenko\PhpPdf\Pdf\StandardFont;
+use Dskripchenko\PhpPdf\Pdf\Merge\PageImporter;
+use Dskripchenko\PhpPdf\Pdf\Reader\ReaderDocument;
+
+$src  = ReaderDocument::fromBytes(file_get_contents('contract.pdf'));
+[$w, $h] = PageImporter::pageSize($src, 0);
+
+$doc  = new Document();
+$page = $doc->addPage(customDimensionsPt: [$w, $h]);
+
+$form = PageImporter::intoDocument($doc, $src, pageIndex: 0);
+$page->useFormXObject($form, 0, 0, $w, $h);              // imported page as background
+$page->showText('DRAFT', 200, 400, StandardFont::Helvetica, 48); // your content on top
+
+$doc->toFile('stamped-contract.pdf');
+```
+
+The page's rotation and crop box are handled automatically. The imported page's
+fonts and images are copied into the output verbatim.
+
 ## Placement
 
 `Placement` controls how the embedded page (sized in points) maps onto the
