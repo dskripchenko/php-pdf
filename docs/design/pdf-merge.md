@@ -107,8 +107,8 @@ Third-party input makes the corpus the real deliverable.
 
 Even though the goal is both operations, they share the reader and `append` is strictly simpler than `embed`. Land order: **Reader → append → embed**, behind an API designed for both from the start.
 
-- [ ] **P0 — Design freeze.** Finalize `PdfMerger` / `PdfSource` API, error taxonomy, non-goals. (this doc)
-- [ ] **P1 — Lexer + ObjectParser.** Tokenize and parse every object type; unit tests on literal fixtures.
+- [x] **P0 — Design freeze.** Finalize `PdfMerger` / `PdfSource` API, error taxonomy, non-goals. (this doc)
+- [x] **P1 — Lexer + ObjectParser.** Tokenize and parse every object type; unit tests on literal fixtures. — `6ad7bd7`, 14 tests.
 - [ ] **P2 — Xref (classic) + trailer + Root + lazy resolver.** Read our own `php-pdf` output; assert `pageCount()`.
 - [ ] **P3 — Filters.** FlateDecode (+predictors), LZW, ASCII85/Hex, RunLength; decode round-trip tests.
 - [ ] **P4 — Xref streams + object streams.** Full support for our own object-stream/xref-stream output.
