@@ -4,6 +4,24 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### PDF reading & merging (new)
+- `ReaderDocument` — parse existing PDFs: classic `xref`, XRef streams,
+  object streams, hybrid `/XRefStm`, incremental updates, and corrupt-xref
+  recovery by scanning object headers.
+- Stream filters: Flate (with PNG/TIFF predictors), LZW, ASCII85, ASCIIHex,
+  RunLength; image filters (DCT/JPX/CCITT/JBIG2) passed through verbatim.
+- Standard-security-handler decryption: RC4 (40/128), AES-128 (AESV2),
+  AES-256 (V5 R5/R6), with user- and owner-password support.
+- Page-tree flattening with inherited MediaBox/CropBox/Rotate/Resources.
+- `PdfMerger` — append/reorder whole or selected pages from multiple sources
+  (`PdfSource::fromFile()` / `fromBytes()`, optional password).
+- `PdfMerger::stamp()` — embed a source page onto output pages as a Form
+  XObject with `Placement::fit()/stretch()/at()`; rotation baked via `/Matrix`.
+- See [docs/en/MERGE.md](docs/en/MERGE.md). v1 does not carry over AcroForm
+  fields, annotations, outlines, or structure tags.
+
 ## [1.0.0] — 2026-05-15
 
 Initial public release.

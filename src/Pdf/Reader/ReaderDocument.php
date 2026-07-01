@@ -8,9 +8,9 @@ namespace Dskripchenko\PhpPdf\Pdf\Reader;
  * A parsed, navigable view over an existing PDF file.
  *
  * Objects are resolved lazily from their cross-reference offsets and cached.
- * Reference chains are dereferenced with a cycle guard. This phase (P2) reads
- * classic-xref files; xref/object streams (P4) and decryption (P7) plug in
- * later without changing this surface.
+ * Reference chains are dereferenced with a cycle guard. Classic tables, XRef
+ * and object streams, corrupt-xref recovery, and standard-handler decryption
+ * are all resolved behind this surface.
  */
 final class ReaderDocument
 {
