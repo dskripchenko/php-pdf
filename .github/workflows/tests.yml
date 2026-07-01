@@ -25,7 +25,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mbstring, dom, zlib, openssl
+          extensions: mbstring, dom, zlib, openssl, gd
           coverage: none
 
       - name: Get Composer cache directory
@@ -36,11 +36,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ matrix.php }}-${{ hashFiles('composer.json') }}
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
           restore-keys: composer-${{ matrix.php }}-
 
-      - name: Install dependencies
-        run: composer update --prefer-dist --no-interaction --no-progress
+      - name: Install dependencies (locked)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Cache fonts
+        uses: actions/cache@v4
+        with:
+          path: .cache/fonts
+          key: liberation-fonts-2.1.5
+
+      - name: Fetch fonts
+        run: bash scripts/fetch-fonts.sh
 
       - name: Run tests
         run: vendor/bin/phpunit
@@ -57,11 +66,11 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, dom, zlib, openssl
+          extensions: mbstring, dom, zlib, openssl, gd
           coverage: none
 
-      - name: Install dependencies
-        run: composer update --prefer-dist --no-interaction --no-progress
+      - name: Install dependencies (locked)
+        run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Run PHPStan
         run: composer stan
