@@ -25,21 +25,21 @@ namespace Dskripchenko\PhpPdf\Font\Ttf;
  */
 final class GposReader
 {
-    private const int VALUE_X_PLACEMENT = 0x0001;
+    private const VALUE_X_PLACEMENT = 0x0001;
 
-    private const int VALUE_Y_PLACEMENT = 0x0002;
+    private const VALUE_Y_PLACEMENT = 0x0002;
 
-    private const int VALUE_X_ADVANCE = 0x0004;
+    private const VALUE_X_ADVANCE = 0x0004;
 
-    private const int VALUE_Y_ADVANCE = 0x0008;
+    private const VALUE_Y_ADVANCE = 0x0008;
 
-    private const int VALUE_X_PLA_DEVICE = 0x0010;
+    private const VALUE_X_PLA_DEVICE = 0x0010;
 
-    private const int VALUE_Y_PLA_DEVICE = 0x0020;
+    private const VALUE_Y_PLA_DEVICE = 0x0020;
 
-    private const int VALUE_X_ADV_DEVICE = 0x0040;
+    private const VALUE_X_ADV_DEVICE = 0x0040;
 
-    private const int VALUE_Y_ADV_DEVICE = 0x0080;
+    private const VALUE_Y_ADV_DEVICE = 0x0080;
 
     /**
      * @param  array{offset: int, length: int}  $gposTableInfo

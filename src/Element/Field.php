@@ -25,15 +25,15 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  */
 final readonly class Field implements InlineElement
 {
-    public const string PAGE = 'PAGE';
+    public const PAGE = 'PAGE';
 
-    public const string NUMPAGES = 'NUMPAGES';
+    public const NUMPAGES = 'NUMPAGES';
 
-    public const string DATE = 'DATE';
+    public const DATE = 'DATE';
 
-    public const string TIME = 'TIME';
+    public const TIME = 'TIME';
 
-    public const string MERGEFIELD = 'MERGEFIELD';
+    public const MERGEFIELD = 'MERGEFIELD';
 
     public function __construct(
         public string $instruction,

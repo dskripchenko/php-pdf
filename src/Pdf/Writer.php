@@ -42,7 +42,7 @@ namespace Dskripchenko\PhpPdf\Pdf;
  */
 final class Writer
 {
-    private const string LINE_ENDING = "\n";
+    private const LINE_ENDING = "\n";
 
     /** @var array<int, ?string> objectId -> serialised body (without `N 0 obj` wrapper) */
     private array $objects = [];

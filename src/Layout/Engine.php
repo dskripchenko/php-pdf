@@ -4404,7 +4404,7 @@ final class Engine
     /**
      * Indent per nesting level (pt).
      */
-    private const float LIST_LEVEL_INDENT_PT = 18.0;
+    private const LIST_LEVEL_INDENT_PT = 18.0;
 
     /**
      * Renders a bullet/ordered list by injecting a marker into the first

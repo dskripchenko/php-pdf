@@ -29,11 +29,11 @@ final class TtfFile
      * Scaler type magic. 0x00010000 = TTF (Windows/Adobe).
      * 'true' = Apple TTF (old). 'OTTO' = OTF with CFF (NOT supported).
      */
-    private const int SCALER_TTF = 0x00010000;
+    private const SCALER_TTF = 0x00010000;
 
-    private const string SCALER_APPLE = 'true';
+    private const SCALER_APPLE = 'true';
 
-    private const string SCALER_OTF_CFF = 'OTTO';
+    private const SCALER_OTF_CFF = 'OTTO';
 
     private readonly BinaryReader $reader;
 
