@@ -133,18 +133,9 @@ final class Filters
         $codeWidth = 9;
         $pos = 0;
 
-        $dict = [];
-        $resetDict = static function () use (&$dict, &$codeWidth): void {
-            $dict = [];
-            for ($i = 0; $i < 256; $i++) {
-                $dict[$i] = chr($i);
-            }
-            $dict[256] = ''; // clear-table marker
-            $dict[257] = ''; // EOD marker
-            $codeWidth = 9;
-        };
-        $resetDict();
+        $dict = self::lzwInitialTable();
         $next = 258;
+        /** @var string|null $prev */
         $prev = null;
 
         while (true) {
@@ -162,7 +153,8 @@ final class Filters
                 break; // EOD
             }
             if ($code === 256) {
-                $resetDict();
+                $dict = self::lzwInitialTable();
+                $codeWidth = 9;
                 $next = 258;
                 $prev = null;
                 continue;
@@ -183,13 +175,32 @@ final class Filters
             }
             $prev = $entry;
 
-            // Widen the code as the table fills (accounting for EarlyChange).
-            if ($next + $earlyChange - 1 >= (1 << $codeWidth) && $codeWidth < 12) {
-                $codeWidth++;
+            // Widen the code one step before the table fills when EarlyChange
+            // is set (PDF/TIFF default 1): grow at next == 2^width - earlyChange.
+            // Cap at the 12-bit LZW maximum.
+            if ($next + $earlyChange >= (1 << $codeWidth)) {
+                $codeWidth = min($codeWidth + 1, 12);
             }
         }
 
         return $out;
+    }
+
+    /**
+     * Base LZW string table: single-byte entries 0–255 plus the clear (256)
+     * and EOD (257) control markers.
+     *
+     * @return array<int,string>
+     */
+    private static function lzwInitialTable(): array
+    {
+        $dict = [];
+        for ($i = 0; $i < 256; $i++) {
+            $dict[$i] = chr($i);
+        }
+        $dict[256] = '';
+        $dict[257] = '';
+        return $dict;
     }
 
     /**

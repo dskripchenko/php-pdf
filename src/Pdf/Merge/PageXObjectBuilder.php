@@ -30,8 +30,8 @@ final class PageXObjectBuilder
     {
         $this->importer->useSource($doc);
 
-        $body = $this->contentBytes($doc, $page);
-        [$matrix, $w, $h] = $this->rotation($page);
+        $body = PageContent::bytes($doc, $page);
+        [$matrix, $w, $h] = PageContent::rotation($page);
         $resources = $this->importer->importValue($page->resources ?? new PdfDictionary([]));
 
         $dict = new PdfDictionary([
@@ -50,40 +50,5 @@ final class PageXObjectBuilder
         );
 
         return [$ref, $w, $h];
-    }
-
-    /** Decode and concatenate all of the page's content streams. */
-    private function contentBytes(ReaderDocument $doc, ReaderPage $page): string
-    {
-        $contents = $doc->deref($page->dict->get('Contents'));
-        $streams = is_array($contents) ? $contents : [$contents];
-
-        $parts = [];
-        foreach ($streams as $entry) {
-            $stream = $doc->deref($entry);
-            if ($stream instanceof PdfStream) {
-                $parts[] = $doc->streamData($stream);
-            }
-        }
-        return implode("\n", $parts);
-    }
-
-    /**
-     * Rotation matrix mapping the crop box to an upright [0,0,W,H] box.
-     *
-     * @return array{array{float,float,float,float,float,float}, float, float}
-     */
-    private function rotation(ReaderPage $page): array
-    {
-        [$cx0, $cy0, $cx1, $cy1] = $page->cropBox;
-        $w = $cx1 - $cx0;
-        $h = $cy1 - $cy0;
-
-        return match ($page->rotate) {
-            90 => [[0.0, -1.0, 1.0, 0.0, -$cy0, $cx1], $h, $w],
-            180 => [[-1.0, 0.0, 0.0, -1.0, $cx1, $cy1], $w, $h],
-            270 => [[0.0, 1.0, -1.0, 0.0, $cy1, -$cx0], $h, $w],
-            default => [[1.0, 0.0, 0.0, 1.0, -$cx0, -$cy0], $w, $h],
-        };
     }
 }

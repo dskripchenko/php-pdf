@@ -105,4 +105,20 @@ final class DecryptorTest extends TestCase
         $title = $doc->deref($info->get('Title'));
         self::assertStringContainsString(self::TITLE, $title->bytes);
     }
+
+    #[Test]
+    public function opens_with_distinct_owner_password_via_algorithm_7(): void
+    {
+        // Distinct user/owner passwords; open with the OWNER password, which
+        // must be recovered from /O (Algorithm 7).
+        $pdf = new PdfDocument();
+        $pdf->metadata(title: self::TITLE);
+        $pdf->addPage();
+        $pdf->encrypt('user-secret', ownerPassword: 'owner-secret', algorithm: EncryptionAlgorithm::Rc4_128);
+
+        $doc = ReaderDocument::fromBytes($pdf->toBytes(), password: 'owner-secret');
+        $info = $doc->deref($doc->trailer()->get('Info'));
+        $title = $doc->deref($info->get('Title'));
+        self::assertStringContainsString(self::TITLE, $title->bytes);
+    }
 }

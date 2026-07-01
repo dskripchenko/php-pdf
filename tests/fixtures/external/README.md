@@ -12,7 +12,8 @@ against our own output can hide spec deviations).
 | `pdflatex-image.pdf` | pdfTeX 1.40.23 | 1 | embedded image |
 | `pdflatex-4pages.pdf` | pdfTeX 1.40.23 | 4 | multi-page |
 | `pdflatex-outline.pdf` | pdfTeX 1.40.23 | 4 | outlines/bookmarks |
-| `imagemagick-lzw.pdf` | ImageMagick | 1 | **LZWDecode** image |
+| `imagemagick-lzw.pdf` | ImageMagick | 1 | **LZWDecode** image (4×4, 9-bit) |
+| `imagemagick-lzw-large.pdf` | ImageMagick | 1 | **LZWDecode** 48×48 noise — exercises code-width widening past 9-bit |
 | `imagemagick-ccitt.pdf` | ImageMagick | 1 | CCITTFax image (passthrough) |
 | `google-doc.pdf` | Skia/PDF (Google Docs) | 1 | Chrome/Skia renderer |
 | `pdfkit.pdf` | Qt 5.12 | 1 | Qt print pipeline |

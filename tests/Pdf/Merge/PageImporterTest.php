@@ -133,4 +133,38 @@ final class PageImporterTest extends TestCase
         $this->expectException(\OutOfRangeException::class);
         PageImporter::intoDocument(new PdfDocument(), $src, 5);
     }
+
+    #[Test]
+    public function works_with_encrypted_output(): void
+    {
+        if (!\Dskripchenko\PhpPdf\Pdf\Encryption::aesAvailable()) {
+            self::markTestSkipped('openssl AES not available');
+        }
+        $src = $this->src('pdflatex-image.pdf');
+        $doc = new PdfDocument();
+        $page = $doc->addPage(customDimensionsPt: [595.0, 842.0]);
+        $form = PageImporter::intoDocument($doc, $src, 0);
+        $page->useFormXObject($form, 0.0, 0.0, 595.0, 842.0);
+        $page->showText('CONF', 200.0, 400.0, StandardFont::Helvetica, 40.0);
+        $doc->encrypt('', algorithm: \Dskripchenko\PhpPdf\Pdf\EncryptionAlgorithm::Aes_128);
+
+        $out = ReaderDocument::fromBytes($doc->toBytes());
+        self::assertSame(1, $out->pageCount());
+        self::assertStringContainsString('CONF', $this->pageContent($out));
+    }
+
+    #[Test]
+    public function works_with_object_stream_output(): void
+    {
+        $src = $this->src('pdflatex-image.pdf');
+        $doc = new PdfDocument();
+        $page = $doc->addPage(customDimensionsPt: [595.0, 842.0]);
+        $form = PageImporter::intoDocument($doc, $src, 0);
+        $page->useFormXObject($form, 0.0, 0.0, 595.0, 842.0);
+        $doc->useObjectStreams(true);
+
+        $out = ReaderDocument::fromBytes($doc->toBytes());
+        self::assertSame(1, $out->pageCount());
+        self::assertInstanceOf(PdfStream::class, $this->firstForm($out));
+    }
 }

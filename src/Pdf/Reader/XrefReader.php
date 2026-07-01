@@ -36,7 +36,7 @@ final class XrefReader
 
         while ($pending !== []) {
             $offset = array_shift($pending);
-            if ($offset === null || isset($seenOffset[$offset]) || $offset < 0 || $offset >= strlen($this->data)) {
+            if (isset($seenOffset[$offset]) || $offset < 0 || $offset >= strlen($this->data)) {
                 continue;
             }
             $seenOffset[$offset] = true;

@@ -60,6 +60,33 @@ final class FiltersTest extends TestCase
     }
 
     #[Test]
+    public function decodes_large_lzw_image_past_9_bit_codes(): void
+    {
+        // A real ImageMagick (libtiff) LZW stream whose dictionary grows past
+        // 9-bit codes — the ground-truth check that code-width widening and
+        // EarlyChange are handled correctly (a 4×4 image never reaches it).
+        $path = __DIR__ . '/../../fixtures/external/imagemagick-lzw-large.pdf';
+        if (!is_file($path)) {
+            self::markTestSkipped('large LZW fixture not present');
+        }
+        $doc = ReaderDocument::fromBytes((string) file_get_contents($path));
+        $resources = $doc->deref($doc->pages()[0]->dict->get('Resources'));
+        $xobjects = $doc->deref($resources->get('XObject'));
+        self::assertInstanceOf(\Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary::class, $xobjects);
+
+        $found = false;
+        foreach ($xobjects->all() as $ref) {
+            $img = $doc->deref($ref);
+            if ($img instanceof PdfStream) {
+                // 48×48 RGB → exactly 6912 decoded bytes; must not throw.
+                self::assertSame(6912, strlen($doc->streamData($img)));
+                $found = true;
+            }
+        }
+        self::assertTrue($found, 'expected an LZW image XObject');
+    }
+
+    #[Test]
     public function png_up_predictor_reverses(): void
     {
         // Two rows of 3 bytes, PNG "Up" (filter type 2), colors=3 bpc=8.
@@ -163,8 +190,8 @@ final class FiltersTest extends TestCase
             } else {
                 $emit($dict[$w]);
                 $dict[$wc] = $next++;
-                // EarlyChange=1: widen one code early.
-                if ($next + 1 - 1 >= (1 << $codeWidth) && $codeWidth < 12) {
+                // EarlyChange=1: widen at next == 2^width - 1 (mirrors decoder).
+                if ($next + 1 >= (1 << $codeWidth) && $codeWidth < 12) {
                     $codeWidth++;
                 }
                 $w = $c;
