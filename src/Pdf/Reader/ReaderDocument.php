@@ -20,16 +20,23 @@ final class ReaderDocument
     /** @var array<int,array{data:string, offsets:array<int,int>, first:int}> objstm number → parsed header */
     private array $objStmCache = [];
 
+    private ?Decryptor $decryptor = null;
+
+    /** Object number of the /Encrypt dictionary, which is never itself decrypted. */
+    private ?int $encryptObjNum = null;
+
     private function __construct(
         private readonly string $data,
         private readonly XrefTable $xref,
+        private readonly string $password = '',
     ) {
+        $this->initDecryption();
     }
 
-    public static function fromBytes(string $data): self
+    public static function fromBytes(string $data, string $password = ''): self
     {
         try {
-            $doc = new self($data, (new XrefReader($data))->read());
+            $doc = new self($data, (new XrefReader($data))->read(), $password);
             if ($doc->isNavigable()) {
                 return $doc;
             }
@@ -37,16 +44,46 @@ final class ReaderDocument
             // Fall through to recovery.
         }
 
-        return new self($data, (new XrefRecovery($data))->rebuild());
+        return new self($data, (new XrefRecovery($data))->rebuild(), $password);
     }
 
     /**
      * Build a document over an already-computed cross-reference table
      * (used by the recovery scanner to bootstrap object-stream indexing).
      */
-    public static function fromXref(string $data, XrefTable $xref): self
+    public static function fromXref(string $data, XrefTable $xref, string $password = ''): self
     {
-        return new self($data, $xref);
+        return new self($data, $xref, $password);
+    }
+
+    /**
+     * Set up the decryptor from /Encrypt, if present. Runs before any object is
+     * decrypted, so the /Encrypt dictionary and /O,/U strings are read as-is.
+     */
+    private function initDecryption(): void
+    {
+        $enc = $this->trailer()->get('Encrypt');
+        if ($enc === null || $enc instanceof PdfNull) {
+            return;
+        }
+        if ($enc instanceof PdfReference) {
+            $this->encryptObjNum = $enc->number;
+        }
+        $encDict = $this->deref($enc);
+        if (!$encDict instanceof PdfDictionary) {
+            return;
+        }
+
+        $idFirst = '';
+        $id = $this->trailer()->get('ID');
+        if (is_array($id) && isset($id[0])) {
+            $first = $this->deref($id[0]);
+            if ($first instanceof PdfString) {
+                $idFirst = $first->bytes;
+            }
+        }
+
+        $this->decryptor = Decryptor::create($encDict, $idFirst, $this->password);
     }
 
     /**
@@ -85,15 +122,52 @@ final class ReaderDocument
         $offset = $this->xref->offsetOf($number);
         if ($offset !== null) {
             $parsed = (new ObjectParser(new Lexer($this->data, $offset)))->parseIndirectObject();
-            return $this->cache[$number] = $parsed['value'];
+            $value = $parsed['value'];
+            if ($this->decryptor !== null && $number !== $this->encryptObjNum) {
+                $gen = $this->xref->generations[$number] ?? 0;
+                $value = $this->decryptValue($value, $number, $gen);
+            }
+            return $this->cache[$number] = $value;
         }
 
         $loc = $this->xref->compressedOf($number);
         if ($loc !== null) {
+            // Members of an object stream are already plaintext once the stream
+            // (a top-level object) has been decrypted — no per-object step.
             return $this->cache[$number] = $this->getCompressedObject($number, $loc[0], $loc[1]);
         }
 
         return PdfNull::instance();
+    }
+
+    /**
+     * Recursively decrypt the strings (and, for streams, the body) of a
+     * top-level object using its own number/generation as the key salt.
+     */
+    private function decryptValue(mixed $value, int $objNum, int $gen): mixed
+    {
+        if ($this->decryptor === null) {
+            return $value;
+        }
+        if ($value instanceof PdfString) {
+            return new PdfString($this->decryptor->decryptString($value->bytes, $objNum, $gen), $value->hex);
+        }
+        if ($value instanceof PdfStream) {
+            $dict = $this->decryptValue($value->dict, $objNum, $gen);
+            $raw = $this->decryptor->decryptStream($value->raw, $objNum, $gen);
+            return new PdfStream($dict instanceof PdfDictionary ? $dict : $value->dict, $raw);
+        }
+        if ($value instanceof PdfDictionary) {
+            $items = [];
+            foreach ($value->all() as $k => $v) {
+                $items[$k] = $this->decryptValue($v, $objNum, $gen);
+            }
+            return new PdfDictionary($items);
+        }
+        if (is_array($value)) {
+            return array_map(fn ($v) => $this->decryptValue($v, $objNum, $gen), $value);
+        }
+        return $value;
     }
 
     /**
