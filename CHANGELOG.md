@@ -13,7 +13,11 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Stream filters: Flate (with PNG/TIFF predictors), LZW, ASCII85, ASCIIHex,
   RunLength; image filters (DCT/JPX/CCITT/JBIG2) passed through verbatim.
 - Standard-security-handler decryption: RC4 (40/128), AES-128 (AESV2),
-  AES-256 (V5 R5/R6), with user- and owner-password support.
+  AES-256 (V5 R5/R6), with user- and owner-password support. Wrong/missing
+  passwords fail fast with a clear error (validated against /U) instead of
+  producing corrupt output.
+- Validated against a third-party corpus (pdfTeX, LibreOffice, Google
+  Docs/Skia, Qt/pdfkit, Ghostscript, ImageMagick, FPDF2, pypdf).
 - Page-tree flattening with inherited MediaBox/CropBox/Rotate/Resources.
 - `PdfMerger` — append/reorder whole or selected pages from multiple sources
   (`PdfSource::fromFile()` / `fromBytes()`, optional password).

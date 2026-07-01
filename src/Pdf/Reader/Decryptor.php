@@ -55,7 +55,23 @@ final class Decryptor
 
         $keyLen = $v === 1 ? 5 : intdiv(self::int($enc->get('Length'), 40), 8);
         $encryptMetadata = !($enc->get('EncryptMetadata') === false);
-        $fileKey = self::deriveKeyV2V4($enc, $password, $fileIdFirst, $keyLen, $r, $v, $encryptMetadata);
+
+        // Try the password as the user password, then as the owner password.
+        $userKey = self::deriveKeyFromPadded(
+            $enc, self::padPassword($password), $fileIdFirst, $keyLen, $r, $v, $encryptMetadata
+        );
+        if (self::validatesAgainstU($enc, $userKey, $fileIdFirst, $r)) {
+            $fileKey = $userKey;
+        } else {
+            $ownerPadded = self::recoverUserPasswordFromOwner($enc, $password, $keyLen, $r);
+            $ownerKey = self::deriveKeyFromPadded(
+                $enc, $ownerPadded, $fileIdFirst, $keyLen, $r, $v, $encryptMetadata
+            );
+            if (!self::validatesAgainstU($enc, $ownerKey, $fileIdFirst, $r)) {
+                throw new PdfParseException('Cannot decrypt: wrong or missing password');
+            }
+            $fileKey = $ownerKey;
+        }
 
         [$streamMethod, $stringMethod] = self::resolveMethods($enc, $v);
 
@@ -124,16 +140,16 @@ final class Decryptor
 
     // --- key derivation ----------------------------------------------------
 
-    private static function deriveKeyV2V4(
+    /** Algorithm 2: file key from an already-padded (32-byte) user password. */
+    private static function deriveKeyFromPadded(
         PdfDictionary $enc,
-        string $password,
+        string $userPadded,
         string $fileIdFirst,
         int $keyLen,
         int $revision,
         int $v,
         bool $encryptMetadata,
     ): string {
-        $userPadded = self::padPassword($password);
         $o = self::stringBytes($enc->get('O'));
         $p = self::int($enc->get('P'), 0);
         $pUnsigned = $p < 0 ? $p + 0x100000000 : $p;
@@ -156,6 +172,66 @@ final class Decryptor
         }
 
         return substr($hash, 0, $keyLen);
+    }
+
+    /**
+     * Algorithm 6: verify a candidate file key by recomputing /U and comparing.
+     * Returns true when /U is absent (nothing to validate against).
+     */
+    private static function validatesAgainstU(PdfDictionary $enc, string $fileKey, string $fileIdFirst, int $revision): bool
+    {
+        $u = self::stringBytes($enc->get('U'));
+        if ($u === '') {
+            return true;
+        }
+        if ($revision === 2) {
+            // Algorithm 4: /U = RC4(fileKey, PADDING).
+            return Encryption::rc4($fileKey, self::PADDING) === substr($u, 0, 32);
+        }
+        // Algorithm 5 (R>=3): compare the first 16 bytes.
+        $x = md5(self::PADDING . $fileIdFirst, true);
+        $y = Encryption::rc4($fileKey, $x);
+        for ($i = 1; $i <= 19; $i++) {
+            $y = Encryption::rc4(self::xorKey($fileKey, $i), $y);
+        }
+        return $y === substr($u, 0, 16);
+    }
+
+    /**
+     * Algorithm 7: recover the padded user password from /O using the given
+     * owner password, so an owner-password open works for V2/V4.
+     */
+    private static function recoverUserPasswordFromOwner(PdfDictionary $enc, string $ownerPassword, int $keyLen, int $revision): string
+    {
+        $ownerPadded = self::padPassword($ownerPassword);
+        $hash = md5($ownerPadded, true);
+        if ($revision >= 3) {
+            for ($i = 0; $i < 50; $i++) {
+                $hash = md5(substr($hash, 0, $keyLen), true);
+            }
+        }
+        $rc4Key = substr($hash, 0, $keyLen);
+
+        $o = self::stringBytes($enc->get('O'));
+        if ($revision === 2) {
+            return Encryption::rc4($rc4Key, $o);
+        }
+        // Reverse the 20 RC4 rounds used to build /O.
+        $y = $o;
+        for ($i = 19; $i >= 0; $i--) {
+            $y = Encryption::rc4($i === 0 ? $rc4Key : self::xorKey($rc4Key, $i), $y);
+        }
+        return $y;
+    }
+
+    private static function xorKey(string $key, int $x): string
+    {
+        $out = '';
+        $len = strlen($key);
+        for ($j = 0; $j < $len; $j++) {
+            $out .= chr(ord($key[$j]) ^ $x);
+        }
+        return $out;
     }
 
     /** Algorithm 2.A — derive the V5 file key from user, then owner, password. */
