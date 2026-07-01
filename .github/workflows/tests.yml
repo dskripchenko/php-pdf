@@ -39,6 +39,9 @@ jobs:
           key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
           restore-keys: composer-${{ matrix.php }}-
 
+      - name: Install poppler-utils (pdftotext, for text-extraction tests)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+
       - name: Install dependencies (locked)
         run: composer install --prefer-dist --no-interaction --no-progress
 
