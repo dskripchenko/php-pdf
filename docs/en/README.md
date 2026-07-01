@@ -4,10 +4,11 @@
 > `mpdf/mpdf` (GPL-2.0) — no licensing friction for OEM, on-premise
 > installers, or proprietary bundles.
 
-[![Packagist](https://img.shields.io/packagist/v/dskripchenko/php-pdf.svg)](https://packagist.org/packages/dskripchenko/php-pdf)
-[![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
-[![PHP](https://img.shields.io/badge/php-%5E8.2-blue.svg)](composer.json)
-[![Tests](https://img.shields.io/badge/tests-1977%20passing-success.svg)](#testing)
+[![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
+[![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
+[![Total Downloads](https://img.shields.io/packagist/dt/dskripchenko/php-pdf)](https://packagist.org/packages/dskripchenko/php-pdf)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PHP](https://img.shields.io/badge/PHP-8.2%2B-purple.svg)](https://www.php.net)
 
 **Languages:** [English](README.md) · [Русский](../ru/README.md) · [中文](../zh/README.md) · [Deutsch](../de/README.md)
 
@@ -240,7 +241,7 @@ composer install
 vendor/bin/phpunit
 ```
 
-1977 tests, ~119k assertions, all passing on PHP 8.2 / 8.3 / 8.4.
+2,000+ tests, ~119k assertions, all passing on PHP 8.2 / 8.3 / 8.4.
 
 ---
 
