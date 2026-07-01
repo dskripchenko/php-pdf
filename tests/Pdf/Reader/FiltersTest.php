@@ -98,6 +98,42 @@ final class FiltersTest extends TestCase
     }
 
     #[Test]
+    public function png_predictor_16bit_is_byte_oriented(): void
+    {
+        // colors=1, bpc=16, columns=3 → 6-byte rows. PNG "Up" is byte-level.
+        $row1 = "\x10\x00\x20\x00\x30\x00";
+        $row2 = "\x01\x02\x03\x04\x05\x06";
+        $encoded = "\x02" . $row1 . "\x02" . self::sub($row2, $row1);
+        self::assertSame($row1 . $row2, Filters::applyPredictor($encoded, 12, 1, 16, 3));
+    }
+
+    #[Test]
+    public function png_predictor_supports_sub_byte_depth(): void
+    {
+        // 4-bpc, colors=1, columns=4 → 2-byte rows; PNG filtering stays byte-wise.
+        $row1 = "\xAB\xCD";
+        $row2 = "\x12\x34";
+        $encoded = "\x02" . $row1 . "\x02" . self::sub($row2, $row1);
+        self::assertSame($row1 . $row2, Filters::applyPredictor($encoded, 12, 1, 4, 4));
+    }
+
+    #[Test]
+    public function tiff_predictor2_16bit_horizontal_difference(): void
+    {
+        // colors=1, bpc=16, columns=4: samples recovered by adding the previous.
+        $raw = pack('n*', 1000, 1005, 1010, 1020);
+        $encoded = pack('n*', 1000, 5, 5, 10);
+        self::assertSame($raw, Filters::applyPredictor($encoded, 2, 1, 16, 4));
+    }
+
+    #[Test]
+    public function tiff_predictor2_rejects_sub_byte_depth(): void
+    {
+        $this->expectException(\Dskripchenko\PhpPdf\Pdf\Reader\PdfParseException::class);
+        Filters::applyPredictor("\x00\x00", 2, 1, 4, 4);
+    }
+
+    #[Test]
     public function stream_decoder_flate_via_document(): void
     {
         $plain = 'stream decoder end-to-end';

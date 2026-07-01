@@ -204,9 +204,12 @@ final class Filters
     }
 
     /**
-     * Reverse a PNG (predictors 10–15) or TIFF (predictor 2) predictor,
-     * assuming 8 bits per component (the common case for xref streams and
-     * most images). Predictor 1 (none) returns the data unchanged.
+     * Reverse a PNG (predictors 10–15) or TIFF (predictor 2) predictor
+     * (ISO 32000-1 §7.4.4.4). Predictor 1 (none) returns the data unchanged.
+     *
+     * PNG predictors are byte-oriented, so any bit depth works once the row
+     * length and bytes-per-pixel are computed in bytes. TIFF predictor 2 is
+     * sample-oriented and supported for 8- and 16-bit components.
      */
     public static function applyPredictor(
         string $data,
@@ -218,28 +221,62 @@ final class Filters
         if ($predictor <= 1) {
             return $data;
         }
-        if ($bitsPerComponent !== 8) {
-            throw new PdfParseException(
-                "Predictor with BitsPerComponent={$bitsPerComponent} is not supported yet"
-            );
-        }
 
-        $bpp = max(1, $colors); // bytes per pixel at 8 bpc
-        $rowLen = $columns * $colors;
+        $colors = max(1, $colors);
+        $bitsPerPixel = $colors * $bitsPerComponent;
+        $rowLen = intdiv($columns * $bitsPerPixel + 7, 8);  // bytes per row (ceil)
+        $bpp = max(1, intdiv($bitsPerPixel + 7, 8));        // bytes per pixel (>= 1)
 
         if ($predictor === 2) {
-            return self::tiffPredictor2($data, $bpp, $rowLen);
+            return self::tiffPredictor2($data, $colors, $bitsPerComponent, $columns, $rowLen);
         }
         return self::pngPredictor($data, $bpp, $rowLen);
     }
 
-    private static function tiffPredictor2(string $data, int $bpp, int $rowLen): string
+    private static function tiffPredictor2(string $data, int $colors, int $bpc, int $columns, int $rowLen): string
+    {
+        if ($bpc === 8) {
+            return self::tiffPredictor2Bytes($data, $colors, $rowLen);
+        }
+        if ($bpc === 16) {
+            return self::tiffPredictor2Words($data, $colors, $columns, $rowLen);
+        }
+        throw new PdfParseException(
+            "TIFF predictor with BitsPerComponent={$bpc} is not supported"
+        );
+    }
+
+    /** TIFF predictor 2 for 8-bit samples: add the same component of the pixel to the left. */
+    private static function tiffPredictor2Bytes(string $data, int $colors, int $rowLen): string
     {
         $out = $data;
         $len = strlen($out);
         for ($row = 0; $row < $len; $row += $rowLen) {
-            for ($i = $bpp; $i < $rowLen && $row + $i < $len; $i++) {
-                $out[$row + $i] = chr((ord($out[$row + $i]) + ord($out[$row + $i - $bpp])) & 0xFF);
+            for ($i = $colors; $i < $rowLen && $row + $i < $len; $i++) {
+                $out[$row + $i] = chr((ord($out[$row + $i]) + ord($out[$row + $i - $colors])) & 0xFF);
+            }
+        }
+        return $out;
+    }
+
+    /** TIFF predictor 2 for 16-bit big-endian samples. */
+    private static function tiffPredictor2Words(string $data, int $colors, int $columns, int $rowLen): string
+    {
+        $out = $data;
+        $len = strlen($out);
+        for ($row = 0; $row + $rowLen <= $len; $row += $rowLen) {
+            // Sample index s within the row; each sample is 2 bytes.
+            for ($s = $colors; $s < $columns * $colors; $s++) {
+                $cur = $row + $s * 2;
+                $prev = $cur - $colors * 2;
+                if ($cur + 1 >= $len) {
+                    break;
+                }
+                $val = ((ord($out[$cur]) << 8) | ord($out[$cur + 1]))
+                    + ((ord($out[$prev]) << 8) | ord($out[$prev + 1]));
+                $val &= 0xFFFF;
+                $out[$cur] = chr($val >> 8);
+                $out[$cur + 1] = chr($val & 0xFF);
             }
         }
         return $out;
