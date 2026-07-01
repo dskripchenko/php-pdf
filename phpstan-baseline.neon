@@ -187,30 +187,6 @@ parameters:
 			path: src/Barcode/Pdf417Encoder.php
 
 		-
-			message: '#^Result of \|\| is always true\.$#'
-			identifier: booleanOr.alwaysTrue
-			count: 1
-			path: src/Barcode/Pdf417Encoder.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between ''alpha'' and ''alpha'' will always evaluate to true\.$#'
-			identifier: identical.alwaysTrue
-			count: 2
-			path: src/Barcode/Pdf417Encoder.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between ''alpha'' and ''punct'' will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/Barcode/Pdf417Encoder.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between \*NEVER\* and ''lower'' will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/Barcode/Pdf417Encoder.php
-
-		-
 			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:__construct\(\) has parameter \$structuredAppend with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1

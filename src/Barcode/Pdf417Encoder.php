@@ -396,18 +396,6 @@ final class Pdf417Encoder
         $values = []; // 5-bit values
         $currentSub = 'alpha'; // start in alpha sub-mode
 
-        $emitShift = function (string $shiftTo) use (&$values, $currentSub): string {
-            if ($shiftTo === 'lower') {
-                $values[] = ($currentSub === 'alpha') ? 27 : 27; // LL or AS=27 in Mixed → keep LL latch
-            } elseif ($shiftTo === 'mixed') {
-                $values[] = ($currentSub === 'alpha' || $currentSub === 'lower') ? 28 : 28;
-            } elseif ($shiftTo === 'alpha') {
-                $values[] = ($currentSub === 'punct') ? 29 : 28;
-            }
-
-            return $shiftTo;
-        };
-
         $n = strlen($data);
         for ($i = 0; $i < $n; $i++) {
             $b = ord($data[$i]);
