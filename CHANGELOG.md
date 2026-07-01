@@ -10,8 +10,9 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ReaderDocument` — parse existing PDFs: classic `xref`, XRef streams,
   object streams, hybrid `/XRefStm`, incremental updates, and corrupt-xref
   recovery by scanning object headers.
-- Stream filters: Flate (with PNG/TIFF predictors), LZW, ASCII85, ASCIIHex,
-  RunLength; image filters (DCT/JPX/CCITT/JBIG2) passed through verbatim.
+- Stream filters: Flate (with PNG/TIFF predictors at any bit depth — 8- and
+  16-bit, plus sub-byte for PNG), LZW, ASCII85, ASCIIHex, RunLength; image
+  filters (DCT/JPX/CCITT/JBIG2) passed through verbatim.
 - Standard-security-handler decryption: RC4 (40/128), AES-128 (AESV2),
   AES-256 (V5 R5/R6), with user- and owner-password support. Wrong/missing
   passwords fail fast with a clear error (validated against /U) instead of
@@ -35,7 +36,20 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   not carried. `ReaderDocument::namedDestinations()` resolves the /Dests
   dictionary and /Names /Dests name tree.
 - See [docs/en/MERGE.md](docs/en/MERGE.md). v1 does not carry over AcroForm
-  fields, annotations, outlines, or structure tags.
+  fields or structure tags (annotations and outlines *are* carried).
+
+### Fixed
+- **PHP 8.2 support restored** — several classes used typed class constants
+  (`const string …`), a PHP 8.3+ feature, so the package failed to parse on
+  PHP 8.2 despite declaring `"php": "^8.2"`. The constant types were removed
+  (behaviour unchanged).
+- LZWDecode code-width widening was off by one (EarlyChange), corrupting LZW
+  streams that grow past 9-bit codes (large images); now validated against a
+  real ImageMagick/libtiff stream.
+
+### Tooling
+- GitHub Actions CI (PHP 8.2 / 8.3 / 8.4) running the test suite, plus a
+  PHPStan (level 6) gate.
 
 ## [1.0.0] — 2026-05-15
 

@@ -1,8 +1,9 @@
 # dskripchenko/php-pdf
 
-> Pure-PHP, **MIT-licensed** PDF generator. A drop-in alternative for
-> `mpdf/mpdf` (GPL-2.0) — no licensing friction for OEM, on-premise
-> installers, or proprietary bundles.
+> Pure-PHP, **MIT-licensed** PDF toolkit — **generate, read, and merge** PDFs.
+> A drop-in alternative for `mpdf/mpdf` (GPL-2.0) and the FPDI add-on
+> (proprietary) — no licensing friction for OEM, on-premise installers, or
+> proprietary bundles.
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
@@ -191,6 +192,15 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - PDF/A-1a, PDF/A-1b, PDF/A-2u with embedded sRGB ICC.
 - PDF/X-1a, PDF/X-3, PDF/X-4 with /OutputIntent /S /GTS_PDFX.
 - Tagged PDF / PDF/UA-ready structure tree.
+
+### Reading and merging
+- Read existing PDFs (`ReaderDocument`) — classic and stream xref, object
+  streams, corrupt-xref recovery, decryption (RC4 / AES-128 / AES-256).
+- Merge (`PdfMerger`) — append and reorder whole or selected pages from
+  multiple files; annotations and bookmarks carried over with internal links
+  and named destinations remapped.
+- Stamp overlays and FPDI-style page import into a generated document
+  (`PageImporter::intoDocument()`). See the [reading & merging guide](MERGE.md).
 
 A complete usage walkthrough is in [USAGE.md](USAGE.md).
 

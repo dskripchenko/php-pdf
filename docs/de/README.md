@@ -1,9 +1,9 @@
 # dskripchenko/php-pdf
 
-> Reiner PHP-PDF-Generator unter der **MIT-Lizenz**. Eine sofort
-> einsatzbereite Alternative zu `mpdf/mpdf` (GPL-2.0) — keine
-> lizenzrechtlichen Reibungspunkte für OEM, On-Premise-Installer oder
-> proprietäre Bundles.
+> Reines PHP-PDF-Toolkit unter der **MIT-Lizenz** — PDFs **erzeugen, lesen und
+> zusammenführen**. Eine sofort einsatzbereite Alternative zu `mpdf/mpdf`
+> (GPL-2.0) und zum FPDI-Add-on (proprietär) — keine lizenzrechtlichen
+> Reibungspunkte für OEM, On-Premise-Installer oder proprietäre Bundles.
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
@@ -196,6 +196,17 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - PDF/A-1a, PDF/A-1b, PDF/A-2u mit eingebettetem sRGB-ICC.
 - PDF/X-1a, PDF/X-3, PDF/X-4 mit /OutputIntent /S /GTS_PDFX.
 - Tagged PDF / PDF/UA-tauglicher Strukturbaum.
+
+### Lesen und Zusammenführen
+- Bestehende PDFs lesen (`ReaderDocument`) — klassische und Stream-xref,
+  Objekt-Streams, Wiederherstellung bei beschädigter xref, Entschlüsselung
+  (RC4 / AES-128 / AES-256).
+- Zusammenführen (`PdfMerger`) — ganze oder ausgewählte Seiten aus mehreren
+  Dateien anhängen und umordnen; Annotationen und Lesezeichen werden mit
+  umgemappten internen Links und benannten Zielen übernommen.
+- Overlays stempeln (Wasserzeichen, Briefköpfe) und FPDI-artiger Seitenimport
+  in ein erzeugtes Dokument (`PageImporter::intoDocument()`). Siehe den
+  [Lese- & Merge-Leitfaden](MERGE.md).
 
 Eine vollständige Anleitung findet sich in [docs/en/USAGE.md](USAGE.md).
 

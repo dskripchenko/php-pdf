@@ -1,8 +1,8 @@
 # dskripchenko/php-pdf
 
-> 纯 PHP 实现、采用 **MIT 许可** 的 PDF 生成器。可作为
-> `mpdf/mpdf`（GPL-2.0）的直接替代品 —— 用于 OEM、本地部署安装包
-> 或专有软件捆绑时不存在任何许可摩擦。
+> 纯 PHP 实现、采用 **MIT 许可** 的 PDF 工具包 —— **生成、读取与合并** PDF。
+> 可作为 `mpdf/mpdf`（GPL-2.0）以及 FPDI 附加组件（专有）的直接替代品 ——
+> 用于 OEM、本地部署安装包或专有软件捆绑时不存在任何许可摩擦。
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
@@ -189,6 +189,14 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - PDF/A-1a、PDF/A-1b、PDF/A-2u，内嵌 sRGB ICC。
 - PDF/X-1a、PDF/X-3、PDF/X-4，配 /OutputIntent /S /GTS_PDFX。
 - Tagged PDF / PDF/UA 就绪的结构树。
+
+### 读取与合并
+- 读取现有 PDF（`ReaderDocument`）—— 经典与流式 xref、对象流、损坏 xref 恢复、
+  解密（RC4 / AES-128 / AES-256）。
+- 合并（`PdfMerger`）—— 追加并重排来自多个文件的全部或选定页面；注释与书签
+  会被带入，内部链接和命名目标随之重新映射。
+- 盖印叠加（水印、信头）与 FPDI 风格的页面导入到生成的文档
+  （`PageImporter::intoDocument()`）。参见[读取与合并指南](MERGE.md)。
 
 完整的使用演练请参阅 [使用指南](USAGE.md)。
 

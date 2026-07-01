@@ -44,6 +44,19 @@ For complex HTML or CSS (Flexbox, multi-column, `@media`, floats),
 tables, lists, inline styling, headings), `php-pdf` is on par with
 better performance.
 
+## Reading & merging existing PDFs
+
+| Capability                               | php-pdf | mpdf | tcpdf | dompdf | FPDF |
+|------------------------------------------|:-------:|:----:|:-----:|:------:|:----:|
+| Read / parse existing PDFs               | ✅      | ❌   | ❌    | ❌     | ❌   |
+| Merge / append & reorder pages           | ✅      | ❌   | ⚠️ FPDI | ❌   | ⚠️ FPDI |
+| Import a page as a template (FPDI-style) | ✅      | ❌   | ⚠️ FPDI | ❌   | ⚠️ FPDI |
+| Carry annotations & bookmarks on merge   | ✅      | ❌   | ❌    | ❌     | ❌   |
+| License of the merge capability          | **MIT** | —    | proprietary (FPDI) | — | proprietary (FPDI) |
+
+Reading and merging existing PDFs — the job FPDI does for FPDF/TCPDF — is
+built in and MIT-licensed, with no proprietary add-on.
+
 ## Typography
 
 | Feature                                | php-pdf | mpdf | tcpdf | dompdf | FPDF |

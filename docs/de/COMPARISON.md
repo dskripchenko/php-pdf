@@ -44,6 +44,19 @@ gehen `dompdf` und `mpdf` weiter. Für Geschäftsdokumente (Absätze,
 Tabellen, Listen, Inline-Styling, Überschriften) ist `php-pdf` auf
 Augenhöhe und bietet bessere Performance.
 
+## Bestehende PDFs lesen & zusammenführen
+
+| Fähigkeit                                  | php-pdf | mpdf | tcpdf | dompdf | FPDF |
+|--------------------------------------------|:-------:|:----:|:-----:|:------:|:----:|
+| Bestehende PDFs lesen / parsen             | ✅      | ❌   | ❌    | ❌     | ❌   |
+| Seiten zusammenführen / anhängen & umordnen | ✅     | ❌   | ⚠️ FPDI | ❌   | ⚠️ FPDI |
+| Seite als Vorlage importieren (FPDI-Stil)  | ✅      | ❌   | ⚠️ FPDI | ❌   | ⚠️ FPDI |
+| Annotationen & Lesezeichen beim Merge      | ✅      | ❌   | ❌    | ❌     | ❌   |
+| Lizenz der Merge-Fähigkeit                 | **MIT** | —    | proprietär (FPDI) | — | proprietär (FPDI) |
+
+Bestehende PDFs lesen und zusammenführen — das, was FPDI für FPDF/TCPDF
+leistet — ist eingebaut und MIT-lizenziert, ohne proprietäres Add-on.
+
 ## Typografie
 
 | Funktion                                | php-pdf | mpdf | tcpdf | dompdf | FPDF |

@@ -1,7 +1,8 @@
 # dskripchenko/php-pdf
 
-> Генератор PDF на чистом PHP под **лицензией MIT**. Полноценная замена
-> `mpdf/mpdf` (GPL-2.0) — никаких лицензионных трений для OEM,
+> PDF-тулкит на чистом PHP под **лицензией MIT** — **генерация, чтение и
+> объединение** PDF. Полноценная замена `mpdf/mpdf` (GPL-2.0) и дополнения
+> FPDI (проприетарное) — никаких лицензионных трений для OEM,
 > on-premise-инсталляторов и проприетарных сборок.
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
@@ -196,6 +197,16 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - PDF/A-1a, PDF/A-1b, PDF/A-2u со встроенным sRGB ICC.
 - PDF/X-1a, PDF/X-3, PDF/X-4 с /OutputIntent /S /GTS_PDFX.
 - Tagged PDF / дерево структуры PDF/UA-ready.
+
+### Чтение и объединение
+- Чтение готовых PDF (`ReaderDocument`) — классический и потоковый xref,
+  object-потоки, восстановление битого xref, расшифровка (RC4 / AES-128 / AES-256).
+- Объединение (`PdfMerger`) — склейка и переупорядочивание всех или выбранных
+  страниц из нескольких файлов; аннотации и закладки переносятся с ремапом
+  внутренних ссылок и именованных назначений.
+- Наложения (водяные знаки, бланки) и импорт страницы в стиле FPDI в
+  сгенерированный документ (`PageImporter::intoDocument()`). См.
+  [руководство по чтению и объединению](MERGE.md).
 
 Полное руководство по использованию — в [docs/en/USAGE.md](USAGE.md).
 
