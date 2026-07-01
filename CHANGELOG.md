@@ -4,7 +4,7 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] — 2026-07-01
 
 ### PDF reading & merging (new)
 - `ReaderDocument` — parse existing PDFs: classic `xref`, XRef streams,
@@ -188,4 +188,5 @@ Initial public release.
   `ext-zlib`, `ext-dom`, plus `ext-openssl` when AES or PKCS#7 is used.
 - PHP 8.2+, strict types throughout.
 
+[1.1.0]: https://github.com/dskripchenko/php-pdf/releases/tag/v1.1.0
 [1.0.0]: https://github.com/dskripchenko/php-pdf/releases/tag/v1.0.0
