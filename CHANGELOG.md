@@ -23,6 +23,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`PdfSource::fromFile()` / `fromBytes()`, optional password).
 - `PdfMerger::stamp()` — embed a source page onto output pages as a Form
   XObject with `Placement::fit()/stretch()/at()`; rotation baked via `/Matrix`.
+- `PdfMerger` carries page annotations and the document outline (bookmarks)
+  by default, remapping internal links and named destinations to the new
+  pages (dangling ones dropped, external URI links kept). Opt out with
+  `withoutAnnotations()` / `withoutOutlines()`. Widget/popup annotations are
+  not carried. `ReaderDocument::namedDestinations()` resolves the /Dests
+  dictionary and /Names /Dests name tree.
 - See [docs/en/MERGE.md](docs/en/MERGE.md). v1 does not carry over AcroForm
   fields, annotations, outlines, or structure tags.
 

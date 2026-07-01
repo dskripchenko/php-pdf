@@ -255,6 +255,9 @@ final class ReaderDocument
     /** @var list<ReaderPage>|null */
     private ?array $pagesCache = null;
 
+    /** @var array<string,mixed>|null name → destination value */
+    private ?array $namedDestCache = null;
+
     /**
      * The document's leaf pages in reading order, with inheritable attributes
      * flattened.
@@ -264,6 +267,65 @@ final class ReaderDocument
     public function pages(): array
     {
         return $this->pagesCache ??= (new PageTree($this))->pages();
+    }
+
+    /**
+     * Flattened named destinations (§12.3.2.3): the legacy `/Dests` dictionary
+     * and the `/Names /Dests` name tree, merged into a name → destination map.
+     * Values are the raw destination (an explicit array, or a `<< /D … >>`
+     * dictionary) — resolution to a page is the caller's job.
+     *
+     * @return array<string,mixed>
+     */
+    public function namedDestinations(): array
+    {
+        if ($this->namedDestCache !== null) {
+            return $this->namedDestCache;
+        }
+
+        $out = [];
+        $catalog = $this->catalog();
+
+        // Legacy /Dests dictionary (PDF 1.1): name → destination.
+        $dests = $this->deref($catalog->get('Dests'));
+        if ($dests instanceof PdfDictionary) {
+            foreach ($dests->all() as $name => $value) {
+                $out[$name] = $value;
+            }
+        }
+
+        // Name tree /Names /Dests (PDF 1.2+).
+        $names = $this->deref($catalog->get('Names'));
+        if ($names instanceof PdfDictionary) {
+            $this->walkNameTree($this->deref($names->get('Dests')), $out, 0);
+        }
+
+        return $this->namedDestCache = $out;
+    }
+
+    /**
+     * @param array<string,mixed> $out
+     */
+    private function walkNameTree(mixed $node, array &$out, int $depth): void
+    {
+        if ($depth > 64 || !$node instanceof PdfDictionary) {
+            return;
+        }
+        $names = $this->deref($node->get('Names'));
+        if (is_array($names)) {
+            for ($i = 0, $n = count($names); $i + 1 < $n; $i += 2) {
+                $key = $this->deref($names[$i]);
+                if ($key instanceof PdfString) {
+                    $out[$key->bytes] = $names[$i + 1];
+                }
+            }
+        }
+        $kids = $this->deref($node->get('Kids'));
+        if (is_array($kids)) {
+            foreach ($kids as $kid) {
+                $this->walkNameTree($this->deref($kid), $out, $depth + 1);
+            }
+        }
     }
 
     /**

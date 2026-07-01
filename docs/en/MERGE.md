@@ -100,6 +100,24 @@ Target specific output pages with `onPages` (1-based):
 The base page's own content is preserved and drawn first; the overlay is drawn
 on top from a clean graphics state.
 
+## Annotations and bookmarks
+
+Page annotations and the document outline (bookmarks) are carried into the
+merged output **by default**. Internal links and bookmark destinations —
+including named destinations — are remapped to the new pages. A link or
+bookmark whose target page is not part of the output is dropped; external
+`URI` links are always kept.
+
+```php
+PdfMerger::create()
+    ->append(PdfSource::fromFile('a.pdf'))
+    ->withoutAnnotations()   // opt out of annotation carry-over
+    ->withoutOutlines()      // opt out of bookmark carry-over
+    ->toBytes();
+```
+
+Form-field widgets (AcroForm) and popup annotations are not carried.
+
 ## Placement
 
 `Placement` controls how the embedded page (sized in points) maps onto the
@@ -142,10 +160,12 @@ restrictions" case) works without any argument.
 Merging rebuilds each page from its content and resources. The following are
 **not** carried into the output yet:
 
-- Interactive form fields (AcroForm) — dropped.
-- Page annotations (links, notes), outlines/bookmarks, named destinations.
+- Interactive form fields (AcroForm) and widget/popup annotations — dropped.
 - Structure tags (Tagged PDF / PDF-A conformance of the result).
 - Image and font streams are copied verbatim, never re-encoded.
+
+Annotations and outlines (bookmarks) with internal/named destinations *are*
+carried and remapped — see [Annotations and bookmarks](#annotations-and-bookmarks).
 
 These are documented so "supports merge" is not mistaken for "preserves
 everything". See `docs/design/pdf-merge.md` for the full scope and roadmap.
