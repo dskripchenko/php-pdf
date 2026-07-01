@@ -115,7 +115,7 @@ Even though the goal is both operations, they share the reader and `append` is s
 - [x] **P5 — Xref recovery scan.** Rebuild index from `N G obj` on corrupt/missing xref. — 4 tests; recovers object-stream files (indexes ObjStm).
 - [x] **P6 — PageTree flatten.** Inherit Resources/MediaBox/CropBox/Rotate; expose per-page metadata. — 6 tests; ReaderPage + PageTree, cycle-guarded.
 - [x] **P7 — Decryptor.** RC4 + AESV2/V3 over `Pdf\Encryption`; empty + supplied password. — 13 tests; RC4-128/AES-128/AES-256/R6, string+stream, owner-password path.
-- [ ] **P8 — ObjectImporter + Writer raw pass-through.** Copy subtree with id remap; emit verbatim foreign objects.
+- [x] **P8 — ObjectImporter + verbatim serializer.** Copy subtree with id remap; emit verbatim foreign objects. — 5 tests; full-document clone round-trips. (Standalone MergeSerializer instead of retrofitting Writer.)
 - [ ] **P9 — `PdfMerger::append()`.** Concatenate pages; round-trip goldens across the producer corpus.
 - [ ] **P10 — `PdfFormXObject` /Resources + `embedPage()`.** Page-as-XObject with BBox/Rotate; render smoke.
 - [ ] **P11 — Docs + CHANGELOG.** User-facing `docs/*/MERGE.md`, README feature row, USAGE section.
