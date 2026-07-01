@@ -4,10 +4,11 @@
 > `mpdf/mpdf` (GPL-2.0) — никаких лицензионных трений для OEM,
 > on-premise-инсталляторов и проприетарных сборок.
 
-[![Packagist](https://img.shields.io/packagist/v/dskripchenko/php-pdf.svg)](https://packagist.org/packages/dskripchenko/php-pdf)
-[![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
-[![PHP](https://img.shields.io/badge/php-%5E8.2-blue.svg)](composer.json)
-[![Tests](https://img.shields.io/badge/tests-1977%20passing-success.svg)](#тестирование)
+[![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
+[![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
+[![Total Downloads](https://img.shields.io/packagist/dt/dskripchenko/php-pdf)](https://packagist.org/packages/dskripchenko/php-pdf)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PHP](https://img.shields.io/badge/PHP-8.2%2B-purple.svg)](https://www.php.net)
 
 **Языки:** [English](../en/README.md) · [Русский](README.md) · [中文](../zh/README.md) · [Deutsch](../de/README.md)
 
@@ -204,6 +205,8 @@ file_put_contents('hello.pdf', $doc->toBytes());
 
 - 📖 [Руководство по использованию](USAGE.md) — абзацы, таблицы,
   графики, штрихкоды, формы, шифрование, подпись, PDF/A.
+- 🔗 [Чтение и объединение PDF](MERGE.md) — чтение готовых файлов,
+  склейка/переупорядочивание страниц, наложения, импорт в стиле FPDI.
 - ⚖️ [Сравнение с mpdf / tcpdf / dompdf / FPDF](COMPARISON.md) —
   матрица возможностей, когда что выбирать.
 - 📊 [Бенчмарки](BENCHMARKS.md) — воспроизводимые замеры
@@ -245,7 +248,7 @@ composer install
 vendor/bin/phpunit
 ```
 
-1977 тестов, ~119k утверждений, все проходят на PHP 8.2 / 8.3 / 8.4.
+2 000+ тестов, ~119k утверждений, все проходят на PHP 8.2 / 8.3 / 8.4.
 
 ---
 

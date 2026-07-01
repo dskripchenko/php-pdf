@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-label="php-pdf icon">
+  <style>.lbl { font-family: Arial, Helvetica, sans-serif; font-weight: 700; }</style>
+  <rect width="128" height="128" rx="26" fill="#777BB4"/>
+  <!-- page -->
+  <path d="M40 26 H74 L96 48 V96 Q96 102 90 102 H40 Q34 102 34 96 V32 Q34 26 40 26 Z" fill="#ffffff"/>
+  <path d="M74 26 V48 H96 Z" fill="#d7dce6"/>
+  <!-- PDF label -->
+  <rect x="44" y="70" width="46" height="22" rx="5" fill="#E03C31"/>
+  <text class="lbl" x="67" y="85.5" font-size="14" fill="#ffffff" text-anchor="middle">PDF</text>
+</svg>

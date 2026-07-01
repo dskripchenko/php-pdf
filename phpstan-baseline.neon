@@ -1,0 +1,787 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_DIGIT is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_LOWER is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_MIXED is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_PUNCT is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_UPPER is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:SHIFT_BINARY is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:SHIFT_PUNCT is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:SHIFT_UPPER_FROM_LOWER is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:buildMatrix\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawAlignmentGrid\(\) has parameter \$m with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawBullsEye\(\) has parameter \$m with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawCompactModeMessage\(\) has parameter \$m with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawFullModeMessage\(\) has parameter \$m with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:gfMul\(\) has parameter \$expTable with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 3 and 3 will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/Barcode/AztecEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_A_FROM_C is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_C_FROM_B is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_SHIFT_AB is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_SHIFT_BA is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 2
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^PHPDoc tag @var for constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:GS1_AI_LENGTHS with type array\<string, int\|null\> is not subtype of value array\{''00''\: 18, ''01''\: 14, ''02''\: 14, 11\: 6, 12\: 6, 13\: 6, 15\: 6, 16\: 6, \.\.\.\}\.$#'
+			identifier: classConstant.phpDocType
+			count: 1
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^Property Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:\$gs1Mode is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/Barcode/Code128Encoder.php
+
+		-
+			message: '#^Comparison operation "\>\=" between 0\|int\<2, max\> and 0 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<33, 47\>\|int\<58, 64\>\|int\<91, 96\>\|int\<123, 255\> and 33 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<58, 64\>\|int\<91, 96\>\|int\<123, 255\> and 58 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<91, 96\>\|int\<123, 255\> and 91 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 1
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\DataMatrixEncoder\:\:FACTOR_SETS is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 2
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between 1\|2\|4\|5\|6\|7\|8\|9\|10\|11\|12\|13\|15\|16\|17\|18\|19\|21\|22\|23\|24\|25\|27\|28\|29\|31\|32\|33\|34\|36\|37\|38\|39\|40\|41\|42\|43\|44\|45\|46\|47\|48\|49\|50\|51\|52\|53\|54\|56\|57\|59\|60\|61\|62\|63\|64\|66\|67\|68\|69\|71\|73\|75\|77\|79\|80\|81\|82\|83\|84\|86\|87\|88\|89\|90\|91\|92\|93\|94\|95\|96\|97\|98\|100\|101\|102\|103\|105\|106\|107\|108\|109\|110\|111\|112\|114\|115\|116\|117\|118\|119\|120\|121\|122\|124\|127\|129\|130\|131\|132\|133\|134\|136\|137\|138\|139\|141\|142\|143\|144\|145\|146\|147\|149\|150\|151\|153\|154\|155\|156\|157\|158\|159\|160\|161\|162\|163\|164\|166\|167\|168\|169\|170\|172\|173\|174\|175\|176\|177\|178\|179\|180\|181\|182\|184\|185\|186\|187\|188\|189\|190\|191\|192\|193\|194\|195\|196\|197\|200\|201\|202\|203\|204\|205\|207\|208\|210\|211\|213\|214\|215\|218\|220\|221\|223\|224\|225\|226\|227\|228\|229\|230\|231\|232\|233\|234\|235\|236\|237\|238\|239\|240\|241\|242\|244\|245\|247\|248\|249\|250\|251\|252\|253\|254\|255 and 0 will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 0\|int\<4, max\> and 2 will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Barcode/DataMatrixEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\Pdf417Encoder\:\:__construct\(\) has parameter \$macroSegment with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/Pdf417Encoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:__construct\(\) has parameter \$structuredAppend with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/QrEncoder.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:writeFormatInfo\(\) has parameter \$matrix with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Barcode/QrEncoder.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:\$selectedMask is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Barcode/QrEncoder.php
+
+		-
+			message: '#^Offset ''componentEnd'' does not exist on array\{flags\: int, glyphIndex\: int, arg1\: int, arg2\: int, byteOffset\: int, argSize\: int, isXY\: bool\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Font/Ttf/CompositeGlyph.php
+
+		-
+			message: '#^Offset ''componentStart'' does not exist on array\{flags\: int, glyphIndex\: int, arg1\: int, arg2\: int, byteOffset\: int, argSize\: int, isXY\: bool\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Font/Ttf/CompositeGlyph.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\GsubReader\:\:findLigaLookupIndices\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Font/Ttf/GsubReader.php
+
+		-
+			message: '#^Parameter &\$used by\-ref type of method Dskripchenko\\PhpPdf\\Font\\Ttf\\TtfSubsetter\:\:addCompositeComponents\(\) expects array\<int, bool\>, array\<bool\> given\.$#'
+			identifier: parameterByRef.type
+			count: 1
+			path: src/Font/Ttf/TtfSubsetter.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupContour\(\) has parameter \$hasDelta with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Font/Ttf/VariableInstance.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupContour\(\) has parameter \$newCoords with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Font/Ttf/VariableInstance.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupContour\(\) has parameter \$origCoords with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Font/Ttf/VariableInstance.php
+
+		-
+			message: '#^Parameter &\$newCoords by\-ref type of method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupRange\(\) expects list\<int\>, non\-empty\-array\<int, int\> given\.$#'
+			identifier: parameterByRef.type
+			count: 3
+			path: src/Font/Ttf/VariableInstance.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseBlock\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseDefinitionListItems\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseDetails\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseImage\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseInlineSvg\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseParagraph\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$node of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:parseTable\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Parameter \#1 \$tableNode of method Dskripchenko\\PhpPdf\\Html\\HtmlParser\:\:extractTableCaption\(\) expects DOMElement, DOMNode given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Html/HtmlParser.php
+
+		-
+			message: '#^Comparison operation "\>" between 0 and 0 is always false\.$#'
+			identifier: greater.alwaysFalse
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:catmullRomToBezierPath\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:drawTextDecorations\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:effectiveLineHeightMult\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderRow\(\) has parameter \$colWidths with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderWatermark\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderWatermarkImage\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Offset ''height'' does not exist on array\{type\: ''image'', text\?\: string, style\?\: Dskripchenko\\PhpPdf\\Style\\RunStyle\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 2
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Offset ''image'' does not exist on array\{type\: ''image'', text\?\: string, style\?\: Dskripchenko\\PhpPdf\\Style\\RunStyle\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Offset ''width'' does not exist on array\{type\: ''image'', text\?\: string, style\?\: Dskripchenko\\PhpPdf\\Style\\RunStyle\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Offset ''width'' does not exist on array\{type\: string, text\?\: string, style\?\: Dskripchenko\\PhpPdf\\Style\\RunStyle\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Parameter &\$prevRowBottomByCol by\-ref type of method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderRow\(\) expects array\<int, Dskripchenko\\PhpPdf\\Style\\Border\>, array\<int, Dskripchenko\\PhpPdf\\Style\\Border\|null\> given\.$#'
+			identifier: parameterByRef.type
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 5
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Result of \|\| is always true\.$#'
+			identifier: booleanOr.alwaysTrue
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between \*NEVER\* and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between null and null will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 8
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between '''' and '''' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and \*NEVER\* will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 3
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 2
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 2
+			path: src/Layout/Engine.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 1
+			path: src/Math/MathRenderer.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Math\\MathRenderer\:\:parseLines\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Math/MathRenderer.php
+
+		-
+			message: '#^Static method Dskripchenko\\PhpPdf\\Math\\MathRenderer\:\:splitMatrix\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Math/MathRenderer.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between '''' and '''' will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 1
+			path: src/Math/MathRenderer.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed~'''' and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Math/MathRenderer.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\ContentStream\:\:emitPath\(\) has parameter \$commands with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/ContentStream.php
+
+		-
+			message: '#^Property Dskripchenko\\PhpPdf\\Pdf\\ContentStream\:\:\$lastWasTextColorQ is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/Pdf/ContentStream.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: mixed$#'
+			identifier: match.unhandled
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Document\:\:buildSignatureDictBody\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Negated boolean expression is always true\.$#'
+			identifier: booleanNot.alwaysTrue
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Offset ''color'' does not exist on array\{level\: int, title\: string, page\: Dskripchenko\\PhpPdf\\Pdf\\Page, x\: float, y\: float\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Offset ''objr'' does not exist on array\{type\: string, mcid\: int, page\: Dskripchenko\\PhpPdf\\Pdf\\Page, altText\?\: string\|null\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^PHPDoc tag @param references unknown parameter\: \$unused$#'
+			identifier: parameter.notFound
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Parameter \#2 \$pageObjectIdMap of method Dskripchenko\\PhpPdf\\Pdf\\Document\:\:emitOutlineTree\(\) expects SplObjectStorage\<Dskripchenko\\PhpPdf\\Pdf\\Page, int\>, SplObjectStorage\<object, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Right side of && is always false\.$#'
+			identifier: booleanAnd.rightAlwaysFalse
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''push'' and ''push'' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: src/Pdf/Document.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$fileId is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$fileKey is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$oValue is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$oeValue is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$permissions is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$permsValue is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$uValue is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Readonly property Dskripchenko\\PhpPdf\\Pdf\\Encryption\:\:\$ueValue is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: src/Pdf/Encryption.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addCircleAnnotation\(\) has parameter \$fillColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addCircleAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addFreeTextAnnotation\(\) has parameter \$color with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addInkAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addLineAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addPolyLineAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addPolygonAnnotation\(\) has parameter \$fillColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addPolygonAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addStrikeOutAnnotation\(\) has parameter \$color with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addUnderlineAnnotation\(\) has parameter \$color with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:emitPath\(\) has parameter \$commands with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Property Dskripchenko\\PhpPdf\\Pdf\\Page\:\:\$transition type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between list\<string\> and false will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Pdf/Page.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositions\(\) has parameter \$cps with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/PdfFont.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositions\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/PdfFont.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositionsForTest\(\) has parameter \$cps with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/PdfFont.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositionsForTest\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/PdfFont.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFormXObject\:\:__construct\(\) has parameter \$matrix with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/PdfFormXObject.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfTilingPattern\:\:__construct\(\) has parameter \$matrix with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Pdf/PdfTilingPattern.php
+
+		-
+			message: '#^Access to an undefined property Dskripchenko\\PhpPdf\\Pdf\\Writer\:\:\$fileId\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Pdf/Writer.php
+
+		-
+			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
+			identifier: greater.alwaysTrue
+			count: 1
+			path: src/Pdf/Writer.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Writer\:\:writeAll\(\) has parameter \$stream with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Pdf/Writer.php
+
+		-
+			message: '#^Offset ''seekable'' on array\{timed_out\: bool, blocked\: bool, eof\: bool, unread_bytes\: int, stream_type\: string, wrapper_type\: string, wrapper_data\: mixed, mode\: string, \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Pdf/Writer.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between null and null will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/Pdf/Writer.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Svg\\SvgRenderer\:\:namedColorRgb\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Svg/SvgRenderer.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Svg\\SvgRenderer\:\:parsePathD\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Svg/SvgRenderer.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Svg\\SvgRenderer\:\:walkElement\(\) has parameter \$gradients with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Svg/SvgRenderer.php
+
+		-
+			message: '#^PHPDoc tag @param references unknown parameter\: \$rgb$#'
+			identifier: parameter.notFound
+			count: 1
+			path: src/Svg/SvgRenderer.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>href" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: src/Svg/SvgRenderer.php
+
+		-
+			message: '#^Offset 0\|1\|2\|3 on array\{65152, 0, 0, 0\}\|array\{65153, 65154, 0, 0\}\|array\{65155, 65156, 0, 0\}\|array\{65157, 65158, 0, 0\}\|array\{65159, 65160, 0, 0\}\|array\{65161, 65162, 65163, 65164\}\|array\{65165, 65166, 0, 0\}\|array\{65167, 65168, 65169, 65170\}\|array\{65171, 65172, 0, 0\}\|array\{65173, 65174, 65175, 65176\}\|array\{65177, 65178, 65179, 65180\}\|array\{65181, 65182, 65183, 65184\}\|array\{65185, 65186, 65187, 65188\}\|array\{65189, 65190, 65191, 65192\}\|array\{65193, 65194, 0, 0\}\|array\{65195, 65196, 0, 0\}\|array\{65197, 65198, 0, 0\}\|array\{65199, 65200, 0, 0\}\|array\{65201, 65202, 65203, 65204\}\|array\{65205, 65206, 65207, 65208\}\|array\{65209, 65210, 65211, 65212\}\|array\{65213, 65214, 65215, 65216\}\|array\{65217, 65218, 65219, 65220\}\|array\{65221, 65222, 65223, 65224\}\|array\{65225, 65226, 65227, 65228\}\|array\{65229, 65230, 65231, 65232\}\|array\{65233, 65234, 65235, 65236\}\|array\{65237, 65238, 65239, 65240\}\|array\{65241, 65242, 65243, 65244\}\|array\{65245, 65246, 65247, 65248\}\|array\{65249, 65250, 65251, 65252\}\|array\{65253, 65254, 65255, 65256\}\|array\{65257, 65258, 65259, 65260\}\|array\{65261, 65262, 0, 0\}\|array\{65263, 65264, 0, 0\}\|array\{65265, 65266, 65267, 65268\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Text/ArabicShaper.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''C''\|''D''\|''R''\|''T''\|''U'' and ''L'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Text/ArabicShaper.php
+
+		-
+			message: '#^Method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyW\(\) has parameter \$types with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Text/BidiAlgorithm.php
+
+		-
+			message: '#^Parameter &\$types by\-ref type of method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyN\(\) expects list\<string\>, non\-empty\-array\<int\<0, max\>, string\> given\.$#'
+			identifier: parameterByRef.type
+			count: 1
+			path: src/Text/BidiAlgorithm.php
+
+		-
+			message: '#^Static method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyI\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Text/BidiAlgorithm.php
+
+		-
+			message: '#^Static method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:filterFormattingChars\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Text/BidiAlgorithm.php

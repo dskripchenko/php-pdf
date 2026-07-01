@@ -4,6 +4,39 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### PDF reading & merging (new)
+- `ReaderDocument` — parse existing PDFs: classic `xref`, XRef streams,
+  object streams, hybrid `/XRefStm`, incremental updates, and corrupt-xref
+  recovery by scanning object headers.
+- Stream filters: Flate (with PNG/TIFF predictors), LZW, ASCII85, ASCIIHex,
+  RunLength; image filters (DCT/JPX/CCITT/JBIG2) passed through verbatim.
+- Standard-security-handler decryption: RC4 (40/128), AES-128 (AESV2),
+  AES-256 (V5 R5/R6), with user- and owner-password support. Wrong/missing
+  passwords fail fast with a clear error (validated against /U) instead of
+  producing corrupt output.
+- Validated against a third-party corpus (pdfTeX, LibreOffice, Google
+  Docs/Skia, Qt/pdfkit, Ghostscript, ImageMagick, FPDF2, pypdf).
+- Page-tree flattening with inherited MediaBox/CropBox/Rotate/Resources.
+- `PdfMerger` — append/reorder whole or selected pages from multiple sources
+  (`PdfSource::fromFile()` / `fromBytes()`, optional password).
+- `PdfMerger::stamp()` — embed a source page onto output pages as a Form
+  XObject with `Placement::fit()/stretch()/at()`; rotation baked via `/Matrix`.
+- `PageImporter::intoDocument()` (FPDI-style) — import an existing PDF page
+  into a freshly generated `Pdf\Document` as a Form XObject, so new php-pdf
+  content can be drawn over/under it. `Document::registerImportedForm()`
+  injects the foreign resource closure into the writer with references
+  renumbered; `PdfValueSerializer` re-emits value trees with a ref map.
+- `PdfMerger` carries page annotations and the document outline (bookmarks)
+  by default, remapping internal links and named destinations to the new
+  pages (dangling ones dropped, external URI links kept). Opt out with
+  `withoutAnnotations()` / `withoutOutlines()`. Widget/popup annotations are
+  not carried. `ReaderDocument::namedDestinations()` resolves the /Dests
+  dictionary and /Names /Dests name tree.
+- See [docs/en/MERGE.md](docs/en/MERGE.md). v1 does not carry over AcroForm
+  fields, annotations, outlines, or structure tags.
+
 ## [1.0.0] — 2026-05-15
 
 Initial public release.

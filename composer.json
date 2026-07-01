@@ -33,7 +33,7 @@
     },
     "scripts": {
         "test": "phpunit",
-        "stan": "phpstan analyse"
+        "stan": "phpstan analyse --memory-limit=1G"
     },
     "config": {
         "sort-packages": true
