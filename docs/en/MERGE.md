@@ -172,7 +172,12 @@ PdfSource::fromFile('protected.pdf', password: 'secret');
 
 Supported: RC4 (40/128-bit), AES-128 (AESV2), and AES-256 (V5 R5/R6). Both the
 user and owner password are tried. An empty password (the common "owner-only
-restrictions" case) works without any argument.
+restrictions" case) works without any argument. Predictor-encoded streams are
+decoded at any bit depth (8-bit and 16-bit, plus sub-byte for PNG predictors).
+
+The public-key security handler (`/Adobe.PubSec`, certificate-based) is not
+supported — such files raise a clear "Unsupported security handler" error
+rather than producing garbage.
 
 ## What the reader handles
 

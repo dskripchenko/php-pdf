@@ -78,4 +78,21 @@ final class XrefRecoveryTest extends TestCase
         $broken = ReaderDocument::fromBytes($this->breakStartxref($pdf));
         self::assertSame($intact->pageCount(), $broken->pageCount());
     }
+
+    #[Test]
+    public function recovers_and_decrypts_an_encrypted_document(): void
+    {
+        // Recovery must still set up decryption from the reconstructed trailer.
+        $pdf = new \Dskripchenko\PhpPdf\Pdf\Document();
+        $pdf->metadata(title: 'RECOVERED-SECRET');
+        $pdf->addPage();
+        $pdf->encrypt('', algorithm: \Dskripchenko\PhpPdf\Pdf\EncryptionAlgorithm::Rc4_128);
+
+        $doc = ReaderDocument::fromBytes($this->breakStartxref($pdf->toBytes()));
+        self::assertSame(1, $doc->pageCount());
+
+        $info = $doc->deref($doc->trailer()->get('Info'));
+        $title = $doc->deref($info->get('Title'));
+        self::assertStringContainsString('RECOVERED-SECRET', $title->bytes);
+    }
 }
