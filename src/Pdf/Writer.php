@@ -67,13 +67,6 @@ final class Writer
     private ?string $cachedFileIdHex = null;
 
     /**
-     * Optional pre-set raw file identifier for the trailer /ID (signing path).
-     * When null, /ID is derived via {@see fileIdHex()}. Declared explicitly so
-     * reads don't trip PHP 8.2+ undefined/dynamic-property warnings.
-     */
-    private ?string $fileId = null;
-
-    /**
      * @param  string  $version  PDF version header (e.g. '1.4', '1.7', '2.0').
      * @param  bool  $useXrefStream  Emit cross-reference table as XRef stream
      *                                object (PDF 1.5+) instead of classic
@@ -569,14 +562,9 @@ final class Writer
         if ($this->encryption !== null && $this->encryptId !== null) {
             $trailer .= ' /Encrypt ' . $this->encryptId . ' 0 R';
         }
-        // Always emit /ID. Prefer pre-set fileId (signing path),
-        // else encryption fileId, else auto-generated.
-        if ($this->fileId !== null) {
-            $fid = strtoupper(bin2hex($this->fileId));
-            $trailer .= ' /ID [<' . $fid . '> <' . $fid . '>]';
-        } else {
-            $trailer .= ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
-        }
+        // Always emit /ID, derived deterministically from the encryption
+        // fileId or hashed content (see fileIdHex()).
+        $trailer .= ' /ID [<'.$this->fileIdHex().'> <'.$this->fileIdHex().'>]';
         $trailer .= ' >>';
         $written += self::writeAll($stream, 'trailer' . self::LINE_ENDING);
         $written += self::writeAll($stream, $trailer . self::LINE_ENDING);

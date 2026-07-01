@@ -691,12 +691,6 @@ parameters:
 			path: src/Pdf/PdfTilingPattern.php
 
 		-
-			message: '#^Access to an undefined property Dskripchenko\\PhpPdf\\Pdf\\Writer\:\:\$fileId\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/Pdf/Writer.php
-
-		-
 			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
 			identifier: greater.alwaysTrue
 			count: 1
