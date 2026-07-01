@@ -178,22 +178,25 @@ final class ReaderDocument
         return $root;
     }
 
+    /** @var list<ReaderPage>|null */
+    private ?array $pagesCache = null;
+
     /**
-     * Number of pages in the document.
+     * The document's leaf pages in reading order, with inheritable attributes
+     * flattened.
      *
-     * Reads `/Count` from the page-tree root. Full leaf-walking (for producers
-     * that omit or misreport `/Count`) lands with the page-tree flattener (P6).
+     * @return list<ReaderPage>
+     */
+    public function pages(): array
+    {
+        return $this->pagesCache ??= (new PageTree($this))->pages();
+    }
+
+    /**
+     * Number of pages in the document (authoritative leaf-walk count).
      */
     public function pageCount(): int
     {
-        $pages = $this->deref($this->catalog()->get('Pages'));
-        if (!$pages instanceof PdfDictionary) {
-            throw new PdfParseException('Page tree root (/Pages) is missing or invalid');
-        }
-        $count = $this->deref($pages->get('Count'));
-        if (!is_int($count)) {
-            throw new PdfParseException('Page tree /Count is missing or invalid');
-        }
-        return $count;
+        return count($this->pages());
     }
 }
