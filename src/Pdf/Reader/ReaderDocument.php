@@ -72,6 +72,14 @@ final class ReaderDocument
     }
 
     /**
+     * Fully decode a stream's `/Filter` chain into its plain bytes.
+     */
+    public function streamData(PdfStream $stream): string
+    {
+        return (new StreamDecoder($this))->decode($stream);
+    }
+
+    /**
      * The document catalog (`/Root`).
      */
     public function catalog(): PdfDictionary
