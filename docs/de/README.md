@@ -205,6 +205,8 @@ Eine vollständige Anleitung findet sich in [docs/en/USAGE.md](USAGE.md).
 
 - 📖 [Anwendungsleitfaden](USAGE.md) — Absätze, Tabellen, Diagramme,
   Barcodes, Formulare, Verschlüsselung, Signing, PDF/A.
+- 🔗 [PDFs lesen & zusammenführen](MERGE.md) — bestehende Dateien lesen,
+  Seiten anhängen/umordnen, Overlays stempeln, FPDI-Stil-Import.
 - ⚖️ [Vergleich mit mpdf / tcpdf / dompdf / FPDF](COMPARISON.md) —
   Feature-Matrix, wann welche Bibliothek zu wählen ist.
 - 📊 [Benchmarks](BENCHMARKS.md) — reproduzierbare Messungen zu

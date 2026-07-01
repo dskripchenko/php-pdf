@@ -200,6 +200,8 @@ A complete usage walkthrough is in [USAGE.md](USAGE.md).
 
 - 📖 [Usage guide](USAGE.md) — paragraphs, tables, charts, barcodes,
   forms, encryption, signing, PDF/A.
+- 🔗 [Reading & merging PDFs](MERGE.md) — read existing files,
+  append/reorder pages, stamp overlays, FPDI-style import.
 - ⚖️ [Comparison vs mpdf / tcpdf / dompdf / FPDF](COMPARISON.md) —
   feature matrix, when to choose each.
 - 📊 [Benchmarks](BENCHMARKS.md) — reproducible wall-time, memory, and

@@ -198,6 +198,8 @@ file_put_contents('hello.pdf', $doc->toBytes());
 
 - 📖 [使用指南](USAGE.md) —— 段落、表格、图表、
   条形码、表单、加密、签名、PDF/A。
+- 🔗 [读取与合并 PDF](MERGE.md) —— 读取现有文件、追加/重排页面、
+  盖印叠加、FPDI 风格导入。
 - ⚖️ [与 mpdf / tcpdf / dompdf / FPDF 的对比](COMPARISON.md) ——
   特性矩阵，以及如何选型。
 - 📊 [基准测试](BENCHMARKS.md) —— 可复现的墙钟时间、内存
