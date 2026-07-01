@@ -28,7 +28,43 @@ final class ReaderDocument
 
     public static function fromBytes(string $data): self
     {
-        return new self($data, (new XrefReader($data))->read());
+        try {
+            $doc = new self($data, (new XrefReader($data))->read());
+            if ($doc->isNavigable()) {
+                return $doc;
+            }
+        } catch (PdfParseException) {
+            // Fall through to recovery.
+        }
+
+        return new self($data, (new XrefRecovery($data))->rebuild());
+    }
+
+    /**
+     * Build a document over an already-computed cross-reference table
+     * (used by the recovery scanner to bootstrap object-stream indexing).
+     */
+    public static function fromXref(string $data, XrefTable $xref): self
+    {
+        return new self($data, $xref);
+    }
+
+    /**
+     * True when the catalog and page-tree root resolve to dictionaries — the
+     * cheap probe that decides whether a parsed xref is trustworthy or the
+     * recovery scanner should take over.
+     */
+    private function isNavigable(): bool
+    {
+        try {
+            $catalog = $this->deref($this->trailer()->get('Root'));
+            if (!$catalog instanceof PdfDictionary) {
+                return false;
+            }
+            return $this->deref($catalog->get('Pages')) instanceof PdfDictionary;
+        } catch (PdfParseException) {
+            return false;
+        }
     }
 
     public function trailer(): PdfDictionary
