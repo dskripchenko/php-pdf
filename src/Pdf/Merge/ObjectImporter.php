@@ -63,6 +63,11 @@ final class ObjectImporter
         $this->objects[$id] = $value;
     }
 
+    public function get(int $id): mixed
+    {
+        return $this->objects[$id] ?? null;
+    }
+
     /**
      * Import the source object with the given number, returning a reference to
      * its new ID (deduplicated within the current source).

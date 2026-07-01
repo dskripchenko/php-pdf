@@ -117,7 +117,7 @@ Even though the goal is both operations, they share the reader and `append` is s
 - [x] **P7 — Decryptor.** RC4 + AESV2/V3 over `Pdf\Encryption`; empty + supplied password. — 13 tests; RC4-128/AES-128/AES-256/R6, string+stream, owner-password path.
 - [x] **P8 — ObjectImporter + verbatim serializer.** Copy subtree with id remap; emit verbatim foreign objects. — 5 tests; full-document clone round-trips. (Standalone MergeSerializer instead of retrofitting Writer.)
 - [x] **P9 — `PdfMerger::append()`.** Concatenate pages; round-trip goldens. — 6 tests; order, subsets, geometry, object-stream + encrypted sources. **END-TO-END APPEND WORKS.**
-- [ ] **P10 — `PdfFormXObject` /Resources + `embedPage()`.** Page-as-XObject with BBox/Rotate; render smoke.
+- [x] **P10 — `PdfMerger::stamp()` (page-as-XObject embed).** Page-as-XObject with BBox from CropBox + `/Matrix` from Rotate, resource closure imported, placed via `Placement` (fit/stretch/at). — 5 tests. Implemented in the merge pipeline (own Form XObject value); the core-Writer FPDI path — combining imports with *freshly generated* php-pdf content — remains future work.
 - [ ] **P11 — Docs + CHANGELOG.** User-facing `docs/*/MERGE.md`, README feature row, USAGE section.
 
 Each phase ends green (`phpunit`) before the next starts.
