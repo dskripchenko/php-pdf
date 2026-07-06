@@ -85,14 +85,42 @@ final class ObjectImporter
         $this->sourceMap[$sourceNumber] = $id;
         $this->objects[$id] = PdfNull::instance(); // placeholder for cycles
 
-        $this->objects[$id] = $this->importValue($this->source->getObject($sourceNumber));
+        $this->objects[$id] = $this->importObjectBody($this->source->getObject($sourceNumber));
 
         return new PdfReference($id, 0);
     }
 
     /**
-     * Deep-copy a value, importing any references it contains and promoting any
-     * inline stream to its own indirect object (streams must be indirect).
+     * Import the body of a top-level object *in place* at its reserved ID.
+     *
+     * Crucially, a stream stays a stream (it already owns this object ID) — it
+     * must NOT be routed through {@see importValue()}, which re-allocates a
+     * fresh object for a stream and returns a reference to it. Doing so would
+     * leave the reserved ID holding a mere `N G R` (a reference-to-a-reference)
+     * — which real PDF readers reject on e.g. /Contents ("weird page
+     * contents", blank pages), even though a lenient reader dereferences it.
+     */
+    private function importObjectBody(mixed $value): mixed
+    {
+        if ($value instanceof PdfStream) {
+            return new PdfStream($this->importDictionary($value->dict), $value->raw);
+        }
+        if ($value instanceof PdfDictionary) {
+            return $this->importDictionary($value);
+        }
+        if (is_array($value)) {
+            return array_map(fn ($v) => $this->importValue($v), $value);
+        }
+        if ($value instanceof PdfReference) {
+            return $this->importObject($value->number);
+        }
+        return $value;
+    }
+
+    /**
+     * Deep-copy a value nested inside a dictionary or array, importing any
+     * references it contains and promoting any inline stream to its own
+     * indirect object (streams must be indirect).
      */
     public function importValue(mixed $value): mixed
     {
