@@ -4,6 +4,16 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-07-06
+
+### Fixed
+- **Merged pages rendered blank in real PDF viewers.** Imported streams
+  (page `/Contents`, image XObjects, embedded fonts) were written as a
+  reference-to-a-reference (`N 0 obj  M 0 R  endobj`). Lenient readers
+  dereferenced the chain, but poppler / Ghostscript / Acrobat rejected
+  `/Contents` with "weird page contents" and drew blank pages. Fixed; merge
+  output is now verified against a real renderer (pdftotext) in the test suite.
+
 ## [1.1.0] — 2026-07-01
 
 ### PDF reading & merging (new)
@@ -188,5 +198,6 @@ Initial public release.
   `ext-zlib`, `ext-dom`, plus `ext-openssl` when AES or PKCS#7 is used.
 - PHP 8.2+, strict types throughout.
 
+[1.1.1]: https://github.com/dskripchenko/php-pdf/releases/tag/v1.1.1
 [1.1.0]: https://github.com/dskripchenko/php-pdf/releases/tag/v1.1.0
 [1.0.0]: https://github.com/dskripchenko/php-pdf/releases/tag/v1.0.0
