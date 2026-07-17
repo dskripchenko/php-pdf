@@ -33,7 +33,8 @@
     },
     "scripts": {
         "test": "phpunit",
-        "stan": "phpstan analyse --memory-limit=1G"
+        "stan": "phpstan analyse --memory-limit=1G",
+        "bench": "bash scripts/bench/bench.sh"
     },
     "config": {
         "sort-packages": true
