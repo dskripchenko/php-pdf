@@ -4,6 +4,41 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **PDF/X output was missing Info keys and page boxes required by
+  ISO 15930.** `/GTS_PDFXVersion` and `/ModDate` are now written to `/Info`,
+  and pages default to a `/TrimBox` equal to the MediaBox when neither
+  TrimBox nor ArtBox was set.
+- **Rectangular DataMatrix symbols (ECC 200, e.g. 12×26) rendered
+  distorted.** The 2D matrix renderer assumed square symbols and read past
+  the module matrix; it now honours the symbol's true width × height.
+- **TrueType `cmap` subtables are now merged instead of picking one.**
+  A format 12 subtable is not necessarily a superset of format 4 (e.g.
+  DroidSansFallback maps CJK only in format 12); previously half the font's
+  coverage could be lost.
+
+### Added
+- Torture set (`examples/torture/`) — 11 worst-case documents (complex
+  tables, Cyrillic/Greek, Arabic bidi, CJK, 5 barcode symbologies, charts,
+  SVG, AcroForm, signature, PDF/A-2u, merge+stamp), smoke-rendered by
+  poppler and Ghostscript in CI; manual cross-viewer checklist in
+  `docs/en/VIEWER-MATRIX.md`.
+- PDF/X structural validation in CI (Ghostscript + byte-level checks) and
+  visual regression against golden renders; conformance checks moved to a
+  dedicated `conformance` workflow with its own badge and
+  `docs/en/CONFORMANCE.md`.
+- `scripts/fetch-fonts.sh` now also fetches Amiri (Arabic) and
+  DroidSansFallback (CJK) for the torture set.
+- OpenSSL CLI verification of PKCS#7 signatures in the test suite.
+
+### Known issues
+- `Engine(fallbackFonts: [...])` does not switch fonts in mixed-script
+  paragraphs: equal-style runs are merged before font resolution, so the
+  fallback never applies. Workaround: assign the script-specific font via
+  `RunStyle(fontFamily: ...)` + a `FontProvider`.
+
 ## [1.1.2] — 2026-07-17
 
 ### Fixed

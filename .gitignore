@@ -1,6 +1,7 @@
 /vendor
 /composer.lock
 /build
+/examples/torture/out
 .DS_Store
 /.phpunit.cache
 /.phpunit.result.cache

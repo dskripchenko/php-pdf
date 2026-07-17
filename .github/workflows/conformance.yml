@@ -115,6 +115,55 @@ jobs:
             build/conformance/pdfx-*.pdf
             build/conformance/summary-pdfx.md
 
+  torture-smoke:
+    runs-on: ubuntu-latest
+    name: Torture set (poppler + Ghostscript)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, zlib, openssl, gd
+          coverage: none
+
+      - name: Install poppler and Ghostscript
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils ghostscript
+
+      - name: Install dependencies (locked)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Cache fonts
+        uses: actions/cache@v4
+        with:
+          path: .cache/fonts
+          key: fonts-liberation-2.1.5-amiri-droid
+
+      - name: Fetch fonts
+        run: bash scripts/fetch-fonts.sh
+
+      - name: Generate torture set
+        run: php examples/torture/generate.php
+
+      - name: Render smoke (poppler + Ghostscript)
+        run: bash scripts/conformance/torture-smoke.sh
+
+      - name: Publish job summary
+        if: always()
+        run: cat build/conformance/summary-torture.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload torture set and renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torture-set
+          path: |
+            examples/torture/out/
+            build/torture-render/
+
   visual-regression:
     runs-on: ubuntu-latest
     name: Visual regression (poppler)
