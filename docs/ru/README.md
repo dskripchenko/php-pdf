@@ -227,7 +227,7 @@ file_put_contents('hello.pdf', $doc->toBytes());
   wall-time, памяти и размера выхода.
 - 🔀 [Миграция с mpdf](MIGRATION-FROM-MPDF.md) — compat-фасад и полная
   таблица соответствий.
-- 🔀 [Миграция с FPDI](../en/MIGRATION-FROM-FPDI.md) — импорт/штамповка,
+- 🔀 [Миграция с FPDI](MIGRATION-FROM-FPDI.md) — импорт/штамповка,
   чтение xref-stream и зашифрованных источников.
 ---
 

@@ -227,7 +227,7 @@ Eine vollständige Anleitung findet sich in [docs/en/USAGE.md](USAGE.md).
   Wall-Time, Speicher und Ausgabegröße.
 - 🔀 [Migration von mpdf](MIGRATION-FROM-MPDF.md) — Compat-Fassade und
   vollständige Mapping-Tabelle.
-- 🔀 [Migration von FPDI](../en/MIGRATION-FROM-FPDI.md) — Import/Stempeln,
+- 🔀 [Migration von FPDI](MIGRATION-FROM-FPDI.md) — Import/Stempeln,
   liest XRef-Stream- und verschlüsselte Quellen.
 
 ---

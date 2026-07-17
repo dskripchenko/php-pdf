@@ -75,4 +75,4 @@ The mappings above are exercised by `tests/Compat/FpdiCompatTest.php`.
 
 ---
 
-Language: [English](MIGRATION-FROM-FPDI.md) — translations follow.
+Language: [English](MIGRATION-FROM-FPDI.md) · [Русский](../ru/MIGRATION-FROM-FPDI.md) · [中文](../zh/MIGRATION-FROM-FPDI.md) · [Deutsch](../de/MIGRATION-FROM-FPDI.md)

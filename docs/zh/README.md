@@ -216,7 +216,7 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - 📊 [基准测试](BENCHMARKS.md) —— 可复现的墙钟时间、内存
   与输出大小测量。
 - 🔀 [从 mpdf 迁移](MIGRATION-FROM-MPDF.md) —— 兼容门面与完整映射表。
-- 🔀 [从 FPDI 迁移](../en/MIGRATION-FROM-FPDI.md) —— 导入/盖印，支持
+- 🔀 [从 FPDI 迁移](MIGRATION-FROM-FPDI.md) —— 导入/盖印，支持
   xref-stream 与加密源。
 ---
 
