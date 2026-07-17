@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  izpack automated-install descriptor for the veraPDF CLI (used by CI).
+  Replace @INSTALL_PATH@ with the target directory before running:
+    sed "s|@INSTALL_PATH@|$HOME/verapdf|" verapdf-auto-install.xml > auto.xml
+    ./verapdf-greenfield-*/verapdf-install /abs/path/to/auto.xml
+-->
+<AutomatedInstallation langpack="eng">
+    <com.izforge.izpack.panels.htmlhello.HTMLHelloPanel id="welcome"/>
+    <com.izforge.izpack.panels.target.TargetPanel id="install_dir">
+        <installpath>@INSTALL_PATH@</installpath>
+    </com.izforge.izpack.panels.target.TargetPanel>
+    <com.izforge.izpack.panels.packs.PacksPanel id="sdk_pack_select">
+        <pack index="0" name="veraPDF GUI" selected="true"/>
+        <pack index="1" name="veraPDF Sample Plugins" selected="false"/>
+    </com.izforge.izpack.panels.packs.PacksPanel>
+    <com.izforge.izpack.panels.install.InstallPanel id="install"/>
+    <com.izforge.izpack.panels.finish.FinishPanel id="finish"/>
+</AutomatedInstallation>
