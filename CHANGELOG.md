@@ -20,9 +20,24 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lookups — a gradient-filled rect rendered opaque black. The renderer
   now strips the default-namespace declaration before parsing.
 
+- **Tagged PDF: marked-content sequences no longer nest.** Table/TR/L
+  used to open their own MCID sequences around their children's — invalid
+  per ISO 32000 and flagged by veraPDF. Grouping elements (Table, TR, L)
+  now live purely in the structure tree with their children in /K; only
+  leaves (P, TD, LI, Hn, Figure) own marked content. The ParentTree is
+  now correctly indexed by MCID.
+
 ### Added
+- **PDF/X-1a conformance reference** with a CMYK output intent
+  (CGATS21_CRPC1 from the ICC registry, fetched on demand); the `/N` key
+  of embedded output-intent profiles now derives from the profile's
+  colour space instead of a hardcoded RGB. The X-1a checker enforces
+  `/N 4` and bans device-RGB operators in content streams.
 - `<rect rx="...">` rounded corners in the SVG renderer (solid fills and
   strokes; pattern fills stay square for now).
+- Viewer matrix: automated pdf.js (Firefox engine) and Quartz (macOS
+  Preview engine) columns; barcode decodability verified with zbar,
+  ZXing and libdmtx against rendered output.
 
 ## [1.2.0] — 2026-07-17
 

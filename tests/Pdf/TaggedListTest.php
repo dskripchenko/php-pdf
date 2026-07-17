@@ -47,8 +47,10 @@ final class TaggedListTest extends TestCase
         $ast = new AstDocument(new Section([$list]), tagged: true);
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        self::assertStringContainsString('/L << /MCID', $bytes);
+        // Only the LI leaf owns marked content; /L groups in the
+        // structure tree (nested MCIDs are invalid).
         self::assertStringContainsString('/LI << /MCID', $bytes);
+        self::assertStringNotContainsString('/L << /MCID', $bytes);
     }
 
     #[Test]
@@ -89,8 +91,9 @@ final class TaggedListTest extends TestCase
         $ast = new AstDocument(new Section([$list]), tagged: true);
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // BDC: /L + /LI = 2. No nested /P.
+        // BDC: only the /LI leaf. /L groups without marked content;
+        // no nested /P either.
         $bdcCount = substr_count($bytes, 'BDC');
-        self::assertSame(2, $bdcCount);
+        self::assertSame(1, $bdcCount);
     }
 }

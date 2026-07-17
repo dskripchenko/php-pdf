@@ -330,10 +330,20 @@ final class Document
 
     /**
      * Struct elements collected during rendering — emitted in StructTreeRoot/K.
+     * Leaf entries carry an mcid; container entries (Table/TR/TD/L/LI)
+     * carry mcid = null plus a list of child element indexes. Hierarchy
+     * lives in the structure tree — marked-content sequences never nest.
      *
-     * @var list<array{type: string, mcid: int, page: Page, altText?: ?string}>
+     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int}>
      */
     private array $structElements = [];
+
+    /**
+     * Stack of open container element indexes (renderer-driven).
+     *
+     * @var list<int>
+     */
+    private array $structContainerStack = [];
 
     /**
      * structElement index → /StructParent number tree key for tagged Link
@@ -370,13 +380,51 @@ final class Document
     }
 
     /**
-     * @internal Used by the Engine to register struct elements.
+     * @internal Used by the Engine to register leaf struct elements
+     * (the ones owning a marked-content sequence).
      */
     public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null): void
     {
+        $parent = $this->structContainerStack === []
+            ? null
+            : $this->structContainerStack[count($this->structContainerStack) - 1];
+        $idx = count($this->structElements);
         $this->structElements[] = [
-            'type' => $type, 'mcid' => $mcid, 'page' => $page, 'altText' => $altText,
+            'type' => $type, 'mcid' => $mcid, 'page' => $page,
+            'altText' => $altText, 'parent' => $parent, 'children' => [],
         ];
+        if ($parent !== null) {
+            $this->structElements[$parent]['children'][] = $idx;
+        }
+    }
+
+    /**
+     * @internal Open a grouping struct element (Table, TR, TD, L, LI...).
+     * Containers have no marked content of their own — their /K is the
+     * list of child elements, so MCID sequences never nest.
+     */
+    public function beginStructContainer(string $type, Page $page): void
+    {
+        $parent = $this->structContainerStack === []
+            ? null
+            : $this->structContainerStack[count($this->structContainerStack) - 1];
+        $idx = count($this->structElements);
+        $this->structElements[] = [
+            'type' => $type, 'mcid' => null, 'page' => $page,
+            'altText' => null, 'parent' => $parent, 'children' => [],
+        ];
+        if ($parent !== null) {
+            $this->structElements[$parent]['children'][] = $idx;
+        }
+        $this->structContainerStack[] = $idx;
+    }
+
+    /**
+     * @internal Close the innermost grouping struct element.
+     */
+    public function endStructContainer(): void
+    {
+        array_pop($this->structContainerStack);
     }
 
     /**
@@ -1127,9 +1175,11 @@ final class Document
                     $structIdx = count($this->structElements);
                     $this->structElements[] = [
                         'type' => 'Link',
-                        'mcid' => -1,
+                        'mcid' => null,
                         'page' => $page,
                         'objr' => $linkAnnotId,
+                        'parent' => null,
+                        'children' => [],
                     ];
                     $this->structParentLinkKeys[$structIdx] = $structParentKey;
                 }
@@ -1401,55 +1451,76 @@ final class Document
         $taggedRef = '';
         if ($this->tagged && $this->structElements !== []) {
             $structRootId = $writer->reserveObject();
+            // Two passes: reserve an object id per element first, so /P
+            // (parent) and /K (children) can cross-reference; then emit.
+            $elemIds = [];
+            foreach ($this->structElements as $idx => $elem) {
+                if (($pageObjectIdMap[$elem['page']] ?? null) !== null) {
+                    $elemIds[$idx] = $writer->reserveObject();
+                }
+            }
+
             $childIds = [];
-            // Track struct element IDs per page for /ParentTree.
-            $structElemsPerPage = [];
-            foreach ($this->structElements as $elem) {
+            // MCID-carrying leaves per page for /ParentTree — the page
+            // entry must be an array indexed BY MCID, so containers
+            // (mcid = null) are excluded and leaves sorted by mcid.
+            $structLeavesPerPage = [];
+            foreach ($this->structElements as $idx => $elem) {
                 $pageId = $pageObjectIdMap[$elem['page']] ?? null;
                 if ($pageId === null) {
                     continue;
                 }
+                $elemId = $elemIds[$idx];
+                $parentRef = $elem['parent'] !== null && isset($elemIds[$elem['parent']])
+                    ? $elemIds[$elem['parent']]
+                    : $structRootId;
                 $altPart = '';
                 if (! empty($elem['altText'])) {
                     $altPart = ' /Alt '.$this->pdfString((string) $elem['altText']);
                 }
                 if (! empty($elem['objr'])) {
-                    $body = sprintf(
-                        '<< /Type /StructElem /S /%s /P %d 0 R '
-                        .'/Pg %d 0 R /K << /Type /OBJR /Obj %d 0 R >>%s >>',
-                        $elem['type'], $structRootId, $pageId, $elem['objr'], $altPart,
+                    $kPart = sprintf('<< /Type /OBJR /Obj %d 0 R >>', $elem['objr']);
+                } elseif ($elem['mcid'] === null) {
+                    $kids = array_map(
+                        fn (int $childIdx) => sprintf('%d 0 R', $elemIds[$childIdx]),
+                        array_values(array_filter($elem['children'], fn (int $c) => isset($elemIds[$c]))),
                     );
+                    $kPart = '['.implode(' ', $kids).']';
                 } else {
-                    $body = sprintf(
-                        '<< /Type /StructElem /S /%s /P %d 0 R '
-                        .'/Pg %d 0 R /K %d%s >>',
-                        $elem['type'], $structRootId, $pageId, $elem['mcid'], $altPart,
-                    );
+                    $kPart = (string) $elem['mcid'];
                 }
-                $elemId = $writer->addObject($body);
-                $childIds[] = $elemId;
+                $writer->setObject($elemId, sprintf(
+                    '<< /Type /StructElem /S /%s /P %d 0 R /Pg %d 0 R /K %s%s >>',
+                    $elem['type'], $parentRef, $pageId, $kPart, $altPart,
+                ));
+                if ($elem['parent'] === null) {
+                    $childIds[] = $elemId;
+                }
 
-                $pageIdx = array_search($elem['page'], $this->pages, true);
-                if ($pageIdx !== false) {
-                    $structElemsPerPage[$pageIdx] ??= [];
-                    $structElemsPerPage[$pageIdx][] = $elemId;
+                if ($elem['mcid'] !== null && empty($elem['objr'])) {
+                    $pageIdx = array_search($elem['page'], $this->pages, true);
+                    if ($pageIdx !== false) {
+                        $structLeavesPerPage[$pageIdx] ??= [];
+                        $structLeavesPerPage[$pageIdx][$elem['mcid']] = $elemId;
+                    }
                 }
             }
             $kidsArray = '['.implode(' ', array_map(fn ($id) => "$id 0 R", $childIds)).']';
 
-            // Emit /ParentTree (number tree) — per-page arrays listing
-            // struct elements rendered on each page.
-            ksort($structElemsPerPage);
+            // Emit /ParentTree (number tree) — per-page arrays indexed by
+            // MCID, mapping each marked-content sequence to its element.
+            ksort($structLeavesPerPage);
             $parentTreeNums = [];
-            foreach ($structElemsPerPage as $pageIdx => $elemIds) {
-                $refs = implode(' ', array_map(fn ($id) => "$id 0 R", $elemIds));
+            foreach ($structLeavesPerPage as $pageIdx => $byMcid) {
+                ksort($byMcid);
+                $refs = implode(' ', array_map(fn ($id) => "$id 0 R", $byMcid));
                 $parentTreeNums[] = "$pageIdx [$refs]";
             }
             // Per-Link /StructParent entries — map key to single struct
             // elem reference (NOT an array; OBJR convention).
             $maxParentKey = count($this->pages);
             foreach ($this->structParentLinkKeys as $structIdx => $key) {
-                $elemId = $childIds[$structIdx] ?? null;
+                $elemId = $elemIds[$structIdx] ?? null;
                 if ($elemId !== null) {
                     $parentTreeNums[] = "$key $elemId 0 R";
                     if ($key + 1 > $maxParentKey) {

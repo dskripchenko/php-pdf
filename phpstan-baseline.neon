@@ -493,12 +493,6 @@ parameters:
 			path: src/Pdf/Document.php
 
 		-
-			message: '#^Offset ''objr'' does not exist on array\{type\: string, mcid\: int, page\: Dskripchenko\\PhpPdf\\Pdf\\Page, altText\?\: string\|null\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: src/Pdf/Document.php
-
-		-
 			message: '#^PHPDoc tag @param references unknown parameter\: \$unused$#'
 			identifier: parameter.notFound
 			count: 1

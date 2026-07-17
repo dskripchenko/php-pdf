@@ -3797,12 +3797,12 @@ final class Engine
 
         $ctx->cursorY -= $t->style->spaceBeforePt;
 
-        // Tagged PDF — wrap table in /Table struct.
+        // Tagged PDF — /Table is a grouping element: it owns no marked
+        // content itself (nested MCIDs are invalid); its /K lists the
+        // TR children in the structure tree.
         $taggedPdf = $ctx->pdf->isTagged();
-        $tableMcid = null;
         if ($taggedPdf) {
-            $tableMcid = $ctx->currentPage->nextMcid();
-            $ctx->currentPage->beginMarkedContent('Table', $tableMcid);
+            $ctx->pdf->beginStructContainer('Table', $ctx->currentPage);
         }
 
         $columnCount = $t->columnCount();
@@ -3841,9 +3841,8 @@ final class Engine
         $ctx->cursorY -= $t->style->spaceAfterPt;
 
         // End /Table struct.
-        if ($taggedPdf && $tableMcid !== null) {
-            $ctx->currentPage->endMarkedContent();
-            $ctx->pdf->addStructElement('Table', $tableMcid, $ctx->currentPage);
+        if ($taggedPdf) {
+            $ctx->pdf->endStructContainer();
         }
     }
 
@@ -3930,12 +3929,10 @@ final class Engine
      */
     private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false, array &$prevRowBottomByCol = []): void
     {
-        // Tagged PDF — wrap row in /TR struct.
+        // Tagged PDF — /TR is a grouping element (children: TD leaves).
         $taggedPdf = $ctx->pdf->isTagged();
-        $rowMcid = null;
         if ($taggedPdf) {
-            $rowMcid = $ctx->currentPage->nextMcid();
-            $ctx->currentPage->beginMarkedContent('TR', $rowMcid);
+            $ctx->pdf->beginStructContainer('TR', $ctx->currentPage);
         }
 
         $rowTopY = $ctx->cursorY;
@@ -4080,9 +4077,8 @@ final class Engine
         $prevRowBottomByCol = $currentRowBottoms;
 
         // End /TR struct.
-        if ($taggedPdf && $rowMcid !== null) {
-            $ctx->currentPage->endMarkedContent();
-            $ctx->pdf->addStructElement('TR', $rowMcid, $ctx->currentPage);
+        if ($taggedPdf) {
+            $ctx->pdf->endStructContainer();
         }
     }
 
@@ -4446,12 +4442,10 @@ final class Engine
         }
         $ctx->cursorY -= $list->spaceBeforePt;
 
-        // Tagged PDF — wrap list in /L struct.
+        // Tagged PDF — /L is a grouping element (children: LI leaves).
         $taggedPdf = $ctx->pdf->isTagged();
-        $listMcid = null;
         if ($taggedPdf) {
-            $listMcid = $ctx->currentPage->nextMcid();
-            $ctx->currentPage->beginMarkedContent('L', $listMcid);
+            $ctx->pdf->beginStructContainer('L', $ctx->currentPage);
         }
 
         $format = $list->effectiveFormat();
@@ -4483,9 +4477,8 @@ final class Engine
 
         $ctx->cursorY -= $list->spaceAfterPt;
 
-        if ($taggedPdf && $listMcid !== null) {
-            $ctx->currentPage->endMarkedContent();
-            $ctx->pdf->addStructElement('L', $listMcid, $ctx->currentPage);
+        if ($taggedPdf) {
+            $ctx->pdf->endStructContainer();
         }
     }
 

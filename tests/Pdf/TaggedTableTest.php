@@ -47,10 +47,11 @@ final class TaggedTableTest extends TestCase
         $ast = new AstDocument(new Section([$table]), tagged: true);
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // BDC for Table + TR + TD.
-        self::assertStringContainsString('/Table << /MCID', $bytes);
-        self::assertStringContainsString('/TR << /MCID', $bytes);
+        // Only the TD leaf owns marked content; Table/TR are grouping
+        // elements in the structure tree (nested MCIDs are invalid).
         self::assertStringContainsString('/TD << /MCID', $bytes);
+        self::assertStringNotContainsString('/Table << /MCID', $bytes);
+        self::assertStringNotContainsString('/TR << /MCID', $bytes);
     }
 
     #[Test]
@@ -72,9 +73,10 @@ final class TaggedTableTest extends TestCase
         $ast = new AstDocument(new Section([$table]), tagged: true);
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // BDC count: Table + TR + TD = 3. No /P внутри.
+        // BDC count: only the TD leaf. Table/TR group in the structure
+        // tree without marked content; no nested /P either.
         $bdcCount = substr_count($bytes, 'BDC');
-        self::assertSame(3, $bdcCount);
+        self::assertSame(1, $bdcCount);
     }
 
     #[Test]
@@ -97,10 +99,14 @@ final class TaggedTableTest extends TestCase
         $ast = new AstDocument(new Section([$table]), tagged: true);
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // StructTreeRoot /K array contains 4 references: Table + TR + 2× TD.
+        // The tree is hierarchical: root /K holds just the Table; the
+        // Table's /K holds the TR; the TR's /K holds both TD leaves.
         preg_match('@/StructTreeRoot /K \[([^\]]+)\]@', $bytes, $m);
         self::assertNotEmpty($m);
-        $refs = preg_match_all('@\d+\s+0\s+R@', $m[1]);
-        self::assertSame(4, $refs);
+        self::assertSame(1, preg_match_all('@\d+\s+0\s+R@', $m[1]));
+
+        preg_match('@/S /TR /P \d+ 0 R /Pg \d+ 0 R /K \[([^\]]+)\]@', $bytes, $tr);
+        self::assertNotEmpty($tr, 'TR must be a grouping element');
+        self::assertSame(2, preg_match_all('@\d+\s+0\s+R@', $tr[1]), 'TR /K must hold both TDs');
     }
 }
