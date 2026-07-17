@@ -1,9 +1,11 @@
 # dskripchenko/php-pdf
 
-> PDF-тулкит на чистом PHP под **лицензией MIT** — **генерация, чтение и
-> объединение** PDF. Полноценная замена `mpdf/mpdf` (GPL-2.0) и дополнения
-> FPDI (проприетарное) — никаких лицензионных трений для OEM,
-> on-premise-инсталляторов и проприетарных сборок.
+> **Один MIT-пакет вместо mpdf + FPDI — без GPL-трений и
+> [быстрее](../en/BENCHMARKS.md).** PDF-тулкит на чистом PHP: **генерация,
+> чтение и объединение** PDF. GPL-free замена mpdf для HTML→PDF и бесплатная
+> альтернатива FPDI для импорта/штамповки — включая xref-stream и
+> зашифрованные исходники. Миграция механическая:
+> [с mpdf](../en/MIGRATION-FROM-MPDF.md) · [с FPDI](../en/MIGRATION-FROM-FPDI.md).
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Conformance](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/conformance.yml?branch=main&label=PDF%2FA%20%C2%B7%20PDF%2FX%20%C2%B7%20visual&logo=github)](../en/CONFORMANCE.md)
@@ -223,7 +225,10 @@ file_put_contents('hello.pdf', $doc->toBytes());
   матрица возможностей, когда что выбирать.
 - 📊 [Бенчмарки](BENCHMARKS.md) — воспроизводимые замеры
   wall-time, памяти и размера выхода.
-
+- 🔀 [Миграция с mpdf](MIGRATION-FROM-MPDF.md) — compat-фасад и полная
+  таблица соответствий.
+- 🔀 [Миграция с FPDI](../en/MIGRATION-FROM-FPDI.md) — импорт/штамповка,
+  чтение xref-stream и зашифрованных источников.
 ---
 
 ## Производительность

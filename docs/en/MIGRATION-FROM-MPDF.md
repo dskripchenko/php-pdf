@@ -104,4 +104,4 @@ ones, not aspirational.
 
 ---
 
-Language: [English](MIGRATION-FROM-MPDF.md) — translations follow.
+Language: [English](MIGRATION-FROM-MPDF.md) · [Русский](../ru/MIGRATION-FROM-MPDF.md) · [中文](../zh/MIGRATION-FROM-MPDF.md) · [Deutsch](../de/MIGRATION-FROM-MPDF.md)

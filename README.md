@@ -7,10 +7,12 @@
 
 # dskripchenko/php-pdf
 
-> Pure-PHP, **MIT-licensed** PDF toolkit — **generate, read, and merge** PDFs.
-> A drop-in alternative for `mpdf/mpdf` (GPL-2.0) and the FPDI add-on
-> (proprietary) — no licensing friction for OEM, on-premise installers, or
-> proprietary bundles.
+> **Replaces mpdf + FPDI with a single MIT package — no GPL friction, and
+> [faster](docs/en/BENCHMARKS.md).** Pure-PHP toolkit to **generate, read,
+> and merge** PDFs: a GPL-free mpdf alternative for HTML→PDF and a free
+> FPDI alternative for import/stamp — including xref-stream and encrypted
+> sources. Migration is mechanical: [from mpdf](docs/en/MIGRATION-FROM-MPDF.md) ·
+> [from FPDI](docs/en/MIGRATION-FROM-FPDI.md).
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Conformance](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/conformance.yml?branch=main&label=PDF%2FA%20%C2%B7%20PDF%2FX%20%C2%B7%20visual&logo=github)](docs/en/CONFORMANCE.md)

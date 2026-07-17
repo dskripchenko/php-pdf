@@ -1,9 +1,11 @@
 # dskripchenko/php-pdf
 
-> Reines PHP-PDF-Toolkit unter der **MIT-Lizenz** — PDFs **erzeugen, lesen und
-> zusammenführen**. Eine sofort einsatzbereite Alternative zu `mpdf/mpdf`
-> (GPL-2.0) und zum FPDI-Add-on (proprietär) — keine lizenzrechtlichen
-> Reibungspunkte für OEM, On-Premise-Installer oder proprietäre Bundles.
+> **Ein MIT-Paket ersetzt mpdf + FPDI — ohne GPL-Reibung, und
+> [schneller](../en/BENCHMARKS.md).** Reines PHP-Toolkit zum **Erzeugen,
+> Lesen und Zusammenführen** von PDFs: GPL-freie mpdf-Alternative für
+> HTML→PDF und freie FPDI-Alternative für Import/Stempeln — inklusive
+> XRef-Stream- und verschlüsselter Quellen. Migration:
+> [von mpdf](../en/MIGRATION-FROM-MPDF.md) · [von FPDI](../en/MIGRATION-FROM-FPDI.md).
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Conformance](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/conformance.yml?branch=main&label=PDF%2FA%20%C2%B7%20PDF%2FX%20%C2%B7%20visual&logo=github)](../en/CONFORMANCE.md)
@@ -223,6 +225,10 @@ Eine vollständige Anleitung findet sich in [docs/en/USAGE.md](USAGE.md).
   Feature-Matrix, wann welche Bibliothek zu wählen ist.
 - 📊 [Benchmarks](BENCHMARKS.md) — reproduzierbare Messungen zu
   Wall-Time, Speicher und Ausgabegröße.
+- 🔀 [Migration von mpdf](MIGRATION-FROM-MPDF.md) — Compat-Fassade und
+  vollständige Mapping-Tabelle.
+- 🔀 [Migration von FPDI](../en/MIGRATION-FROM-FPDI.md) — Import/Stempeln,
+  liest XRef-Stream- und verschlüsselte Quellen.
 
 ---
 

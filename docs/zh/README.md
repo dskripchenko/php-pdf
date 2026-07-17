@@ -1,8 +1,10 @@
 # dskripchenko/php-pdf
 
-> 纯 PHP 实现、采用 **MIT 许可** 的 PDF 工具包 —— **生成、读取与合并** PDF。
-> 可作为 `mpdf/mpdf`（GPL-2.0）以及 FPDI 附加组件（专有）的直接替代品 ——
-> 用于 OEM、本地部署安装包或专有软件捆绑时不存在任何许可摩擦。
+> **一个 MIT 包同时替代 mpdf 与 FPDI —— 没有 GPL 摩擦，而且[更快](../en/BENCHMARKS.md)。**
+> 纯 PHP 实现的 PDF 工具包：**生成、读取与合并** PDF。HTML→PDF 场景下的
+> GPL-free mpdf 替代品，导入/盖印场景下的免费 FPDI 替代品 —— 包括
+> xref-stream 与加密源文件。迁移是机械化的：
+> [从 mpdf](../en/MIGRATION-FROM-MPDF.md) · [从 FPDI](../en/MIGRATION-FROM-FPDI.md)。
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
 [![Conformance](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/conformance.yml?branch=main&label=PDF%2FA%20%C2%B7%20PDF%2FX%20%C2%B7%20visual&logo=github)](../en/CONFORMANCE.md)
@@ -213,7 +215,9 @@ file_put_contents('hello.pdf', $doc->toBytes());
   特性矩阵，以及如何选型。
 - 📊 [基准测试](BENCHMARKS.md) —— 可复现的墙钟时间、内存
   与输出大小测量。
-
+- 🔀 [从 mpdf 迁移](MIGRATION-FROM-MPDF.md) —— 兼容门面与完整映射表。
+- 🔀 [从 FPDI 迁移](../en/MIGRATION-FROM-FPDI.md) —— 导入/盖印，支持
+  xref-stream 与加密源。
 ---
 
 ## 性能
