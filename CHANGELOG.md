@@ -4,6 +4,24 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] — 2026-07-17
+
+### Fixed
+- **Stream `/Length` counted the EOL delimiter before `endstream` as data.**
+  ToUnicode CMap streams (emitted for every embedded TrueType font) and
+  uncompressed content streams declared a `/Length` one byte too long,
+  violating PDF/A clause 6.1.7 (ISO 19005). Viewers tolerate it; validators
+  don't. All PDF/A flavours (1b, 1a, 2b, 2u, 3b) now validate as compliant
+  with veraPDF.
+
+### Added
+- PDF/A conformance validation in CI: reference documents with embedded
+  fonts, Cyrillic text and tables are generated per flavour and checked with
+  veraPDF on every push (`scripts/conformance/`, job `conformance-pdfa`);
+  reports are published as workflow artifacts.
+- Vendored sRGB2014 ICC profile (`resources/icc/sRGB2014.icc`) usable as an
+  `/OutputIntents` profile for `PdfAConfig` / `PdfXConfig`.
+
 ## [1.1.1] — 2026-07-06
 
 ### Fixed
