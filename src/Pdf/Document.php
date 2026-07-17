@@ -947,7 +947,7 @@ final class Document
                 ));
             } else {
                 $contentId = $writer->addObject(sprintf(
-                    "<< /Length %d >>\nstream\n%sendstream",
+                    "<< /Length %d >>\nstream\n%s\nendstream",
                     strlen($contentStreamBody),
                     $contentStreamBody,
                 ));

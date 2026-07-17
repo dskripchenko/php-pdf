@@ -830,7 +830,9 @@ final class PdfFont
 
         $body .= "endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n";
 
-        return sprintf("<< /Length %d >>\nstream\n%sendstream", strlen($body), $body);
+        // EOL before `endstream` is a delimiter, not stream data — excluded
+        // from /Length (ISO 19005 6.1.7 counts exact bytes).
+        return sprintf("<< /Length %d >>\nstream\n%s\nendstream", strlen($body), $body);
     }
 
     /**
