@@ -13,6 +13,7 @@
 > proprietary bundles.
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/tests.yml?branch=main&label=tests&logo=github)](https://github.com/dskripchenko/php-pdf/actions/workflows/tests.yml)
+[![Conformance](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/conformance.yml?branch=main&label=PDF%2FA%20%C2%B7%20PDF%2FX%20%C2%B7%20visual&logo=github)](docs/en/CONFORMANCE.md)
 [![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
 [![Total Downloads](https://img.shields.io/packagist/dt/dskripchenko/php-pdf)](https://packagist.org/packages/dskripchenko/php-pdf)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -224,6 +225,9 @@ A complete usage walkthrough is in [docs/en/USAGE.md](docs/en/USAGE.md).
   feature matrix, when to choose each.
 - 📊 [Benchmarks](docs/en/BENCHMARKS.md) — reproducible wall-time, memory,
   and output-size measurements.
+- ✅ [Conformance](docs/en/CONFORMANCE.md) — PDF/A validated with veraPDF,
+  PDF/X checked with Ghostscript, renders diffed against goldens, and
+  signatures verified with OpenSSL — on every push.
 
 ---
 
