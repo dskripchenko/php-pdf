@@ -122,9 +122,10 @@ final class Engine
         public readonly bool $compressStreams = true,
         /**
          * Font fallback chain — if the main font (defaultFont or resolved
-         * variant) lacks a glyph for some char in Run text, try the next
-         * font in the chain. All-or-nothing per Run (no per-char font
-         * switching).
+         * variant) lacks a glyph for some char, try the next font in the
+         * chain. Resolution is per whitespace-separated word: a mixed-script
+         * paragraph draws Latin words with the main font and e.g. CJK words
+         * with the fallback. All-or-nothing per word (no per-char switching).
          *
          * @var list<PdfFont>
          */
@@ -3398,11 +3399,13 @@ final class Engine
         $batchBaselineY = 0.0;
         $batchSizePt = 0.0;
         $batchStyle = null;
+        $batchFont = null; // resolved font of the words in the batch
         $batchEndX = 0.0;  // running end-X for decorations + link tracking
-        $flushBatch = function () use (&$batchText, &$batchStartX, &$batchBaselineY, &$batchSizePt, &$batchStyle, &$batchEndX, $ctx): void {
+        $flushBatch = function () use (&$batchText, &$batchStartX, &$batchBaselineY, &$batchSizePt, &$batchStyle, &$batchFont, &$batchEndX, $ctx): void {
             if ($batchText === '' || $batchStyle === null) {
                 $batchText = '';
                 $batchStyle = null;
+                $batchFont = null;
 
                 return;
             }
@@ -3415,11 +3418,19 @@ final class Engine
             }
             $batchText = '';
             $batchStyle = null;
+            $batchFont = null;
         };
 
         // Compatibility: is the current item compatible with the currently building batch?
-        $compatible = function (RunStyle $itemStyle, float $itemSizePt, float $itemBaselineY) use (&$batchStyle, &$batchSizePt, &$batchBaselineY): bool {
+        $compatible = function (RunStyle $itemStyle, float $itemSizePt, float $itemBaselineY, ?PdfFont $itemFont) use (&$batchStyle, &$batchSizePt, &$batchBaselineY, &$batchFont): bool {
             if ($batchStyle === null) {
+                return false;
+            }
+            // The RESOLVED font must match, not just the style: with a
+            // fallbackFonts chain, two equal-styled words in different
+            // scripts resolve to different fonts (e.g. Latin → default,
+            // CJK → fallback) and must not merge into one draw call.
+            if ($itemFont !== $batchFont) {
                 return false;
             }
             if (abs($itemSizePt - $batchSizePt) > 0.001) {
@@ -3500,6 +3511,7 @@ final class Engine
                 $wordBaselineY = $baselineY - $baseSizePt * 0.15;
             }
             $wordWidth = $this->measureWidth($word, $style->withSizePt($sizePt));
+            $wordFont = $this->resolveEmbeddedFont($style, $word);
 
             $wordLink = $item['link'] ?? null;
             if ($wordLink !== $linkRef) {
@@ -3512,7 +3524,7 @@ final class Engine
             }
 
             // Try to batch this word with the previous batch.
-            $canBatch = $extraPerGap === 0.0 && $compatible($style, $sizePt, $wordBaselineY);
+            $canBatch = $extraPerGap === 0.0 && $compatible($style, $sizePt, $wordBaselineY, $wordFont);
             if ($canBatch) {
                 $batchText .= $word;
                 $batchEndX = $x + $wordWidth;
@@ -3523,6 +3535,7 @@ final class Engine
                 $batchBaselineY = $wordBaselineY;
                 $batchSizePt = $sizePt;
                 $batchStyle = $style;
+                $batchFont = $wordFont;
                 $batchEndX = $x + $wordWidth;
             }
             $x += $wordWidth;
@@ -3554,7 +3567,12 @@ final class Engine
                 $spaceCanBatch = ! $nextIsImage
                     && $extraPerGap === 0.0
                     && $nextLink === $linkRef
-                    && $compatible($nextStyle, $nextSize, $nextBaselineY);
+                    && $compatible(
+                        $nextStyle,
+                        $nextSize,
+                        $nextBaselineY,
+                        $this->resolveEmbeddedFont($nextStyle, $nextItem['text'] ?? ''),
+                    );
                 if ($spaceCanBatch && $batchText !== '') {
                     // Append space to batch — next iteration appends word.
                     $batchText .= ' ';

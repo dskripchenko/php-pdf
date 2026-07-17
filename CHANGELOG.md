@@ -54,11 +54,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   DroidSansFallback (CJK) for the torture set.
 - OpenSSL CLI verification of PKCS#7 signatures in the test suite.
 
-### Known issues
-- `Engine(fallbackFonts: [...])` does not switch fonts in mixed-script
-  paragraphs: equal-style runs are merged before font resolution, so the
-  fallback never applies. Workaround: assign the script-specific font via
-  `RunStyle(fontFamily: ...)` + a `FontProvider`.
+### Fixed
+- **`Engine(fallbackFonts: [...])` never actually switched fonts.** The
+  draw-call batcher merged equal-styled words before font resolution, so
+  mixed-script paragraphs rendered `.notdef` boxes for every character the
+  main font lacked. Fonts are now resolved per word and participate in
+  batch compatibility — Latin words draw with the main font, CJK/Arabic
+  words with the first covering fallback, even inside a single `Run`.
+  Latin-only output is byte-identical to before.
 
 ## [1.1.2] — 2026-07-17
 
