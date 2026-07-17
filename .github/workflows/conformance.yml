@@ -96,6 +96,15 @@ jobs:
       - name: Fetch fonts
         run: bash scripts/fetch-fonts.sh
 
+      - name: Cache CMYK ICC profile
+        uses: actions/cache@v4
+        with:
+          path: .cache/icc
+          key: icc-cgats21-crpc1
+
+      - name: Fetch CMYK ICC profile (for PDF/X-1a)
+        run: bash scripts/fetch-icc.sh
+
       - name: Generate reference PDF/X documents
         run: php scripts/conformance/generate.php
 

@@ -34,8 +34,10 @@ from pathlib import Path
 GS = os.environ.get("GS", "gs")
 
 EXPECTED = {
-    "pdfx-3": ("PDF/X-3:2003", (1, 4)),
-    "pdfx-4": ("PDF/X-4", (1, 6)),
+    "pdfx-3": ("PDF/X-3:2003", (1, 4), None),
+    "pdfx-4": ("PDF/X-4", (1, 6), None),
+    # X-1a: CMYK output intent (/N 4) and no RGB colour operators.
+    "pdfx-1a": ("PDF/X-1a:2003", (1, 4), "cmyk"),
 }
 
 
@@ -66,7 +68,21 @@ def page_objects(data: bytes) -> list[bytes]:
     return pages
 
 
-def check_file(pdf: Path, variant: str, min_version: tuple[int, int]) -> list[str]:
+def inflate_streams(data: bytes) -> bytes:
+    """Raw bytes with FlateDecode streams replaced by their inflation."""
+    import zlib
+
+    def repl(m: re.Match) -> bytes:
+        try:
+            return b"stream\n" + zlib.decompress(m.group(1)) + b"\nendstream"
+        except zlib.error:
+            return m.group(0)
+
+    return re.sub(rb"stream\r?\n(.*?)\r?\nendstream", repl, data, flags=re.S)
+
+
+def check_file(pdf: Path, variant: str, min_version: tuple[int, int],
+               colour: str | None) -> list[str]:
     errors: list[str] = []
     data = pdf.read_bytes()
 
@@ -113,6 +129,15 @@ def check_file(pdf: Path, variant: str, min_version: tuple[int, int]) -> list[st
         if not has_trim and not has_art:
             errors.append(f"page {i + 1}: neither /TrimBox nor /ArtBox present")
 
+    if colour == "cmyk":
+        if not re.search(rb"/N 4\b", data):
+            errors.append("X-1a output intent must embed a CMYK profile (/N 4)")
+        # X-1a forbids device-RGB content: no rg/RG operators in any
+        # content stream (checked on the inflated bytes).
+        inflated = inflate_streams(data)
+        if re.search(rb"[\d.]+\s+[\d.]+\s+[\d.]+\s+(rg|RG)[\s\n]", inflated):
+            errors.append("X-1a content uses device-RGB colour operators")
+
     return errors
 
 
@@ -121,14 +146,19 @@ def main() -> int:
     rows = []
     failed = False
 
-    for name, (variant, min_version) in EXPECTED.items():
+    for name, (variant, min_version, colour) in EXPECTED.items():
         pdf = out_dir / f"{name}.pdf"
         if not pdf.is_file():
+            if name == "pdfx-1a":
+                # Generated only when the CMYK profile is cached.
+                print(f"SKIP {name}.pdf (run scripts/fetch-icc.sh)")
+                rows.append(f"| {name}.pdf | {variant} | ⚪ skipped (no CMYK profile) | — |")
+                continue
             print(f"MISSING {pdf}", file=sys.stderr)
             rows.append(f"| {name}.pdf | {variant} | ❌ missing | — |")
             failed = True
             continue
-        errors = check_file(pdf, variant, min_version)
+        errors = check_file(pdf, variant, min_version, colour)
         if errors:
             failed = True
             print(f"FAIL {name}.pdf ({variant})", file=sys.stderr)
@@ -143,9 +173,7 @@ def main() -> int:
     summary.write_text(
         "## PDF/X structural checks — Ghostscript + byte-level assertions\n\n"
         "| Document | Variant | Result | Details |\n|---|---|---|---|\n"
-        + "\n".join(rows) + "\n\n"
-        "PDF/X-1a reference is pending a redistributable CMYK output-intent "
-        "profile (X-1a forbids an RGB output intent).\n",
+        + "\n".join(rows) + "\n",
     )
     print()
     print(summary.read_text())

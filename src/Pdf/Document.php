@@ -691,6 +691,20 @@ final class Document
         return $this;
     }
 
+    /**
+     * Component count for an ICC profile's colour space (header bytes
+     * 16..19): 'RGB ' → 3, 'CMYK' → 4, 'GRAY' → 1. Used for the /N key
+     * of embedded DestOutputProfile streams.
+     */
+    private static function iccComponents(string $iccBytes): int
+    {
+        return match (substr($iccBytes, 16, 4)) {
+            'CMYK' => 4,
+            'GRAY' => 1,
+            default => 3,
+        };
+    }
+
     private function formatPdfDate(\DateTimeInterface $dt): string
     {
         // PDF date format: D:YYYYMMDDHHmmSS+TZ'mm'
@@ -1481,11 +1495,13 @@ final class Document
                 strlen($xmp),
                 $xmp,
             ));
-            // Embedded ICC profile — Flate-compressed stream with /N 3 (RGB).
+            // Embedded ICC profile — Flate-compressed stream; /N derives
+            // from the profile's colour space (RGB → 3, CMYK → 4, GRAY → 1).
             $iccBytes = $this->pdfA->iccProfileBytes();
             $iccCompressed = (string) gzcompress($iccBytes, 6);
             $iccId = $writer->addObject(sprintf(
-                "<< /N 3 /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                "<< /N %d /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                self::iccComponents($iccBytes),
                 strlen($iccCompressed),
                 $iccCompressed,
             ));
@@ -1517,7 +1533,8 @@ final class Document
             $iccBytes = $this->pdfX->iccProfileBytes();
             $iccCompressed = (string) gzcompress($iccBytes, 6);
             $iccId = $writer->addObject(sprintf(
-                "<< /N 3 /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                "<< /N %d /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
+                self::iccComponents($iccBytes),
                 strlen($iccCompressed), $iccCompressed,
             ));
             $outputIntentBody = sprintf(

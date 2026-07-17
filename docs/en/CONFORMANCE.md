@@ -13,7 +13,7 @@ summary page.
 | Check | Standard | Tool | References |
 |---|---|---|---|
 | PDF/A validation | ISO 19005 | [veraPDF](https://verapdf.org) — the industry-standard open-source validator | PDF/A-1b, 1a, 2b, 2u, 3b |
-| PDF/X structure | ISO 15930 | Ghostscript render (`-dPDFSTOPONERROR`) + byte-level assertions (OutputIntent `/GTS_PDFX`, Info keys, trailer `/ID`, TrimBox/ArtBox per page, no encryption) | PDF/X-3, X-4 |
+| PDF/X structure | ISO 15930 | Ghostscript render (`-dPDFSTOPONERROR`) + byte-level assertions (OutputIntent `/GTS_PDFX`, CMYK profile and RGB-operator ban for X-1a, Info keys, trailer `/ID`, TrimBox/ArtBox per page, no encryption) | PDF/X-1a, X-3, X-4 |
 | Visual regression | — | poppler `pdftoppm` render diffed against committed golden PNGs (ImageMagick, 5% fuzz, ≤0.5% differing pixels) | reference pages |
 | PKCS#7 signatures | — | OpenSSL CLI: `openssl cms -verify` over the exact `/ByteRange` bytes; tampering must break verification | test suite (`SignatureOpenSslTest`) |
 | Torture set | — | 11 worst-case documents (tables, Arabic/CJK, barcodes, charts, SVG, forms, signature, PDF/A, merge) rendered by poppler **and** Ghostscript; manual cross-viewer checklist in [VIEWER-MATRIX.md](VIEWER-MATRIX.md) | `examples/torture/` |
@@ -45,9 +45,9 @@ vendor/bin/phpunit tests/Pdf/SignatureOpenSslTest.php
 
 ## Known boundaries
 
-- **PDF/X-1a** has no reference document yet: X-1a mandates a CMYK output
-  intent and the repository so far vendors only an sRGB profile. X-3/X-4
-  (which permit RGB) are covered.
+- **PDF/X-1a** uses the CGATS21_CRPC1 CMYK characterization profile,
+  fetched on demand from the ICC registry (`scripts/fetch-icc.sh`) — at
+  ~3.7 MB it is cached, not vendored.
 - **PDF/X preflight depth**: full ISO 15930 preflight is the domain of
   commercial tools (callas pdfToolbox, Acrobat Preflight). The CI checks
   cover the machine-checkable structural requirements; they are necessary,

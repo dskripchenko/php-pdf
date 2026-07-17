@@ -104,12 +104,17 @@ $engine = new Engine(
     boldFont: new PdfFont(TtfFile::fromFile($fontDir.'/LiberationSans-Bold.ttf')),
 );
 
-// PDF/X-1a is deliberately absent: it mandates a CMYK output intent, and the
-// repository only vendors an sRGB profile so far. X-3 and X-4 permit RGB.
+// X-3 and X-4 permit an RGB output intent (sRGB); X-1a mandates CMYK —
+// its reference is generated only when the CGATS21 profile is cached
+// (scripts/fetch-icc.sh).
 $pdfxVariants = [
     'pdfx-3' => PdfXConfig::VARIANT_X3,
     'pdfx-4' => PdfXConfig::VARIANT_X4,
 ];
+$cmykIccPath = $root.'/.cache/icc/CGATS21_CRPC1.icc';
+if (! is_readable($cmykIccPath)) {
+    fwrite(STDERR, "note: pdfx-1a skipped — run scripts/fetch-icc.sh for the CMYK profile\n");
+}
 
 $emit = function (string $name, Document $document) use ($engine, $outDir): bool {
     $path = $outDir.'/'.$name.'.pdf';
@@ -155,6 +160,25 @@ foreach ($pdfxVariants as $name => $variant) {
             variant: $variant,
             trapped: PdfXConfig::TRAPPED_FALSE,
             title: 'php-pdf conformance reference — '.strtoupper($name),
+            author: 'dskripchenko/php-pdf',
+        ),
+    ));
+    $failures += $ok ? 0 : 1;
+}
+
+if (is_readable($cmykIccPath)) {
+    $ok = $emit('pdfx-1a', new Document(
+        $section,
+        lang: 'en',
+        pdfX: new PdfXConfig(
+            $cmykIccPath,
+            iccProfileName: 'CGATS21_CRPC1',
+            outputConditionIdentifier: 'CGATS21-2-CRPC1',
+            outputCondition: 'CGATS 21-2 Reference Print Condition 1',
+            registryName: 'http://www.color.org',
+            variant: PdfXConfig::VARIANT_X1A,
+            trapped: PdfXConfig::TRAPPED_FALSE,
+            title: 'php-pdf conformance reference — PDFX-1A',
             author: 'dskripchenko/php-pdf',
         ),
     ));
