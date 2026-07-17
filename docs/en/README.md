@@ -217,6 +217,12 @@ A complete usage walkthrough is in [USAGE.md](USAGE.md).
   feature matrix, when to choose each.
 - 📊 [Benchmarks](BENCHMARKS.md) — reproducible wall-time, memory, and
   output-size measurements.
+- ✅ [Conformance](CONFORMANCE.md) — PDF/A validated with veraPDF, PDF/X
+  checked with Ghostscript, renders diffed against goldens.
+- 🔀 [Migrating from mpdf](MIGRATION-FROM-MPDF.md) — compat facade + full
+  mapping table.
+- 🔀 [Migrating from FPDI](MIGRATION-FROM-FPDI.md) — import/merge facade;
+  reads xref-stream and encrypted sources.
 
 ---
 

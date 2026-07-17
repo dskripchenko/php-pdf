@@ -6,6 +6,16 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Migration compat facades** for the two libraries php-pdf replaces:
+  `Compat\Mpdf` (`WriteHTML`/`AddPage`/`Output` F·S·D·I, metadata
+  setters, `format`/`orientation`/margin config keys) and `Compat\Fpdi`
+  (`setSourceFile`/`importPage`/`getTemplateSize`/`AddPage`/
+  `useTemplate`/`Output` with FPDF top-left/mm coordinate conventions,
+  both `Output` argument orders, escape hatches to the native
+  `Pdf\Page`/`Pdf\Document`). Migration guides with full mapping tables:
+  `docs/en/MIGRATION-FROM-MPDF.md`, `docs/en/MIGRATION-FROM-FPDI.md`.
+
 ### Changed
 - Benchmark harness is now a first-class reproducible artifact:
   `composer bench` from a clean clone installs the pinned competitors

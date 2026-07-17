@@ -228,6 +228,11 @@ A complete usage walkthrough is in [docs/en/USAGE.md](docs/en/USAGE.md).
 - ✅ [Conformance](docs/en/CONFORMANCE.md) — PDF/A validated with veraPDF,
   PDF/X checked with Ghostscript, renders diffed against goldens, and
   signatures verified with OpenSSL — on every push.
+- 🔀 [Migrating from mpdf](docs/en/MIGRATION-FROM-MPDF.md) — compat
+  facade (`WriteHTML`/`Output` keep working) + full mapping table.
+- 🔀 [Migrating from FPDI](docs/en/MIGRATION-FROM-FPDI.md) —
+  `setSourceFile`/`importPage`/`useTemplate` facade; reads xref-stream
+  and encrypted sources without a commercial parser.
 
 ---
 
