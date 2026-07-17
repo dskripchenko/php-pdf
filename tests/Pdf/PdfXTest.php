@@ -144,6 +144,60 @@ final class PdfXTest extends TestCase
     }
 
     #[Test]
+    public function info_dict_contains_gts_pdfx_version(): void
+    {
+        self::assertStringContainsString(
+            '/GTS_PDFXVersion (PDF/X-3:2003)',
+            $this->buildPdf(),
+        );
+        self::assertStringContainsString(
+            '/GTS_PDFXVersion (PDF/X-4)',
+            $this->buildPdf(PdfXConfig::VARIANT_X4),
+        );
+    }
+
+    #[Test]
+    public function info_dict_contains_mod_date(): void
+    {
+        self::assertMatchesRegularExpression(
+            '@/ModDate \(D:\d{14}@',
+            $this->buildPdf(),
+        );
+    }
+
+    #[Test]
+    public function pages_default_to_trim_box_equal_to_media_box(): void
+    {
+        $bytes = $this->buildPdf();
+        self::assertMatchesRegularExpression(
+            '@/Type /Page /Parent \d+ 0 R /MediaBox \[0 0 (\S+) (\S+)\].*?/TrimBox \[0 0 \1 \2\]@s',
+            $bytes,
+        );
+    }
+
+    #[Test]
+    public function explicit_art_box_suppresses_default_trim_box(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->setArtBox(10, 10, 500, 700);
+        $pdf->enablePdfX(new PdfXConfig(iccProfilePath: $this->iccPath));
+        $bytes = $pdf->toBytes();
+
+        self::assertStringContainsString('/ArtBox [10 10 500 700]', $bytes);
+        self::assertStringNotContainsString('/TrimBox', $bytes);
+    }
+
+    #[Test]
+    public function non_pdfx_documents_get_no_default_trim_box(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $pdf->addPage();
+
+        self::assertStringNotContainsString('/TrimBox', $pdf->toBytes());
+    }
+
+    #[Test]
     public function pdf_structure_remains_valid(): void
     {
         $bytes = $this->buildPdf();

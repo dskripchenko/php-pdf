@@ -1189,10 +1189,16 @@ final class Document
             $rotateRef = $page->rotation() !== 0 ? ' /Rotate '.$page->rotation() : '';
             // Optional page boxes (/CropBox /BleedBox /TrimBox /ArtBox).
             $boxRef = '';
+            $trimBox = $page->trimBox();
+            // PDF/X (ISO 15930) requires a TrimBox or ArtBox on every page;
+            // default the TrimBox to the full MediaBox when neither is set.
+            if ($this->pdfX !== null && $trimBox === null && $page->artBox() === null) {
+                $trimBox = [0.0, 0.0, $page->widthPt(), $page->heightPt()];
+            }
             foreach ([
                 'CropBox' => $page->cropBox(),
                 'BleedBox' => $page->bleedBox(),
-                'TrimBox' => $page->trimBox(),
+                'TrimBox' => $trimBox,
                 'ArtBox' => $page->artBox(),
             ] as $name => $box) {
                 if ($box !== null) {
@@ -1698,8 +1704,12 @@ final class Document
         foreach ($meta as $key => $value) {
             $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
         }
-        // PDF/X requires /Trapped key in /Info.
+        // PDF/X requires /GTS_PDFXVersion, /ModDate and /Trapped in /Info.
         if ($this->pdfX !== null) {
+            $entries[] = '/GTS_PDFXVersion '.$this->pdfString($this->pdfX->variant);
+            if (! isset($this->metadata['ModDate'])) {
+                $entries[] = '/ModDate '.$this->pdfString((string) $meta['CreationDate']);
+            }
             $entries[] = '/Trapped /'.$this->pdfX->trapped;
             // Title from PdfXConfig if not set in metadata.
             if (! isset($this->metadata['Title']) && $this->pdfX->title !== '') {
