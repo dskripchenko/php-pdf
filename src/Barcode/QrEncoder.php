@@ -1290,21 +1290,22 @@ final class QrEncoder
             [0, 8], [1, 8], [2, 8], [3, 8], [4, 8], [5, 8], [7, 8], [8, 8],
             [8, 7], [8, 5], [8, 4], [8, 3], [8, 2], [8, 1], [8, 0],
         ];
-        // Bits 0..14 → tlPositions in order.
-        // bitArr[0] = highest bit (14), reverse to get low-to-high.
-        $bitsLowToHigh = array_reverse($bitArr);
+        // ISO/IEC 18004 places the MOST significant bit (14) at (8, 0) and
+        // walks down to bit 0 at (0, 8) — bitArr is already MSB-first.
+        // (Both copies used to be written LSB-first, which made the BCH
+        // codeword invalid and every external decoder reject the symbol.)
         foreach ($tlPositions as $i => [$x, $y]) {
-            $matrix[$y][$x] = $bitsLowToHigh[$i];
+            $matrix[$y][$x] = $bitArr[$i];
         }
 
         // TR + BL duplicate.
-        // Bits 0..7 → BL col 8 from bottom: (8, size-1) down to (8, size-7).
-        // Bits 8..14 → TR row 8: (size-8, 8) to (size-1, 8).
+        // Bits 14..8 → BL col 8 from bottom: (size-1, 8) up to (size-7, 8).
+        // Bits 7..0 → TR row 8: (8, size-8) to (8, size-1).
         for ($i = 0; $i < 7; $i++) {
-            $matrix[$size - 1 - $i][8] = $bitsLowToHigh[$i];
+            $matrix[$size - 1 - $i][8] = $bitArr[$i];
         }
         for ($i = 0; $i < 8; $i++) {
-            $matrix[8][$size - 8 + $i] = $bitsLowToHigh[7 + $i];
+            $matrix[8][$size - 8 + $i] = $bitArr[7 + $i];
         }
     }
 }

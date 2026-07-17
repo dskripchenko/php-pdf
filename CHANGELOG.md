@@ -4,6 +4,26 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **QR codes were unreadable by real scanners.** The 15-bit format
+  information (ECC level + mask) was written LSB-first into both matrix
+  copies — a mirrored, BCH-invalid codeword. Viewers happily rendered the
+  symbol; every decoder (zbar, ZXing, phone cameras) rejected it. Both
+  copies now follow ISO/IEC 18004 bit order; decodability is covered by a
+  pure-PHP BCH round-trip test plus an end-to-end zbar test.
+- **SVG gradients, `<style>` and `<use>` were silently ignored for
+  real-world files.** SimpleXML's xpath() cannot address the default
+  namespace, so any SVG declaring `xmlns="http://www.w3.org/2000/svg"`
+  (i.e. all of them) lost its `//linearGradient`, `//style` and `//use`
+  lookups — a gradient-filled rect rendered opaque black. The renderer
+  now strips the default-namespace declaration before parsing.
+
+### Added
+- `<rect rx="...">` rounded corners in the SVG renderer (solid fills and
+  strokes; pattern fills stay square for now).
+
 ## [1.2.0] — 2026-07-17
 
 ### Added

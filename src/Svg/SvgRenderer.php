@@ -182,6 +182,14 @@ final class SvgRenderer
 
     public static function render(string $svgXml, Page $page, float $boxX, float $boxY, float $boxW, float $boxH): void
     {
+        // SimpleXML's xpath() cannot address the default namespace without
+        // a registered prefix, which silently disabled every //style,
+        // //linearGradient, //radialGradient, //use lookup for real-world
+        // SVGs (they all declare xmlns="http://www.w3.org/2000/svg").
+        // Dropping the default-namespace declaration keeps element and
+        // attribute access uniform across namespaced and plain input.
+        $svgXml = preg_replace('@\sxmlns="http://www\.w3\.org/2000/svg"@', '', $svgXml) ?? $svgXml;
+
         // Suppress libxml warnings.
         $prev = libxml_use_internal_errors(true);
         $xml = simplexml_load_string($svgXml);
@@ -902,14 +910,23 @@ final class SvgRenderer
         $ph = $h * $scaleY;
         $py = $ty($y + $h);
 
-        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $px, $py, $pw, $ph, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX, $patternName): void {
+        // Rounded corners: rx (ry falls back to rx, as in SVG). Pattern
+        // fills stay square — clipping a shading to a rounded path is
+        // future work.
+        $radius = max((float) ($el['rx'] ?? 0), (float) ($el['ry'] ?? 0)) * min($scaleX, $scaleY);
+
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $px, $py, $pw, $ph, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX, $patternName, $radius): void {
             if ($patternName !== null) {
                 $page->fillRectWithPattern($px, $py, $pw, $ph, $patternName);
             } elseif ($hasFill) {
-                $page->fillRect($px, $py, $pw, $ph, $fr, $fg, $fb);
+                $radius > 0
+                    ? $page->fillRoundedRect($px, $py, $pw, $ph, $radius, $fr, $fg, $fb)
+                    : $page->fillRect($px, $py, $pw, $ph, $fr, $fg, $fb);
             }
             if ($hasStroke) {
-                $page->strokeRect($px, $py, $pw, $ph, $sw * $scaleX, $sr, $sg, $sb);
+                $radius > 0
+                    ? $page->strokeRoundedRect($px, $py, $pw, $ph, $radius, $sw * $scaleX, $sr, $sg, $sb)
+                    : $page->strokeRect($px, $py, $pw, $ph, $sw * $scaleX, $sr, $sg, $sb);
             }
         });
     }
