@@ -24,6 +24,7 @@ use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Pdf\PdfAConfig;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
+use Dskripchenko\PhpPdf\Pdf\PdfXConfig;
 use Dskripchenko\PhpPdf\Section;
 use Dskripchenko\PhpPdf\Style\RunStyle;
 
@@ -103,9 +104,30 @@ $engine = new Engine(
     boldFont: new PdfFont(TtfFile::fromFile($fontDir.'/LiberationSans-Bold.ttf')),
 );
 
+// PDF/X-1a is deliberately absent: it mandates a CMYK output intent, and the
+// repository only vendors an sRGB profile so far. X-3 and X-4 permit RGB.
+$pdfxVariants = [
+    'pdfx-3' => PdfXConfig::VARIANT_X3,
+    'pdfx-4' => PdfXConfig::VARIANT_X4,
+];
+
+$emit = function (string $name, Document $document) use ($engine, $outDir): bool {
+    $path = $outDir.'/'.$name.'.pdf';
+    try {
+        file_put_contents($path, $document->toBytes($engine));
+        echo "generated $path\n";
+
+        return true;
+    } catch (\Throwable $e) {
+        fwrite(STDERR, "FAILED $name: {$e->getMessage()}\n");
+
+        return false;
+    }
+};
+
 $failures = 0;
 foreach ($flavours as $name => [$part, $conformance]) {
-    $document = new Document(
+    $ok = $emit($name, new Document(
         $section,
         lang: 'en',
         pdfA: new PdfAConfig(
@@ -117,16 +139,26 @@ foreach ($flavours as $name => [$part, $conformance]) {
             part: $part,
             conformance: $conformance,
         ),
-    );
+    ));
+    $failures += $ok ? 0 : 1;
+}
 
-    $path = $outDir.'/'.$name.'.pdf';
-    try {
-        file_put_contents($path, $document->toBytes($engine));
-        echo "generated $path\n";
-    } catch (\Throwable $e) {
-        fwrite(STDERR, "FAILED $name: {$e->getMessage()}\n");
-        $failures++;
-    }
+foreach ($pdfxVariants as $name => $variant) {
+    $ok = $emit($name, new Document(
+        $section,
+        lang: 'en',
+        pdfX: new PdfXConfig(
+            $iccPath,
+            iccProfileName: 'sRGB2014',
+            outputConditionIdentifier: 'sRGB IEC61966-2.1',
+            outputCondition: 'sRGB colour space — reference display condition',
+            variant: $variant,
+            trapped: PdfXConfig::TRAPPED_FALSE,
+            title: 'php-pdf conformance reference — '.strtoupper($name),
+            author: 'dskripchenko/php-pdf',
+        ),
+    ));
+    $failures += $ok ? 0 : 1;
 }
 
 exit($failures > 0 ? 1 : 0);

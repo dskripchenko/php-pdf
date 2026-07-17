@@ -116,6 +116,55 @@ jobs:
           name: conformance-pdfa
           path: build/conformance/
 
+  conformance-pdfx:
+    runs-on: ubuntu-latest
+    name: PDF/X conformance (Ghostscript)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, zlib, openssl, gd
+          coverage: none
+
+      - name: Install Ghostscript
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ghostscript
+
+      - name: Install dependencies (locked)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Cache fonts
+        uses: actions/cache@v4
+        with:
+          path: .cache/fonts
+          key: liberation-fonts-2.1.5
+
+      - name: Fetch fonts
+        run: bash scripts/fetch-fonts.sh
+
+      - name: Generate reference PDF/X documents
+        run: php scripts/conformance/generate.php
+
+      - name: Validate PDF/X structure
+        run: python3 scripts/conformance/pdfx-check.py
+
+      - name: Publish job summary
+        if: always()
+        run: cat build/conformance/summary-pdfx.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload conformance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-pdfx
+          path: |
+            build/conformance/pdfx-*.pdf
+            build/conformance/summary-pdfx.md
+
   static-analysis:
     runs-on: ubuntu-latest
     name: PHPStan (level 6)
