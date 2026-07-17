@@ -165,6 +165,53 @@ jobs:
             build/conformance/pdfx-*.pdf
             build/conformance/summary-pdfx.md
 
+  visual-regression:
+    runs-on: ubuntu-latest
+    name: Visual regression (poppler)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, zlib, openssl, gd
+          coverage: none
+
+      - name: Install poppler and ImageMagick
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils imagemagick
+
+      - name: Install dependencies (locked)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Cache fonts
+        uses: actions/cache@v4
+        with:
+          path: .cache/fonts
+          key: liberation-fonts-2.1.5
+
+      - name: Fetch fonts
+        run: bash scripts/fetch-fonts.sh
+
+      - name: Generate reference documents
+        run: php scripts/conformance/generate.php
+
+      - name: Compare renders against goldens
+        run: bash scripts/conformance/visual-check.sh
+
+      - name: Publish job summary
+        if: always()
+        run: cat build/conformance/summary-visual.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload renders and diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression
+          path: build/visual/
+
   static-analysis:
     runs-on: ubuntu-latest
     name: PHPStan (level 6)
