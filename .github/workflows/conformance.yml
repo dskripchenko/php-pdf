@@ -151,9 +151,17 @@ jobs:
       - name: Render smoke (poppler + Ghostscript)
         run: bash scripts/conformance/torture-smoke.sh
 
+      - name: Run cookbook examples
+        run: for f in examples/0*.php; do php "$f"; done
+
+      - name: Render smoke for cookbook samples
+        run: bash scripts/conformance/torture-smoke.sh samples summary-samples.md
+
       - name: Publish job summary
         if: always()
-        run: cat build/conformance/summary-torture.md >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          cat build/conformance/summary-torture.md >> "$GITHUB_STEP_SUMMARY"
+          cat build/conformance/summary-samples.md >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload torture set and renders
         if: always()

@@ -2,8 +2,10 @@
 # Smoke-check the torture set: every document must parse and render cleanly
 # in two independent engines (poppler pdftoppm + Ghostscript).
 #
-# Usage: scripts/conformance/torture-smoke.sh [dir]
-#   dir — directory with generated torture PDFs (default examples/torture/out)
+# Usage: scripts/conformance/torture-smoke.sh [dir] [summary-name]
+#   dir — directory with PDFs to check (default examples/torture/out)
+#   summary-name — summary file name in build/conformance
+#                  (default summary-torture.md)
 #
 # Env: PDFTOPPM, GS — binary overrides.
 #
@@ -21,9 +23,9 @@ GS="${GS:-gs}"
 
 mkdir -p "$OUT" "$RENDER"
 
-summary="$OUT/summary-torture.md"
+summary="$OUT/${2:-summary-torture.md}"
 {
-    echo "## Torture set — render smoke (poppler + Ghostscript)"
+    echo "## Render smoke: $(basename "$DIR") (poppler + Ghostscript)"
     echo
     echo "| Document | poppler | Ghostscript |"
     echo "|---|---|---|"

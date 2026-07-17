@@ -234,6 +234,26 @@ A complete usage walkthrough is in [docs/en/USAGE.md](docs/en/USAGE.md).
   `setSourceFile`/`importPage`/`useTemplate` facade; reads xref-stream
   and encrypted sources without a commercial parser.
 
+### Examples
+
+Runnable scripts in [`examples/`](examples/), outputs committed to
+[`samples/`](samples/) — every one is render-checked in CI:
+
+| Run | Output | Shows |
+|---|---|---|
+| `php examples/01-html-to-pdf.php` | [PDF](samples/01-html-to-pdf.pdf) | HTML/CSS subset → PDF |
+| `php examples/02-builder.php` | [PDF](samples/02-builder.pdf) | fluent builder, tables |
+| `php examples/03-barcodes.php` | [PDF](samples/03-barcodes.pdf) | QR, Code 128, EAN-13, DataMatrix |
+| `php examples/04-charts.php` | [PDF](samples/04-charts.pdf) | vector pie/bar/line charts |
+| `php examples/05-forms.php` | [PDF](samples/05-forms.pdf) | fillable AcroForm fields |
+| `php examples/06-signature.php` | [PDF](samples/06-signature.pdf) | PKCS#7 digital signature |
+| `php examples/07-pdfa.php` | [PDF](samples/07-pdfa.pdf) | PDF/A-2u (veraPDF-clean); needs `scripts/fetch-fonts.sh` |
+| `php examples/08-merge.php` | [PDF](samples/08-merge.pdf) | append + reorder existing PDFs |
+| `php examples/09-stamp.php` | [PDF](samples/09-stamp.pdf) | watermark/letterhead stamping |
+
+The [torture set](examples/torture/) exercises the hard paths (Arabic,
+CJK, rectangular DataMatrix, …) — see [VIEWER-MATRIX](docs/en/VIEWER-MATRIX.md).
+
 ---
 
 ## Performance
