@@ -2495,7 +2495,7 @@ final class Engine
     {
         $enc = new \Dskripchenko\PhpPdf\Barcode\DataMatrixEncoder($bc->value);
         $this->render2DMatrix(
-            $enc->modules(), $enc->size(), $bc, $ctx,
+            $enc->modules(), $enc->symbolWidth(), $bc, $ctx,
             quietZone: 1,
         );
     }
@@ -2600,13 +2600,20 @@ final class Engine
      */
     private function render2DMatrix(array $matrix, int $matrixSize, Barcode $bc, LayoutContext $ctx, int $quietZone): void
     {
-        $gridSize = $matrixSize + 2 * $quietZone;
+        // $matrixSize is the column count; the row count comes from the
+        // matrix itself — DataMatrix ECC 200 has rectangular symbols
+        // (e.g. 12×26), so the symbol must not be assumed square.
+        $cols = $matrixSize;
+        $rows = count($matrix);
+        $gridCols = $cols + 2 * $quietZone;
+        $gridRows = $rows + 2 * $quietZone;
         $totalSizePt = $bc->widthPt ?? 80.0;
         $totalSizePt = min($totalSizePt, $ctx->contentWidth);
-        $moduleSize = $totalSizePt / $gridSize;
+        $moduleSize = $totalSizePt / $gridCols;
+        $symbolHeightPt = $gridRows * $moduleSize;
 
         $captionHeight = $bc->showText ? $bc->textSizePt + 2.0 : 0;
-        $totalHeight = $totalSizePt + $captionHeight;
+        $totalHeight = $symbolHeightPt + $captionHeight;
         $this->ensureRoomFor($ctx, $totalHeight);
 
         $blockX = match ($bc->alignment) {
@@ -2617,10 +2624,10 @@ final class Engine
 
         $yTop = $ctx->cursorY;
         $matrixOffset = $quietZone * $moduleSize;
-        for ($row = 0; $row < $matrixSize; $row++) {
+        for ($row = 0; $row < $rows; $row++) {
             $rowYBottom = $yTop - $matrixOffset - ($row + 1) * $moduleSize;
             $runStart = null;
-            for ($col = 0; $col < $matrixSize; $col++) {
+            for ($col = 0; $col < $cols; $col++) {
                 if ($matrix[$row][$col]) {
                     if ($runStart === null) {
                         $runStart = $col;
@@ -2635,7 +2642,7 @@ final class Engine
                 }
             }
             if ($runStart !== null) {
-                $w = ($matrixSize - $runStart) * $moduleSize;
+                $w = ($cols - $runStart) * $moduleSize;
                 $ctx->currentPage->fillRect(
                     $blockX + $matrixOffset + $runStart * $moduleSize,
                     $rowYBottom, $w, $moduleSize, 0, 0, 0,
@@ -2644,7 +2651,7 @@ final class Engine
         }
 
         if ($bc->showText) {
-            $captionY = $yTop - $totalSizePt - $bc->textSizePt - 1.0;
+            $captionY = $yTop - $symbolHeightPt - $bc->textSizePt - 1.0;
             $captionWidth = $this->defaultFont !== null
                 ? (new TextMeasurer($this->defaultFont, $bc->textSizePt))->widthPt($bc->value)
                 : mb_strlen($bc->value, 'UTF-8') * $bc->textSizePt * 0.5;

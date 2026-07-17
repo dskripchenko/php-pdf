@@ -638,16 +638,31 @@ final class TtfFile
         if ($subtables === []) {
             throw new \RuntimeException('No usable cmap subtable found in TTF.');
         }
-        ksort($subtables); // lowest = highest priority
-        $chosenOffset = reset($subtables);
-
-        $this->reader->seek($chosenOffset);
-        $format = $this->reader->readUInt16();
-        $this->cmap = match ($format) {
-            4 => $this->parseCmapFormat4($chosenOffset),
-            12 => $this->parseCmapFormat12($chosenOffset),
-            default => throw new \RuntimeException("Unsupported cmap format $format"),
-        };
+        // Merge all usable subtables, lowest priority first, so the
+        // highest-priority mapping wins per codepoint. A format 12 subtable
+        // is not guaranteed to be a superset of the format 4 one: e.g.
+        // DroidSansFallback maps Latin only in format 4 and CJK only in
+        // format 12 — picking a single subtable loses half the font.
+        krsort($subtables);
+        $merged = [];
+        $parsedAny = false;
+        foreach ($subtables as $offset) {
+            $this->reader->seek($offset);
+            $format = $this->reader->readUInt16();
+            $parsed = match ($format) {
+                4 => $this->parseCmapFormat4($offset),
+                12 => $this->parseCmapFormat12($offset),
+                default => null, // ignore other formats if a usable one exists
+            };
+            if ($parsed !== null) {
+                $merged = $parsed + $merged;
+                $parsedAny = true;
+            }
+        }
+        if (! $parsedAny) {
+            throw new \RuntimeException('No supported cmap subtable format found in TTF.');
+        }
+        $this->cmap = $merged;
     }
 
     private function cmapSubtablePriority(int $platformId, int $encodingId): ?int
