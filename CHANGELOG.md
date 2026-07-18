@@ -4,7 +4,7 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.2] — 2026-07-18
 
 ### Fixed
 - **Aztec: letter case inverted after a shifted uppercase character.**
