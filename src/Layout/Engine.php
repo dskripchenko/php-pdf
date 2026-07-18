@@ -2119,46 +2119,6 @@ final class Engine
         }
     }
 
-    /**
-     * Renders diagonal watermark on the current page. Centered, 72pt size,
-     * angle ≈ -45° (down-right), light-gray (0.88 0.88 0.88).
-     *
-     * Text positioned relative to page center; rotation matrix rotates
-     * around that point.
-     */
-    private function renderWatermark(string $text, ?float $opacity, LayoutContext $ctx): void
-    {
-        $setup = $ctx->pageSetup;
-        [$pageWidth, $pageHeight] = $setup->dimensions();
-
-        $sizePt = 72;
-        // Estimate text width — for centering positioning.
-        $textWidth = $this->defaultFont !== null
-            ? (new TextMeasurer($this->defaultFont, $sizePt))->widthPt($text)
-            : mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
-
-        // We want the center of the rotated text to land at page center.
-        // The Tm matrix applies to origin (0,0) → moves it to (x,y).
-        // Since text is drawn from baseline left, for centering:
-        // start position = pageCenter - rotatedHalfWidth × cosθ + ...
-        // For simplicity: place baseline left at an offset from center.
-        $angleRad = -M_PI / 4; // -45°
-        $halfWidth = $textWidth / 2;
-        $cx = $pageWidth / 2 - $halfWidth * cos($angleRad);
-        $cy = $pageHeight / 2 - $halfWidth * sin($angleRad) - $sizePt * 0.3;
-
-        if ($this->defaultFont !== null) {
-            $ctx->currentPage->drawWatermarkEmbedded(
-                $text, $cx, $cy, $this->defaultFont, $sizePt, $angleRad,
-                opacity: $opacity,
-            );
-        } else {
-            $ctx->currentPage->drawWatermark(
-                $text, $cx, $cy, $this->fallbackStandard, $sizePt, $angleRad,
-                opacity: $opacity,
-            );
-        }
-    }
 
     /**
      * Draw both image and text watermarks on a specific Page.
@@ -2232,36 +2192,6 @@ final class Engine
         }
     }
 
-    /**
-     * Image watermark — centered on the page, scaled to $widthPt
-     * preserving aspect ratio. null widthPt → 50% page width.
-     *
-     * Transparency is not applied automatically: pass a pre-prepared PNG
-     * with an alpha channel or a light JPEG, otherwise the watermark will
-     * cover the content.
-     */
-    private function renderWatermarkImage(
-        \Dskripchenko\PhpPdf\Image\PdfImage $image,
-        ?float $widthPt,
-        ?float $opacity,
-        LayoutContext $ctx,
-    ): void {
-        $setup = $ctx->pageSetup;
-        [$pageWidth, $pageHeight] = $setup->dimensions();
-
-        $w = $widthPt ?? $pageWidth * 0.5;
-        $aspect = $image->heightPx > 0 ? $image->widthPx / $image->heightPx : 1.0;
-        $h = $aspect > 0 ? $w / $aspect : $w;
-
-        $x = ($pageWidth - $w) / 2;
-        $y = ($pageHeight - $h) / 2;
-
-        if ($opacity !== null && $opacity < 1.0) {
-            $ctx->currentPage->drawImageWithOpacity($image, $x, $y, $w, $h, $opacity);
-        } else {
-            $ctx->currentPage->drawImage($image, $x, $y, $w, $h);
-        }
-    }
 
     /**
      * Physical 1-based index of the current page (for mirrored margins +
@@ -3732,11 +3662,6 @@ final class Engine
         if ($ctx->cursorY - $heightPt < $ctx->bottomY) {
             $this->forcePageBreak($ctx);
         }
-    }
-
-    private function effectiveLineHeightMult(Paragraph $p): float
-    {
-        return $p->style->lineHeightMult ?? $this->defaultLineHeightMult;
     }
 
     /**

@@ -1,82 +1,10 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_DIGIT is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_LOWER is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_MIXED is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_PUNCT is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:LATCH_UPPER is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:SHIFT_BINARY is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:SHIFT_PUNCT is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:SHIFT_UPPER_FROM_LOWER is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
 			message: '#^Strict comparison using \=\=\= between 3 and 3 will always evaluate to true\.$#'
 			identifier: identical.alwaysTrue
 			count: 1
 			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_A_FROM_C is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/Code128Encoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_C_FROM_B is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/Code128Encoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_SHIFT_AB is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/Code128Encoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:CODE_SHIFT_BA is unused\.$#'
-			identifier: classConstant.unused
-			count: 1
-			path: src/Barcode/Code128Encoder.php
 
 		-
 			message: '#^Match expression does not handle remaining value\: string$#'
@@ -87,12 +15,6 @@ parameters:
 		-
 			message: '#^PHPDoc tag @var for constant Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:GS1_AI_LENGTHS with type array\<string, int\|null\> is not subtype of value array\{''00''\: 18, ''01''\: 14, ''02''\: 14, 11\: 6, 12\: 6, 13\: 6, 15\: 6, 16\: 6, \.\.\.\}\.$#'
 			identifier: classConstant.phpDocType
-			count: 1
-			path: src/Barcode/Code128Encoder.php
-
-		-
-			message: '#^Property Dskripchenko\\PhpPdf\\Barcode\\Code128Encoder\:\:\$gs1Mode is never read, only written\.$#'
-			identifier: property.onlyWritten
 			count: 1
 			path: src/Barcode/Code128Encoder.php
 
@@ -117,12 +39,6 @@ parameters:
 		-
 			message: '#^Comparison operation "\>\=" between int\<91, 96\>\|int\<123, 255\> and 91 is always true\.$#'
 			identifier: greaterOrEqual.alwaysTrue
-			count: 1
-			path: src/Barcode/DataMatrixEncoder.php
-
-		-
-			message: '#^Constant Dskripchenko\\PhpPdf\\Barcode\\DataMatrixEncoder\:\:FACTOR_SETS is unused\.$#'
-			identifier: classConstant.unused
 			count: 1
 			path: src/Barcode/DataMatrixEncoder.php
 
@@ -161,12 +77,6 @@ parameters:
 			identifier: offsetAccess.notFound
 			count: 1
 			path: src/Font/Ttf/CompositeGlyph.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\GsubReader\:\:findLigaLookupIndices\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Font/Ttf/GsubReader.php
 
 		-
 			message: '#^Parameter &\$used by\-ref type of method Dskripchenko\\PhpPdf\\Font\\Ttf\\TtfSubsetter\:\:addCompositeComponents\(\) expects array\<int, bool\>, array\<bool\> given\.$#'
@@ -236,24 +146,6 @@ parameters:
 
 		-
 			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:drawTextDecorations\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Layout/Engine.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:effectiveLineHeightMult\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Layout/Engine.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderWatermark\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Layout/Engine.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderWatermarkImage\(\) is unused\.$#'
 			identifier: method.unused
 			count: 1
 			path: src/Layout/Engine.php
@@ -349,28 +241,10 @@ parameters:
 			path: src/Math/MathRenderer.php
 
 		-
-			message: '#^Static method Dskripchenko\\PhpPdf\\Math\\MathRenderer\:\:splitMatrix\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Math/MathRenderer.php
-
-		-
 			message: '#^Strict comparison using \!\=\= between '''' and '''' will always evaluate to false\.$#'
 			identifier: notIdentical.alwaysFalse
 			count: 1
 			path: src/Math/MathRenderer.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between mixed~'''' and '''' will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: src/Math/MathRenderer.php
-
-		-
-			message: '#^Property Dskripchenko\\PhpPdf\\Pdf\\ContentStream\:\:\$lastWasTextColorQ is never read, only written\.$#'
-			identifier: property.onlyWritten
-			count: 1
-			path: src/Pdf/ContentStream.php
 
 		-
 			message: '#^Match expression does not handle remaining value\: mixed$#'
@@ -393,12 +267,6 @@ parameters:
 		-
 			message: '#^Offset ''color'' does not exist on array\{level\: int, title\: string, page\: Dskripchenko\\PhpPdf\\Pdf\\Page, x\: float, y\: float\}\.$#'
 			identifier: offsetAccess.notFound
-			count: 1
-			path: src/Pdf/Document.php
-
-		-
-			message: '#^PHPDoc tag @param references unknown parameter\: \$unused$#'
-			identifier: parameter.notFound
 			count: 1
 			path: src/Pdf/Document.php
 
@@ -519,17 +387,5 @@ parameters:
 		-
 			message: '#^Parameter &\$types by\-ref type of method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyN\(\) expects list\<string\>, non\-empty\-array\<int\<0, max\>, string\> given\.$#'
 			identifier: parameterByRef.type
-			count: 1
-			path: src/Text/BidiAlgorithm.php
-
-		-
-			message: '#^Static method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyI\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Text/BidiAlgorithm.php
-
-		-
-			message: '#^Static method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:filterFormattingChars\(\) is unused\.$#'
-			identifier: method.unused
 			count: 1
 			path: src/Text/BidiAlgorithm.php

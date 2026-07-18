@@ -75,7 +75,6 @@ final class DataMatrixEncoder
     /**
      * RS factor polynomials per error correction codeword count.
      */
-    private const FACTOR_SETS = [5, 7, 10, 11, 12, 14, 18, 20, 24, 28, 36, 42, 48, 56, 62, 68];
 
     private const FACTORS = [
         5  => [228, 48, 15, 111, 62],

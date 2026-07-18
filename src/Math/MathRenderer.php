@@ -395,59 +395,6 @@ final class MathRenderer
         return $rows;
     }
 
-    /**
-     * @param  list<array<string, mixed>>  $tokens
-     * @return list<list<list<array<string, mixed>>>>
-     */
-    private static function splitMatrix(array $tokens): array
-    {
-        $rows = [];
-        $currentRow = [];
-        $currentCell = [];
-        foreach ($tokens as $tok) {
-            if ($tok['type'] === 'text') {
-                // Process text — may contain '&' and '\\\\' separators.
-                $remaining = $tok['value'];
-                while ($remaining !== '') {
-                    $pos1 = strpos($remaining, '&');
-                    $pos2 = strpos($remaining, "\\\\"); // '\\' in input encoded as single backslash here.
-                    $cuts = array_filter([$pos1, $pos2], fn ($p) => $p !== false);
-                    if ($cuts === []) {
-                        if ($remaining !== '') {
-                            $currentCell[] = ['type' => 'text', 'value' => $remaining];
-                        }
-                        break;
-                    }
-                    $cut = min($cuts);
-                    if ($cut > 0) {
-                        $currentCell[] = ['type' => 'text', 'value' => substr($remaining, 0, $cut)];
-                    }
-                    if ($remaining[$cut] === '&') {
-                        $currentRow[] = $currentCell;
-                        $currentCell = [];
-                        $remaining = substr($remaining, $cut + 1);
-                    } else {
-                        // '\\\\' row separator (2 chars).
-                        $currentRow[] = $currentCell;
-                        $currentCell = [];
-                        $rows[] = $currentRow;
-                        $currentRow = [];
-                        $remaining = substr($remaining, $cut + 2);
-                    }
-                }
-            } else {
-                $currentCell[] = $tok;
-            }
-        }
-        if ($currentCell !== []) {
-            $currentRow[] = $currentCell;
-        }
-        if ($currentRow !== []) {
-            $rows[] = $currentRow;
-        }
-
-        return $rows;
-    }
 
     /**
      * Measure total horizontal width.

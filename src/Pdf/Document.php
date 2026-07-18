@@ -79,7 +79,6 @@ final class Document
      * use larger chunks to keep root /Kids ≤ FANOUT.
      *
      * @param  list<int>  $pageIds
-     * @param  resource|null  $unused  unused (kept for signature consistency)
      * @return array{parentOf: list<int>, rootKids: list<int>, intermediates: list<array{id: int, kids: list<int>, count: int}>}
      */
     private function buildPageTree(array $pageIds, int $rootId, Writer $writer): array

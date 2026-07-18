@@ -30,14 +30,6 @@ final class AztecEncoder
     // ---------------- Character mode tables ----------------
 
     /** Special action codes (returned from encode functions as negative ints). */
-    private const SHIFT_PUNCT = -1;     // P/S
-    private const SHIFT_BINARY = -2;    // B/S — followed by length + bytes
-    private const SHIFT_UPPER_FROM_LOWER = -3; // U/S in Lower mode
-    private const LATCH_UPPER = -10;
-    private const LATCH_LOWER = -11;
-    private const LATCH_MIXED = -12;
-    private const LATCH_PUNCT = -13;
-    private const LATCH_DIGIT = -14;
 
     /** Mode IDs. */
     private const MODE_UPPER = 0;

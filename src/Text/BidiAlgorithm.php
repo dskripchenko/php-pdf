@@ -121,28 +121,6 @@ final class BidiAlgorithm
         return self::applyL2($cps, $levels);
     }
 
-    /**
-     * X9 filter. Bidi formatting characters don't appear in
-     * rendered output (UAX 9 §3.3, after L1).
-     *
-     * @param  list<int>  $cps
-     * @return list<int>
-     */
-    private static function filterFormattingChars(array $cps): array
-    {
-        $out = [];
-        foreach ($cps as $cp) {
-            if ($cp >= 0x202A && $cp <= 0x202E) {
-                continue; // LRE/RLE/PDF/LRO/RLO
-            }
-            if ($cp >= 0x2066 && $cp <= 0x2069) {
-                continue; // LRI/RLI/FSI/PDI
-            }
-            $out[] = $cp;
-        }
-
-        return $out;
-    }
 
     /**
      * L3 mirroring. Applied BEFORE L2 reorder while levels are still
@@ -686,41 +664,6 @@ final class BidiAlgorithm
         }
     }
 
-    /**
-     * I rules — implicit level assignment per UAX 9 §3.3.5.
-     *
-     * Even paragraph level (LTR=0):
-     *  L → same level, R → +1, AN/EN → +2
-     * Odd paragraph level (RTL=1):
-     *  R → same, L/AN/EN → +1
-     *
-     * @param  list<string>  $types
-     * @return list<int>  per-char level
-     */
-    private static function applyI(array $types, int $paragraphLevel): array
-    {
-        $levels = [];
-        foreach ($types as $t) {
-            if (($paragraphLevel & 1) === 0) {
-                // Even (LTR paragraph).
-                $levels[] = match ($t) {
-                    self::L => $paragraphLevel,
-                    self::R => $paragraphLevel + 1,
-                    self::AN, self::EN => $paragraphLevel + 2,
-                    default => $paragraphLevel,
-                };
-            } else {
-                // Odd (RTL paragraph).
-                $levels[] = match ($t) {
-                    self::R => $paragraphLevel,
-                    self::L, self::AN, self::EN => $paragraphLevel + 1,
-                    default => $paragraphLevel,
-                };
-            }
-        }
-
-        return $levels;
-    }
 
     /**
      * L2 — reverse contiguous spans of chars at level ≥ k for k from

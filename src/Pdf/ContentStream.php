@@ -30,7 +30,6 @@ final class ContentStream
     private ?float $lastFillR = null;
     private ?float $lastFillG = null;
     private ?float $lastFillB = null;
-    private bool $lastWasTextColorQ = false; // true if the last emit was a q/rg wrap
 
     /**
      * Text operation. Coordinates in pt from origin (bottom-left).

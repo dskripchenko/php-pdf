@@ -71,26 +71,6 @@ final class GsubReader
         return ['liga' => $liga, 'single' => $single];
     }
 
-    /**
-     * FeatureList:
-     *   uint16 featureCount
-     *   FeatureRecord featureRecords[featureCount]:
-     *     Tag (4 bytes ASCII) featureTag
-     *     Offset16 featureOffset (from FeatureList start)
-     *
-     * FeatureTable:
-     *   uint16 featureParamsOffset (we do not use)
-     *   uint16 lookupIndexCount
-     *   uint16 lookupListIndices[lookupIndexCount]
-     *
-     * Returns the set of lookup indices for all 'liga' features.
-     *
-     * @return array<int, true>
-     */
-    private function findLigaLookupIndices(string $bytes, int $featureListOffset): array
-    {
-        return $this->findFeatureLookupIndices($bytes, $featureListOffset, 'liga');
-    }
 
     /**
      * Generic feature-tag lookup finder.

@@ -4,6 +4,22 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Aztec: letter case inverted after a shifted uppercase character.**
+  From Lower mode, code 28 is U/S — an upper shift valid for one
+  character — but the encoder latched its mode variable, desynchronizing
+  from the decoder ("Aztec-Test" scanned as "Aztec-TEst"). Found while
+  reviewing findings frozen in the PHPStan baseline; verified with ZXing.
+
+### Changed
+- PHPStan baseline halved (129 → 65 entries): every missing iterable
+  value type got a precise annotation, dangling docblocks re-attached,
+  and dead code removed (legacy watermark renderers, superseded bidi
+  helpers, unused mode-switch constants). Remaining entries are reviewed
+  false positives, documented as such.
+
 ## [1.2.1] — 2026-07-18
 
 ### Fixed

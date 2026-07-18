@@ -64,13 +64,10 @@ final class Code128Encoder
     private const STOP = 106;
 
     // Code-switch / shift codewords. Different code values per set.
-    private const CODE_SHIFT_BA = 98;   // in Set A: shift to Set B (one char)
 
-    private const CODE_SHIFT_AB = 98;   // in Set B: shift to Set A (one char)
 
     private const CODE_C_FROM_A = 99;   // in Set A: CODE_C permanent switch
 
-    private const CODE_C_FROM_B = 99;   // in Set B: CODE_C permanent switch
 
     private const CODE_B_FROM_A = 100;  // in Set A: CODE_B
 
@@ -78,7 +75,6 @@ final class Code128Encoder
 
     private const CODE_A_FROM_B = 101;  // in Set B: CODE_A
 
-    private const CODE_A_FROM_C = 101;  // in Set C: CODE_A
 
     private const FNC1 = 102;           // Function 1 (GS1-128 separator, all sets)
 
@@ -103,7 +99,6 @@ final class Code128Encoder
         // All other AIs default to variable (null lookup).
     ];
 
-    private bool $gs1Mode = false;
 
     /**
      * Resulting modules: each entry true = black, false = white.
@@ -142,7 +137,6 @@ final class Code128Encoder
         if ($data === '') {
             throw new \InvalidArgumentException('Code 128 input must be non-empty');
         }
-        $this->gs1Mode = $gs1Mode;
 
         if ($gs1Mode) {
             $codes = $this->encodeGs1($data);
