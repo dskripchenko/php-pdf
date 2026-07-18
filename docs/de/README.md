@@ -171,6 +171,8 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - Kerning, einfache GSUB-Ligaturen, ToUnicode-CMap.
 - Variable-Font-Instanzen (fvar, gvar, MVAR, HVAR, avar).
 - Bidi (UAX#9), Arabische Schaping, einfache indische Schaping.
+- Fertiges Liberation-Bundle (metrisch kompatibel zu Arial / Times New
+  Roman / Courier New): [dskripchenko/php-pdf-fonts-liberation](https://github.com/dskripchenko/php-pdf-fonts-liberation).
 
 ### Barcodes
 - Linear: Code 128 (A/B/C automatisch, GS1-128), Code 39, Code 93,

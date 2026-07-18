@@ -164,6 +164,8 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - 字距调整、基础 GSUB 连字、ToUnicode CMap。
 - 可变字体实例（fvar、gvar、MVAR、HVAR、avar）。
 - Bidi（UAX#9）、阿拉伯语字形整形、基础印度语系字形整形。
+- 现成的 Liberation 字体包（与 Arial / Times New Roman / Courier New
+  度量兼容）：[dskripchenko/php-pdf-fonts-liberation](https://github.com/dskripchenko/php-pdf-fonts-liberation)。
 
 ### 条形码
 - 线性：Code 128（A/B/C 自动、GS1-128）、Code 39、Code 93、Code 11、

@@ -170,6 +170,8 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - Кернинг, базовые GSUB-лигатуры, ToUnicode CMap.
 - Экземпляры variable-шрифтов (fvar, gvar, MVAR, HVAR, avar).
 - Bidi (UAX#9), арабская формовка, базовая индийская формовка.
+- Готовый бандл Liberation (метрически совместим с Arial / Times New
+  Roman / Courier New): [dskripchenko/php-pdf-fonts-liberation](https://github.com/dskripchenko/php-pdf-fonts-liberation).
 
 ### Штрихкоды
 - Линейные: Code 128 (A/B/C auto, GS1-128), Code 39, Code 93, Code 11,
