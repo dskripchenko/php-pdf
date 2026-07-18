@@ -58,7 +58,7 @@ $mpdf = new Mpdf([], $engine);
 | `$mpdf->WriteHTML($html)` | `$doc = Document::fromHtml($html)` |
 | `$mpdf->Output($f, 'F')` | `$doc->toFile($f)` |
 | `$mpdf->Output('', 'S')` | `$doc->toBytes()` |
-| `$mpdf->Output('x.pdf', 'D')` | send headers + `echo $doc->toBytes()` (Laravel: `response()->streamDownload(...)`) |
+| `$mpdf->Output('x.pdf', 'D')` | send headers + `echo $doc->toBytes()` (Laravel: `response()->pdf(...)` from [dskripchenko/laravel-php-pdf](https://github.com/dskripchenko/laravel-php-pdf)) |
 | `$mpdf->Output('', 'I')` | send headers + `echo $doc->toBytes()` |
 | `['format' => 'A4-L', 'margin_left' => 15]` | `new Section($blocks, pageSetup: new PageSetup(paperSize: PaperSize::A4, orientation: Orientation::Landscape, margins: new PageMargins(leftPt: 15 * 72 / 25.4)))` |
 | `$mpdf->SetTitle('T')` / `SetAuthor` | `new Document($section, metadata: ['Title' => 'T', 'Author' => ...])` or `Document::fromHtml($html, metadata: [...])` |
