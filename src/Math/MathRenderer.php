@@ -96,6 +96,9 @@ final class MathRenderer
         ) ?? $tex;
     }
 
+    /**
+     * @return list<list<array<string, mixed>>> one token list (see parse()) per line
+     */
     public static function parseLines(string $tex): array
     {
         // Pre-process LaTeX environments \begin{name}...\end{name}.

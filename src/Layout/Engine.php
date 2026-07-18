@@ -1696,7 +1696,7 @@ final class Engine
      *   C2 = P_{i+1} - (P_{i+2} - P_i) / 6
      *
      * @param  list<array{0: float, 1: float}>  $points
-     * @return list<array|string>
+     * @return list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>
      */
     private static function catmullRomToBezierPath(array $points): array
     {
@@ -3920,8 +3920,6 @@ final class Engine
 
     /**
      * @param  list<float>  $colWidths
-     */
-    /**
      * @param  array<int, \Dskripchenko\PhpPdf\Style\Border>  &$prevRowBottomByCol
      *   Map column-index → bottom border of the cell occupying it in the prior row.
      *   Modified in-place: after renderRow() contains the current row's bottoms

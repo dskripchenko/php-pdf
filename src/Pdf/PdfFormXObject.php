@@ -37,7 +37,7 @@ final readonly class PdfFormXObject
         public float $bboxLly,
         public float $bboxUrx,
         public float $bboxUry,
-        /** Optional /Matrix [a b c d e f] — default identity. */
+        /** @var list<float>|null Optional /Matrix [a b c d e f] — default identity. */
         public ?array $matrix = null,
     ) {
         if ($bboxUrx <= $bboxLlx || $bboxUry <= $bboxLly) {

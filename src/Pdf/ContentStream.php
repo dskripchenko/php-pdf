@@ -191,7 +191,7 @@ final class ContentStream
      *
      * \$mode: 'fill' | 'stroke' | 'fillstroke'.
      *
-     * @param  list<array|string>  $commands
+     * @param  list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
      * @param  array{r: float, g: float, b: float}|null  $fillRgb
      * @param  array{r: float, g: float, b: float}|null  $strokeRgb
      */

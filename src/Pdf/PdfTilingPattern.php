@@ -36,7 +36,7 @@ final readonly class PdfTilingPattern
         public float $bboxUry,
         public float $xStep,
         public float $yStep,
-        /** Optional /Matrix [a b c d e f] for rotated/sheared tile. */
+        /** @var list<float>|null Optional /Matrix [a b c d e f] for rotated/sheared tile. */
         public ?array $matrix = null,
     ) {
         if ($bboxUrx <= $bboxLlx || $bboxUry <= $bboxLly) {

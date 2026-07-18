@@ -83,6 +83,7 @@ final class Pdf417Encoder
      * @param  string  $data            arbitrary bytes
      * @param  int     $eccLevel        0..8 (defaults to auto based on data size)
      * @param  float   $aspectRatio     desired width/height ratio (TCPDF default 2.0)
+     * @param  array{index: int, total: int, fileId: int}|null  $macroSegment  Macro PDF417 control block
      */
     public function __construct(
         public readonly string $data,

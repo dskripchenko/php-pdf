@@ -49,42 +49,6 @@ parameters:
 			path: src/Barcode/AztecEncoder.php
 
 		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:buildMatrix\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawAlignmentGrid\(\) has parameter \$m with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawBullsEye\(\) has parameter \$m with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawCompactModeMessage\(\) has parameter \$m with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:drawFullModeMessage\(\) has parameter \$m with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\AztecEncoder\:\:gfMul\(\) has parameter \$expTable with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/AztecEncoder.php
-
-		-
 			message: '#^Strict comparison using \=\=\= between 3 and 3 will always evaluate to true\.$#'
 			identifier: identical.alwaysTrue
 			count: 1
@@ -181,24 +145,6 @@ parameters:
 			path: src/Barcode/DataMatrixEncoder.php
 
 		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\Pdf417Encoder\:\:__construct\(\) has parameter \$macroSegment with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/Pdf417Encoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:__construct\(\) has parameter \$structuredAppend with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/QrEncoder.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:writeFormatInfo\(\) has parameter \$matrix with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Barcode/QrEncoder.php
-
-		-
 			message: '#^Readonly property Dskripchenko\\PhpPdf\\Barcode\\QrEncoder\:\:\$selectedMask is assigned outside of the constructor\.$#'
 			identifier: property.readOnlyAssignNotInConstructor
 			count: 1
@@ -227,24 +173,6 @@ parameters:
 			identifier: parameterByRef.type
 			count: 1
 			path: src/Font/Ttf/TtfSubsetter.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupContour\(\) has parameter \$hasDelta with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Font/Ttf/VariableInstance.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupContour\(\) has parameter \$newCoords with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Font/Ttf/VariableInstance.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupContour\(\) has parameter \$origCoords with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Font/Ttf/VariableInstance.php
 
 		-
 			message: '#^Parameter &\$newCoords by\-ref type of method Dskripchenko\\PhpPdf\\Font\\Ttf\\VariableInstance\:\:iupRange\(\) expects list\<int\>, non\-empty\-array\<int, int\> given\.$#'
@@ -307,12 +235,6 @@ parameters:
 			path: src/Layout/Engine.php
 
 		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:catmullRomToBezierPath\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Layout/Engine.php
-
-		-
 			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:drawTextDecorations\(\) is unused\.$#'
 			identifier: method.unused
 			count: 1
@@ -321,12 +243,6 @@ parameters:
 		-
 			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:effectiveLineHeightMult\(\) is unused\.$#'
 			identifier: method.unused
-			count: 1
-			path: src/Layout/Engine.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderRow\(\) has parameter \$colWidths with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
 			count: 1
 			path: src/Layout/Engine.php
 
@@ -433,12 +349,6 @@ parameters:
 			path: src/Math/MathRenderer.php
 
 		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Math\\MathRenderer\:\:parseLines\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Math/MathRenderer.php
-
-		-
 			message: '#^Static method Dskripchenko\\PhpPdf\\Math\\MathRenderer\:\:splitMatrix\(\) is unused\.$#'
 			identifier: method.unused
 			count: 1
@@ -455,12 +365,6 @@ parameters:
 			identifier: notIdentical.alwaysTrue
 			count: 1
 			path: src/Math/MathRenderer.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\ContentStream\:\:emitPath\(\) has parameter \$commands with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/ContentStream.php
 
 		-
 			message: '#^Property Dskripchenko\\PhpPdf\\Pdf\\ContentStream\:\:\$lastWasTextColorQ is never read, only written\.$#'
@@ -571,120 +475,6 @@ parameters:
 			path: src/Pdf/Encryption.php
 
 		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addCircleAnnotation\(\) has parameter \$fillColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addCircleAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addFreeTextAnnotation\(\) has parameter \$color with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addInkAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addLineAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addPolyLineAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addPolygonAnnotation\(\) has parameter \$fillColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addPolygonAnnotation\(\) has parameter \$strokeColor with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addStrikeOutAnnotation\(\) has parameter \$color with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:addUnderlineAnnotation\(\) has parameter \$color with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\Page\:\:emitPath\(\) has parameter \$commands with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Property Dskripchenko\\PhpPdf\\Pdf\\Page\:\:\$transition type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between list\<string\> and false will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/Pdf/Page.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositions\(\) has parameter \$cps with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/PdfFont.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositions\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/PdfFont.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositionsForTest\(\) has parameter \$cps with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/PdfFont.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFont\:\:detectRphPositionsForTest\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/PdfFont.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfFormXObject\:\:__construct\(\) has parameter \$matrix with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/PdfFormXObject.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Pdf\\PdfTilingPattern\:\:__construct\(\) has parameter \$matrix with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Pdf/PdfTilingPattern.php
-
-		-
 			message: '#^Comparison operation "\>" between int\<1, max\> and 0 is always true\.$#'
 			identifier: greater.alwaysTrue
 			count: 1
@@ -709,30 +499,6 @@ parameters:
 			path: src/Pdf/Writer.php
 
 		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Svg\\SvgRenderer\:\:namedColorRgb\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Svg/SvgRenderer.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Svg\\SvgRenderer\:\:parsePathD\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Svg/SvgRenderer.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Svg\\SvgRenderer\:\:walkElement\(\) has parameter \$gradients with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Svg/SvgRenderer.php
-
-		-
-			message: '#^PHPDoc tag @param references unknown parameter\: \$rgb$#'
-			identifier: parameter.notFound
-			count: 1
-			path: src/Svg/SvgRenderer.php
-
-		-
 			message: '#^Using nullsafe property access "\?\-\>href" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
@@ -749,12 +515,6 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 1
 			path: src/Text/ArabicShaper.php
-
-		-
-			message: '#^Method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyW\(\) has parameter \$types with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Text/BidiAlgorithm.php
 
 		-
 			message: '#^Parameter &\$types by\-ref type of method Dskripchenko\\PhpPdf\\Text\\BidiAlgorithm\:\:applyN\(\) expects list\<string\>, non\-empty\-array\<int\<0, max\>, string\> given\.$#'

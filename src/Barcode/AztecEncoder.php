@@ -379,6 +379,13 @@ final class AztecEncoder
         if ($to === self::MODE_PUNCT && $from !== self::MODE_MIXED) {
             return false;
         }
+        // From Lower, code 28 is U/S — an UPPER SHIFT valid for ONE
+        // character; there is no direct Lower→Upper latch in Aztec.
+        // Treating it as a latch desynchronized encoder state from the
+        // decoder and inverted letter case until the next real latch.
+        if ($from === self::MODE_LOWER && $to === self::MODE_UPPER) {
+            return false;
+        }
 
         return true;
     }
@@ -413,7 +420,7 @@ final class AztecEncoder
             [self::MODE_UPPER, self::MODE_DIGIT] => 30,
             [self::MODE_LOWER, self::MODE_MIXED] => 29,
             [self::MODE_LOWER, self::MODE_DIGIT] => 30,
-            [self::MODE_LOWER, self::MODE_UPPER] => 28, // U/S shift in greedy impl emits 28 as latch
+            [self::MODE_LOWER, self::MODE_UPPER] => 28, // U/S — single-char shift, mode stays Lower
             [self::MODE_MIXED, self::MODE_LOWER] => 28,
             [self::MODE_MIXED, self::MODE_UPPER] => 29,
             [self::MODE_MIXED, self::MODE_PUNCT] => 30,
@@ -748,7 +755,10 @@ final class AztecEncoder
         return $cache[$key] = [$log, $exp];
     }
 
-    /** @param list<int> $logTable @param list<int> $expTable */
+    /**
+     * @param list<int> $logTable
+     * @param list<int> $expTable
+     */
     private static function gfMul(int $a, int $b, array $logTable, array $expTable, int $size): int
     {
         if ($a === 0 || $b === 0) {
@@ -768,6 +778,8 @@ final class AztecEncoder
      *  3. Draw mode message (28 bits compact / 40 bits full).
      *  4. Draw bullseye (5-ring compact / 7-ring full) with orientation cells.
      *  5. Draw alignment grid lines (Full only).
+     *
+     * @return list<list<bool>>
      */
     private function buildMatrix(string $messageBits, string $modeBits): array
     {
@@ -848,6 +860,8 @@ final class AztecEncoder
      * Draw concentric square frames at distance 0, 2, ..., size-1 from
      * center. Compact: size=5 (3 frames). Full: size=7 (4 frames).
      * Plus 6 fixed orientation cells just outside bullseye.
+     *
+     * @param array<int, array<int, bool>> $m
      */
     private function drawBullsEye(array &$m, int $center, int $size): void
     {
@@ -871,6 +885,8 @@ final class AztecEncoder
     /**
      * Compact: 28-bit mode message in 7-cell groups on 4 sides
      * (rows c-5, c+5; cols c-5, c+5; offsets c-3..c+3).
+     *
+     * @param array<int, array<int, bool>> $m
      */
     private function drawCompactModeMessage(array &$m, int $center, string $modeBits): void
     {
@@ -895,6 +911,8 @@ final class AztecEncoder
      * Full: 40-bit mode message in 10-cell groups on 4 sides
      * (rows c-7, c+7; cols c-7, c+7).
      * Offset formula: c - 5 + i + i/5 (skips center alignment cell at i=5).
+     *
+     * @param array<int, array<int, bool>> $m
      */
     private function drawFullModeMessage(array &$m, int $center, string $modeBits): void
     {
@@ -918,6 +936,8 @@ final class AztecEncoder
     /**
      * Full Aztec reference grid lines — dotted vertical + horizontal lines
      * at center and every 16 modules from center.
+     *
+     * @param array<int, array<int, bool>> $m
      */
     private function drawAlignmentGrid(array &$m, int $matrixSize, int $base): void
     {

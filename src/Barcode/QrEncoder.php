@@ -362,6 +362,9 @@ final class QrEncoder
      */
     public readonly ?int $fnc1AimIndicator;
 
+    /**
+     * @param array{position: int, total: int, parity: int}|null $structuredAppend
+     */
     public function __construct(
         public readonly string $data,
         ?QrEccLevel $eccLevel = null,
@@ -1253,6 +1256,9 @@ final class QrEncoder
         }
     }
 
+    /**
+     * @param  array<int, array<int, bool>>  $matrix
+     */
     private function writeFormatInfo(array &$matrix, int $size, int $mask = 0): void
     {
         // ECC level (2 bits) + mask (3 bits) = 5 bits.

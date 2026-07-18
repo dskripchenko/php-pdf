@@ -343,6 +343,17 @@ final class PdfFont
     }
 
     /**
+     * @param  list<int>  $cps
+     * @return array<int, true>
+     *
+     * @internal exposed for unit testing of reph detection
+     */
+    public static function detectRphPositionsForTest(array $cps): array
+    {
+        return self::detectRphPositions($cps);
+    }
+
+    /**
      * Identify codepoint positions where RA + virama forms a reph.
      * After Indic shaping, reph clusters have RA + virama at end of syllable
      * (NOT at start). Detection: RA followed by virama, where previous cp
@@ -351,12 +362,6 @@ final class PdfFont
      * @param  list<int>  $cps
      * @return array<int, true>  Index of RA codepoint that should be rphf-substituted.
      */
-    /** @internal exposed for unit testing of reph detection */
-    public static function detectRphPositionsForTest(array $cps): array
-    {
-        return self::detectRphPositions($cps);
-    }
-
     private static function detectRphPositions(array $cps): array
     {
         $positions = [];

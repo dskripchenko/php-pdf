@@ -18,7 +18,7 @@ use Dskripchenko\PhpPdf\Pdf\Page;
 final class SvgRenderer
 {
     /**
-     * @param  array{0: int, 1: int, 2: int}|null  $rgb
+     * @return array{0: int, 1: int, 2: int}|null
      */
     private static function namedColorRgb(string $name): ?array
     {
@@ -406,14 +406,15 @@ final class SvgRenderer
     }
 
     /**
-     * @param  callable(float): float  $tx
-     * @param  callable(float): float  $ty
-     */
-    /**
      * @var array<string, array<string, mixed>>
      */
     private static array $currentGradients = [];
 
+    /**
+     * @param  callable(float): float  $tx
+     * @param  callable(float): float  $ty
+     * @param  array<string, array<string, mixed>>  $gradients
+     */
     private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY, array $gradients = []): void
     {
         self::$currentGradients = $gradients;
@@ -1185,7 +1186,7 @@ final class SvgRenderer
      *
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
-     * @return list<array|string>
+     * @return list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>
      */
     private static function parsePathD(string $d, callable $tx, callable $ty): array
     {

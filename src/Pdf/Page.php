@@ -66,7 +66,7 @@ final class Page
 
     private int $layerCounter = 0;
 
-    /** Page transition (slideshow effect) — emitted as /Trans dict. */
+    /** @var array{style: string, duration: float, dimension: string|null, direction: int|null}|null Page transition (slideshow effect) — emitted as /Trans dict. */
     private ?array $transition = null;
 
     /** Page rotation in degrees (0, 90, 180, 270). */
@@ -408,9 +408,8 @@ final class Page
      */
     private static function splitChars(string $text): array
     {
-        $out = mb_str_split($text, 1, 'UTF-8');
-
-        return $out === false ? [] : $out;
+        // mb_str_split() never returns false on PHP 8+.
+        return mb_str_split($text, 1, 'UTF-8');
     }
 
     /**
@@ -933,7 +932,7 @@ final class Page
     /**
      * Emit generic path (with cubic Bezier curves).
      *
-     * @param  list<array|string>  $commands
+     * @param  list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
      * @param  array{r: float, g: float, b: float}|null  $fillRgb
      * @param  array{r: float, g: float, b: float}|null  $strokeRgb
      */
@@ -1063,6 +1062,8 @@ final class Page
 
     /**
      * Underline markup annotation.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $color  default blue (0, 0.5, 1)
      */
     public function addUnderlineAnnotation(
         float $x,
@@ -1077,6 +1078,8 @@ final class Page
 
     /**
      * Strike-out markup annotation.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $color  default red (1, 0, 0)
      */
     public function addStrikeOutAnnotation(
         float $x,
@@ -1120,6 +1123,9 @@ final class Page
     /**
      * Circle (ellipse) annotation — outlines an oval inscribed
      * within (x, y, width, height) rect.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $strokeColor  /C border
+     * @param  array{0:float,1:float,2:float}|null  $fillColor    /IC interior
      */
     public function addCircleAnnotation(
         float $x,
@@ -1183,6 +1189,7 @@ final class Page
      *
      * @param  list<list<array{0:float,1:float}>>  $strokes  outer list = strokes (pen-down spans);
      *                                                       inner list = (x, y) points per stroke
+     * @param  array{0:float,1:float,2:float}|null  $strokeColor
      */
     public function addInkAnnotation(
         array $strokes,
@@ -1222,6 +1229,8 @@ final class Page
      * Polygon annotation — closed shape with vertex list.
      *
      * @param  list<array{0:float,1:float}>  $vertices
+     * @param  array{0:float,1:float,2:float}|null  $strokeColor
+     * @param  array{0:float,1:float,2:float}|null  $fillColor
      */
     public function addPolygonAnnotation(
         array $vertices,
@@ -1240,6 +1249,7 @@ final class Page
      * PolyLine annotation — open polyline.
      *
      * @param  list<array{0:float,1:float}>  $vertices
+     * @param  array{0:float,1:float,2:float}|null  $strokeColor
      */
     public function addPolyLineAnnotation(
         array $vertices,
@@ -1278,6 +1288,8 @@ final class Page
 
     /**
      * Line annotation — emits a thin line between two endpoints.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $strokeColor
      */
     public function addLineAnnotation(
         float $x1,
@@ -1303,6 +1315,8 @@ final class Page
 
     /**
      * FreeText annotation — text rendered directly on the page surface.
+     *
+     * @param  array{0:float,1:float,2:float}|null  $color
      */
     public function addFreeTextAnnotation(
         float $x,

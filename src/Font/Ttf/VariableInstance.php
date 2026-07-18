@@ -94,21 +94,6 @@ final class VariableInstance
     }
 
     /**
-     * IUP (Interpolation of Unreferenced Points) per OpenType spec §11.7.
-     *
-     * For each contiguous range of unreferenced points between referenced
-     * points P_a and P_b on the contour:
-     *   - If P_a and P_b have same original coord: shift unreferenced
-     *     points by same delta as P_a (= P_b).
-     *   - If the original coord of an unreferenced point lies between
-     *     P_a and P_b: linearly interpolate based on position ratio.
-     *   - Else: shift by closer referenced point's delta.
-     *
-     * @param  list<int>  $newCoords  modified coords (modified in-place)
-     * @param  list<int>  $origCoords original coords (read-only)
-     * @param  array<int, bool>  $hasDelta  points that have explicit delta
-     */
-    /**
      * Apply gvar deltas to composite glyph component anchor offsets.
      *
      * For composite glyphs, gvar point indices map to component anchors:
@@ -148,6 +133,21 @@ final class VariableInstance
         return $composite->serialize($newOffsets);
     }
 
+    /**
+     * IUP (Interpolation of Unreferenced Points) per OpenType spec §11.7.
+     *
+     * For each contiguous range of unreferenced points between referenced
+     * points P_a and P_b on the contour:
+     *   - If P_a and P_b have same original coord: shift unreferenced
+     *     points by same delta as P_a (= P_b).
+     *   - If the original coord of an unreferenced point lies between
+     *     P_a and P_b: linearly interpolate based on position ratio.
+     *   - Else: shift by closer referenced point's delta.
+     *
+     * @param  list<int>  $newCoords  modified coords (modified in-place)
+     * @param  list<int>  $origCoords original coords (read-only)
+     * @param  array<int, bool>  $hasDelta  points that have explicit delta
+     */
     private static function iupContour(array &$newCoords, array $origCoords, array $hasDelta, int $start, int $end): void
     {
         $length = $end - $start + 1;

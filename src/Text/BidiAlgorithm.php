@@ -517,6 +517,9 @@ final class BidiAlgorithm
         return $levels;
     }
 
+    /**
+     * @param  list<string>  $types  per-char bidi types (modified in-place)
+     */
     private static function applyW(array &$types, int $paragraphLevel): void
     {
         $n = count($types);
