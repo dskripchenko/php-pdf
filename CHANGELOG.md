@@ -4,6 +4,15 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] — 2026-07-28
+
+### Changed
+- CI: PHP **8.5** added to the test matrix — the supported range
+  (8.2–8.5) is now verified on every push.
+- Docs: the Fonts highlights link to the Liberation bundle; the
+  `fallbackFonts` entry moved to the release section it shipped in; the
+  mpdf migration guide points its download row at the Laravel bridge.
+
 ## [1.2.2] — 2026-07-18
 
 ### Fixed
