@@ -128,6 +128,56 @@ final class PdfFont
      * returns the Type0 font dict object ID - this ID is used in the page
      * Resources /Font dict.
      */
+    /**
+     * Сжатые тела шрифтов, по хэшу содержимого.
+     *
+     * @var array<string, string>
+     */
+    private static array $compressedCache = [];
+
+    /**
+     * Сколько сжатых шрифтов держать в памяти.
+     *
+     * Ограничение нужно долгоживущим процессам: воркер, обслуживающий много
+     * документов с разными наборами шрифтов, иначе накапливал бы их все.
+     */
+    public static int $compressedCacheLimit = 24;
+
+    /**
+     * Сжатие тела шрифта с запоминанием результата.
+     *
+     * Тело шрифта одинаково от документа к документу, а `gzcompress` уровня 6
+     * на нём — самая дорогая часть встраивания: замер в приложении-потребителе
+     * показал 2.2 мс на документ, около 18% всего рендера, при двух шрифтах и
+     * 62 КБ на каждый.
+     *
+     * Ключ — хэш содержимого, а не имя файла: он остаётся верным и для
+     * сабсета, который у каждого документа свой. Хэширование 62 КБ стоит
+     * микросекунды против миллисекунды сжатия.
+     */
+    private static function compress(string $fontBytes): string
+    {
+        $key = hash('xxh3', $fontBytes);
+
+        if (isset(self::$compressedCache[$key])) {
+            return self::$compressedCache[$key];
+        }
+
+        // Вытесняем самый давний: порядок вставки и есть порядок обращения —
+        // при попадании запись не переставляется.
+        if (count(self::$compressedCache) >= self::$compressedCacheLimit) {
+            array_shift(self::$compressedCache);
+        }
+
+        return self::$compressedCache[$key] = (string) gzcompress($fontBytes, 6);
+    }
+
+    /** Забыть сжатые тела шрифтов. */
+    public static function forgetCompressedCache(): void
+    {
+        self::$compressedCache = [];
+    }
+
     public function registerWith(Writer $writer, bool $compressStreams = true): int
     {
         // per-Writer cache (instead of single $fontObjectId).
@@ -146,7 +196,7 @@ final class PdfFont
             ? (new \Dskripchenko\PhpPdf\Font\Ttf\TtfSubsetter)->subset($this->ttf, array_keys($this->usedGlyphs), $variableInstance)
             : $this->ttf->rawBytes();
         if ($compressStreams) {
-            $compressed = (string) gzcompress($fontBytes, 6);
+            $compressed = self::compress($fontBytes);
             $fontFileObjId = $writer->addObject(sprintf(
                 "<< /Length %d /Length1 %d /Filter /FlateDecode >>\nstream\n%s\nendstream",
                 strlen($compressed),
