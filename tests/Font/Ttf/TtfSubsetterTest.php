@@ -146,4 +146,49 @@ final class TtfSubsetterTest extends TestCase
 
         return is_string($out) && trim($out) !== '';
     }
+
+    #[Test]
+    public function post_table_carries_no_glyph_names(): void
+    {
+        // `post` формата 2.0 несёт имена ВСЕХ глифов исходного шрифта, и в
+        // сабсете это была самая большая таблица: 26 КБ из 61 КБ на Liberation
+        // Sans, при том что контуры занимали 6 КБ. В PDF имена не нужны —
+        // отображение идёт по идентификаторам, извлечение текста по ToUnicode.
+        $subset = (new TtfSubsetter)->subset($this->ttf, [43, 72, 79, 82]);
+        $post = $this->table($subset, 'post');
+
+        self::assertNotNull($post);
+        self::assertSame(32, strlen($post), 'формат 3.0 — это ровно заголовок');
+        self::assertSame(0x00030000, unpack('N', substr($post, 0, 4))[1]);
+    }
+
+    #[Test]
+    public function post_header_fields_survive(): void
+    {
+        // Заголовок у всех версий одинаков, и наш собственный парсер читает
+        // оттуда наклон и моноширинность — они обязаны сохраниться.
+        $original = $this->table($this->ttf->rawBytes(), 'post');
+        $subset = $this->table((new TtfSubsetter)->subset($this->ttf, [43, 72]), 'post');
+
+        self::assertSame(substr($original, 4, 28), substr($subset, 4, 28));
+    }
+
+    /** Тело таблицы по тегу из бинарника шрифта. */
+    private function table(string $font, string $tag): ?string
+    {
+        $count = unpack('n', substr($font, 4, 2))[1];
+
+        for ($i = 0; $i < $count; $i++) {
+            $record = substr($font, 12 + $i * 16, 16);
+            if (substr($record, 0, 4) !== $tag) {
+                continue;
+            }
+            $offset = unpack('N', substr($record, 8, 4))[1];
+            $length = unpack('N', substr($record, 12, 4))[1];
+
+            return substr($font, $offset, $length);
+        }
+
+        return null;
+    }
 }

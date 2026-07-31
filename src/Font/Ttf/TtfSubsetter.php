@@ -366,8 +366,34 @@ final class TtfSubsetter
     }
 
     /**
+     * `post` без имён глифов — формат 3.0.
+     *
+     * Формат 2.0 несёт имена ВСЕХ глифов исходного шрифта, и в сабсете это
+     * оказывается самой большой таблицей: на Liberation Sans 26 КБ из 61 КБ,
+     * то есть 43% — при том что сами контуры занимают 6 КБ.
+     *
+     * Имена глифов в PDF не нужны: отображение идёт по идентификаторам, а
+     * извлечение текста — по `ToUnicode` CMap, который эмиттер пишет отдельно.
+     * Формат 3.0 именно это и означает — «имён нет».
+     *
+     * Заголовок у всех версий одинаков (32 байта: версия, наклон, подчёркивание,
+     * моноширинность, лимиты памяти), поэтому достаточно обрезать таблицу до
+     * него и сменить номер версии. Всё, что читает наш собственный парсер —
+     * `italicAngle` и `isFixedPitch`, — остаётся на месте.
+     */
+    private static function postWithoutGlyphNames(string $post): string
+    {
+        // Короткая таблица уже не несёт имён — оставляем как есть.
+        if (strlen($post) < 32) {
+            return $post;
+        }
+
+        return pack('N', 0x00030000).substr($post, 4, 28);
+    }
+
+    /**
      * Emit final TTF with replaced glyf + loca tables. All other tables
-     * are copied bytes-as-is.
+     * are copied bytes-as-is (кроме `post` — см. postWithoutGlyphNames).
      *
      * Table directory: each entry is 16 bytes (tag + checksum + offset + length).
      * Tables are aligned on a 4-byte boundary in the file.
@@ -407,6 +433,9 @@ final class TtfSubsetter
             $bytes = match ($tag) {
                 'glyf' => $newGlyf,
                 'loca' => $newLoca,
+                'post' => self::postWithoutGlyphNames(
+                    substr($sourceBytes, $info['offset'], $info['length'])
+                ),
                 default => substr($sourceBytes, $info['offset'], $info['length']),
             };
             $newTableData[$tag] = $bytes;
