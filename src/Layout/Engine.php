@@ -3790,6 +3790,68 @@ final class Engine
             $isLastRow = $rowIdx === $totalRows - 1;
 
             if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
+                // Строка не помещается. Прежде чем уносить её целиком —
+                // пробуем разделить: строка выше страницы иначе оставляет за
+                // собой полупустой лист, а строка, которая ВООБЩЕ не влезает
+                // в страницу, уходила бы в бесконечный перенос.
+                $available = $ctx->cursorY - $ctx->bottomY;
+                $split = $this->splitRowForPage($t, $row, $colWidths, $available);
+
+                if ($split !== null) {
+                    [$head, $tail] = $split;
+                    $this->renderRow($t, $head, $colWidths, $tableLeftX, $available, $ctx, false, $prevRowBottomByCol);
+                    $ctx->cursorY -= $available;
+
+                    $this->forcePageBreak($ctx);
+                    $prevRowBottomByCol = [];
+                    foreach ($headerRows as $hr) {
+                        $hh = $this->measureRowHeight($t, $hr, $colWidths);
+                        $this->renderRow($t, $hr, $colWidths, $tableLeftX, $hh, $ctx, false, $prevRowBottomByCol);
+                        $ctx->cursorY -= $hh;
+                    }
+
+                    // Хвост может не поместиться снова — обрабатываем его тем
+                    // же кодом, поэтому возвращаемся к началу итерации.
+                    $row = $tail;
+                    $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
+                    if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
+                        $rowsToProcess = [$tail];
+                        while ($rowsToProcess !== []) {
+                            $current = array_shift($rowsToProcess);
+                            $currentHeight = $this->measureRowHeight($t, $current, $colWidths);
+                            $room = $ctx->cursorY - $ctx->bottomY;
+                            if ($currentHeight <= $room) {
+                                $this->renderRow($t, $current, $colWidths, $tableLeftX, $currentHeight, $ctx, $isLastRow, $prevRowBottomByCol);
+                                $ctx->cursorY -= $currentHeight;
+
+                                continue;
+                            }
+                            $next = $this->splitRowForPage($t, $current, $colWidths, $room);
+                            if ($next === null) {
+                                $this->forcePageBreak($ctx);
+                                $prevRowBottomByCol = [];
+                                $this->renderRow($t, $current, $colWidths, $tableLeftX, $currentHeight, $ctx, $isLastRow, $prevRowBottomByCol);
+                                $ctx->cursorY -= $currentHeight;
+
+                                continue;
+                            }
+                            [$nextHead, $nextTail] = $next;
+                            $this->renderRow($t, $nextHead, $colWidths, $tableLeftX, $room, $ctx, false, $prevRowBottomByCol);
+                            $ctx->cursorY -= $room;
+                            $this->forcePageBreak($ctx);
+                            $prevRowBottomByCol = [];
+                            $rowsToProcess[] = $nextTail;
+                        }
+
+                        continue;
+                    }
+
+                    $this->renderRow($t, $row, $colWidths, $tableLeftX, $rowHeight, $ctx, $isLastRow, $prevRowBottomByCol);
+                    $ctx->cursorY -= $rowHeight;
+
+                    continue;
+                }
+
                 $this->forcePageBreak($ctx);
                 $prevRowBottomByCol = [];
                 if (! $row->isHeader) {
@@ -3894,6 +3956,91 @@ final class Engine
      *   Modified in-place: after renderRow() contains the current row's bottoms
      *   keyed by column position (accounting for column spans).
      */
+    /**
+     * Разделить строку по нижнему краю страницы.
+     *
+     * Строка таблицы — горизонтальная полоса, и разрыв означает: часть
+     * содержимого каждой ячейки остаётся выше границы, остальное продолжается
+     * на следующей странице. Word так делает по умолчанию («Allow row to break
+     * across pages»), и без этого одна высокая строка оставляла за собой
+     * полупустой лист: в разобранном страховом полисе четвёртая страница несла
+     * 40 слов вместо семисот.
+     *
+     * Делим по блокам: ячейка — это список абзацев, и граница проходит между
+     * ними. Внутрь абзаца не лезем — строку текста рвать нечем, а
+     * практическая польза уже достигается: в реальных документах высокую
+     * строку делает не один гигантский абзац, а их набор.
+     *
+     * Возвращает `null`, когда делить нечего или незачем:
+     *   - строка-шапка (её повторяют целиком на каждой странице);
+     *   - объединение по вертикали (rowSpan) — разрыв разъехался бы с соседями;
+     *   - в отведённое место не помещается ни один блок ни одной ячейки —
+     *     иначе получился бы бесконечный перенос пустой части.
+     *
+     * @param  list<float>  $colWidths
+     * @return array{0: Row, 1: Row}|null
+     */
+    private function splitRowForPage(Table $t, Row $row, array $colWidths, float $available): ?array
+    {
+        if ($row->isHeader || $available <= 0.0) {
+            return null;
+        }
+
+        foreach ($row->cells as $cell) {
+            if ($cell->rowSpan > 1) {
+                return null;
+            }
+        }
+
+        $headCells = [];
+        $tailCells = [];
+        $anythingFits = false;
+        $anythingLeft = false;
+        $colIdx = 0;
+
+        foreach ($row->cells as $cell) {
+            $cellWidth = 0.0;
+            for ($i = 0; $i < $cell->columnSpan && $colIdx + $i < count($colWidths); $i++) {
+                $cellWidth += $colWidths[$colIdx + $i];
+            }
+            $colIdx += $cell->columnSpan;
+
+            $cs = $this->effectiveCellStyle($t, $cell);
+            $contentWidth = $cellWidth - $cs->paddingLeftPt - $cs->paddingRightPt;
+            $room = $available - $cs->paddingTopPt - $cs->paddingBottomPt;
+
+            $head = [];
+            $tail = [];
+            $used = 0.0;
+            foreach ($cell->children as $block) {
+                $blockHeight = $this->measureBlockHeight($block, $contentWidth);
+                if ($tail === [] && $used + $blockHeight <= $room) {
+                    $head[] = $block;
+                    $used += $blockHeight;
+
+                    continue;
+                }
+                $tail[] = $block;
+            }
+
+            if ($head !== []) {
+                $anythingFits = true;
+            }
+            if ($tail !== []) {
+                $anythingLeft = true;
+            }
+
+            $headCells[] = new Cell($head, $cell->style, $cell->columnSpan, $cell->rowSpan);
+            $tailCells[] = new Cell($tail, $cell->style, $cell->columnSpan, $cell->rowSpan);
+        }
+
+        if (! $anythingFits || ! $anythingLeft) {
+            return null;
+        }
+
+        return [new Row($headCells, false), new Row($tailCells, false)];
+    }
+
     private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false, array &$prevRowBottomByCol = []): void
     {
         // Tagged PDF — /TR is a grouping element (children: TD leaves).
