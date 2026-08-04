@@ -2951,7 +2951,9 @@ final class Engine
             $word = $item['text'] ?? '';
             $style = $item['style'] ?? $effectiveDefault;
             $wordWidth = $this->measureWidth($word, $style);
-            $sepWidth = $currentLine === [] ? 0 : $this->measureWidth(' ', $style);
+            $sepWidth = ($currentLine === [] || ($item['glue'] ?? false))
+                ? 0
+                : $this->measureWidth(' ', $style);
 
             // Hanging punctuation — trailing punct discounted from
             // the wrap decision (it visually overflows past the margin).
@@ -3033,6 +3035,19 @@ final class Engine
      * @param  array<string, mixed>|null  $currentLink
      * @param  list<array<string, mixed>>  $items
      */
+    /**
+     * Кончился ли предыдущий токен содержимым (а не пробелом).
+     *
+     * Нужно на стыке рунов: Word режет строку по смене начертания, и «(» с
+     * «залогодатель» приезжают отдельными рунами без пробела между ними.
+     */
+    private bool $lastTokenEndedInside = false;
+
+    /**
+     * @param  list<mixed>  $children
+     * @param  list<array<string, mixed>>  $items
+     * @param  array<string, string>|null  $currentLink
+     */
     private function tokenizeChildren(
         array $children,
         RunStyle $effectiveDefault,
@@ -3045,14 +3060,35 @@ final class Engine
                 $childStyle = $child->style->inheritFrom($effectiveDefault);
                 // \t (tab) — emit 'tab' marker between segments.
                 $segments = explode("\t", $child->text);
+                // Первое слово руна приклеено к предыдущему, если ни там, ни
+                // тут не было пробела. Иначе стык двух рунов превращается в
+                // пробел, которого в тексте нет: «(» и «залогодатель» —
+                // отдельные руны (Word режет строку по смене начертания), и
+                // документ печатался как «( залогодатель )».
+                $gluedToPrevious = $items !== []
+                    && $this->lastTokenEndedInside
+                    && $child->text !== ''
+                    && preg_match('/^\s/u', $child->text) !== 1;
+                $firstWordOfRun = true;
                 foreach ($segments as $segIdx => $segment) {
                     foreach ($this->splitWords($segment) as $word) {
-                        $items[] = ['type' => 'word', 'text' => $word, 'style' => $childStyle, 'link' => $currentLink];
+                        $items[] = [
+                            'type' => 'word',
+                            'text' => $word,
+                            'style' => $childStyle,
+                            'link' => $currentLink,
+                            'glue' => $firstWordOfRun && $gluedToPrevious,
+                        ];
+                        $firstWordOfRun = false;
                     }
                     if ($segIdx < count($segments) - 1) {
                         $items[] = ['type' => 'tab', 'style' => $childStyle, 'link' => $currentLink];
                     }
                 }
+                // Рун, кончившийся пробелом, разделителем уже обеспечен —
+                // следующий приклеивать нельзя.
+                $this->lastTokenEndedInside = $child->text !== ''
+                    && preg_match('/\s$/u', $child->text) !== 1;
             } elseif ($child instanceof LineBreak) {
                 $items[] = ['type' => 'br'];
             } elseif ($child instanceof PageBreak) {
@@ -3250,7 +3286,10 @@ final class Engine
                 $word = $item['text'] ?? '';
                 $totalContentWidth += $this->measureWidth($word, $style);
             }
-            if ($i + 1 < $countWords && $type !== 'tab' && ($wordItems[$i + 1]['type'] ?? null) !== 'tab') {
+            if ($i + 1 < $countWords
+                && $type !== 'tab'
+                && ($wordItems[$i + 1]['type'] ?? null) !== 'tab'
+                && ! ($wordItems[$i + 1]['glue'] ?? false)) {
                 $totalContentWidth += $this->measureWidth(' ', $style);
             }
         }
@@ -3477,6 +3516,11 @@ final class Engine
                 $nextItem = $wordItems[$i + 1];
                 // If next item is tab, do not append space (tab sets exact x).
                 if (($nextItem['type'] ?? null) === 'tab') {
+                    continue;
+                }
+                // Слипшийся стык рунов: пробела в тексте не было, рисовать
+                // его нельзя (см. tokenizeChildren).
+                if ($nextItem['glue'] ?? false) {
                     continue;
                 }
                 $spaceWidth = $this->measureWidth(' ', $style) + $extraPerGap;
