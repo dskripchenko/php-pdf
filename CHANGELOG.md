@@ -62,6 +62,14 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] — 2026-08-04
+
+### Fixed
+- Типы в docblock'ах `renderRow()` — 1.3.0 ушла в тег с непройденным
+  статическим анализом (три `missingType.iterableValue`). Заодно снята
+  устаревшая запись baseline: она описывала прежний, менее точный тип
+  by-ref параметра.
+
 ## [1.3.0] — 2026-08-04
 
 ### Added

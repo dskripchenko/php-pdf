@@ -175,12 +175,6 @@ parameters:
 			path: src/Layout/Engine.php
 
 		-
-			message: '#^Parameter &\$prevRowBottomByCol by\-ref type of method Dskripchenko\\PhpPdf\\Layout\\Engine\:\:renderRow\(\) expects array\<int, Dskripchenko\\PhpPdf\\Style\\Border\>, array\<int, Dskripchenko\\PhpPdf\\Style\\Border\|null\> given\.$#'
-			identifier: parameterByRef.type
-			count: 1
-			path: src/Layout/Engine.php
-
-		-
 			message: '#^Result of && is always false\.$#'
 			identifier: booleanAnd.alwaysFalse
 			count: 5

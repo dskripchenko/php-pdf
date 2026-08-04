@@ -4041,6 +4041,10 @@ final class Engine
         return [new Row($headCells, false), new Row($tailCells, false)];
     }
 
+    /**
+     * @param  list<float>  $colWidths
+     * @param  array<int, \Dskripchenko\PhpPdf\Style\Border|null>  $prevRowBottomByCol
+     */
     private function renderRow(Table $t, Row $row, array $colWidths, float $tableLeftX, float $rowHeight, LayoutContext $ctx, bool $isLastRow = false, array &$prevRowBottomByCol = []): void
     {
         // Tagged PDF — /TR is a grouping element (children: TD leaves).
