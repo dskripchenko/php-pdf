@@ -2054,7 +2054,10 @@ final class Engine
             }
             // Header zone goes from pageHeight-4 (close to top edge) down;
             // bottom of zone = pageHeight - max(margins.topPt, headerHeight + headerPaddingPt).
-            $effectiveTopMargin = max($setup->margins->topPt, $headerHeight + $headerPaddingPt);
+            $effectiveTopMargin = max(
+                $setup->margins->topPt,
+                $setup->headerDistancePt + $headerHeight + $headerPaddingPt,
+            );
             $headerZoneBottomY = $pageHeight - $effectiveTopMargin + $headerPaddingPt / 2;
             // Push body topY down if header overflows default margin.
             $adaptiveBodyTopY = $pageHeight - $effectiveTopMargin;
@@ -2067,11 +2070,11 @@ final class Engine
             $headerArea = new LayoutContext(
                 pdf: $ctx->pdf,
                 currentPage: $ctx->currentPage,
-                cursorY: $pageHeight - 4.0,
+                cursorY: $pageHeight - $setup->headerDistancePt,
                 leftX: $effectiveLeftX,
                 contentWidth: $effectiveContentWidth,
                 bottomY: $headerZoneBottomY,
-                topY: $pageHeight - 4.0,
+                topY: $pageHeight - $setup->headerDistancePt,
                 pageSetup: $setup,
                 skipParagraphTag: $ctx->skipParagraphTag,
                 inHeaderFooterRender: true,
@@ -2101,7 +2104,7 @@ final class Engine
                 cursorY: $footerZoneTopY,
                 leftX: $effectiveLeftX,
                 contentWidth: $effectiveContentWidth,
-                bottomY: 4.0,
+                bottomY: $setup->footerDistancePt,
                 topY: $footerZoneTopY,
                 pageSetup: $setup,
                 skipParagraphTag: $ctx->skipParagraphTag,

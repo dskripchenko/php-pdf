@@ -62,6 +62,16 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-08-04
+
+### Added
+- **Расстояние до колонтитулов** — `PageSetup::$headerDistancePt` /
+  `$footerDistancePt`. Word задаёт его отдельно от поля страницы (`w:header`,
+  `w:footer`), а движок прижимал шапку к самому краю листа: импортированный
+  документ ехал вверх относительно оригинала на два сантиметра. По умолчанию
+  4pt — прежнее поведение. Зона шапки теперь учитывает и расстояние, и её
+  высоту, поэтому при большом `w:header` текст не налезает на колонтитул.
+
 ## [1.3.1] — 2026-08-04
 
 ### Fixed
