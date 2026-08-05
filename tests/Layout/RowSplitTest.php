@@ -6,6 +6,8 @@ namespace Dskripchenko\PhpPdf\Tests\Layout;
 
 use Dskripchenko\PhpPdf\Document;
 use Dskripchenko\PhpPdf\Element\Cell;
+use Dskripchenko\PhpPdf\Element\Image;
+use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
@@ -72,6 +74,32 @@ final class RowSplitTest extends TestCase
         }
     }
 
+    /** Сырой текст постранично — когда важно, что и где напечаталось.
+     *
+     * @return list<string>
+     */
+    private function pageTexts(Section $section): array
+    {
+        $pdf = (new Document($section))->toBytes(new Engine(compressStreams: false));
+        $path = tempnam(sys_get_temp_dir(), 'split-').'.pdf';
+        file_put_contents($path, $pdf);
+
+        try {
+            $pages = [];
+            for ($p = 1; $p <= 6; $p++) {
+                $text = trim((string) shell_exec('pdftotext -f '.$p.' -l '.$p.' '.escapeshellarg($path).' - 2>/dev/null'));
+                if ($text === '') {
+                    break;
+                }
+                $pages[] = $text;
+            }
+
+            return $pages;
+        } finally {
+            @unlink($path);
+        }
+    }
+
     #[Test]
     public function tall_row_is_split_across_pages(): void
     {
@@ -93,6 +121,38 @@ final class RowSplitTest extends TestCase
         // Первая страница должна нести соизмеримое со второй количество слов,
         // а не десяток: именно это отличает деление от переноса целиком.
         self::assertGreaterThan($counts[1] / 2, $counts[0]);
+    }
+
+    #[Test]
+    public function a_row_nobody_continues_moves_whole(): void
+    {
+        // Строка «слева директива, справа её результат»: текст в остаток
+        // страницы помещается, картинка — нет. Разделить такую строку значит
+        // развести по разным страницам то, что читается только вместе:
+        // страница закончится строкой с пустой правой ячейкой, а следующая
+        // начнётся строкой с пустой левой. Переносим целиком.
+        $filler = [];
+        for ($i = 0; $i < 44; $i++) {
+            $filler[] = new Paragraph([new Run('Заполнение страницы, абзац номер '.$i.'.')]);
+        }
+
+        $fixture = __DIR__.'/../fixtures/sample.jpg';
+        if (! is_readable($fixture)) {
+            self::markTestSkipped('Sample JPEG fixture missing.');
+        }
+        $tall = new Image(PdfImage::fromPath($fixture), widthPt: 160, heightPt: 160);
+
+        $table = new Table([new Row([
+            new Cell([new Paragraph([new Run('@qr($verify_url, 96)')])]),
+            new Cell([$tall]),
+        ])]);
+
+        $pages = $this->pageTexts(new Section([...$filler, $table]));
+
+        // Директива не должна остаться на странице, где нет её результата.
+        self::assertCount(2, $pages, 'ожидались ровно две страницы');
+        self::assertStringNotContainsString('@qr', $pages[0], 'строку разорвало: текст остался без картинки');
+        self::assertStringContainsString('@qr', $pages[1]);
     }
 
     #[Test]

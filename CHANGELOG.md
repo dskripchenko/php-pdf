@@ -4,6 +4,17 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] — 2026-08-05
+
+### Fixed
+- **A table row was torn apart instead of being moved.** When a row did not
+  fit in what was left of the page, it was split — but the split is only a
+  continuation if some cell has content on both sides. With a row like
+  "directive on the left, its result on the right" the text fitted and the
+  image did not, so the page ended with a row whose right cell was empty and
+  the next page opened with a row whose left cell was empty: two halves of one
+  statement, separated. A row that nobody continues is now moved whole.
+
 ## [1.8.1] — 2026-08-05
 
 ### Fixed

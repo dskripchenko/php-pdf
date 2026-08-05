@@ -4122,6 +4122,7 @@ final class Engine
         $tailCells = [];
         $anythingFits = false;
         $anythingLeft = false;
+        $continued = false;
         $colIdx = 0;
 
         foreach ($row->cells as $cell) {
@@ -4155,12 +4156,22 @@ final class Engine
             if ($tail !== []) {
                 $anythingLeft = true;
             }
+            if ($head !== [] && $tail !== []) {
+                $continued = true;
+            }
 
             $headCells[] = new Cell($head, $cell->style, $cell->columnSpan, $cell->rowSpan);
             $tailCells[] = new Cell($tail, $cell->style, $cell->columnSpan, $cell->rowSpan);
         }
 
-        if (! $anythingFits || ! $anythingLeft) {
+        // Разделять имеет смысл, только если хоть одна ячейка ПРОДОЛЖАЕТСЯ на
+        // следующей странице. Если же каждая целиком легла на одну из сторон,
+        // это не перенос, а разрыв связи: читатель видит строку с пустой
+        // ячейкой, а её содержимое — отдельной строкой на следующей странице.
+        // Так рвалась строка «директива слева, её результат справа»: текст
+        // помещался, картинка нет, и они расходились по разным страницам.
+        // Целую строку перенести в этом случае строго лучше.
+        if (! $anythingFits || ! $anythingLeft || ! $continued) {
             return null;
         }
 
