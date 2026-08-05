@@ -2090,9 +2090,21 @@ final class Engine
             foreach ($footerBlocks as $block) {
                 $footerHeight += $this->measureBlockHeight($block, $effectiveContentWidth);
             }
-            // Footer zone goes from y=margins.bottomPt up, or higher if footer
-            // overflows default bottom margin.
-            $effectiveBottomMargin = max($setup->margins->bottomPt, $footerHeight + $footerPaddingPt);
+            // Footer zone starts at the bottom margin line and flows down into
+            // the margin — the same way Word lays it out. The body is pushed up
+            // only when the footer does not fit between that line and the page
+            // edge, and the decision is made on the footer's own geometry:
+            // distance from the edge plus its height.
+            //
+            // Adding a visual gap to that comparison (as this did) makes the
+            // body shrink for footers that fit perfectly well. On an A4 policy
+            // with a one-line footer that cost ~15pt of body height on every
+            // page — about six lines over five pages, enough to push the last
+            // page over.
+            $effectiveBottomMargin = max(
+                $setup->margins->bottomPt,
+                $setup->footerDistancePt + $footerHeight,
+            );
             $footerZoneTopY = $effectiveBottomMargin - $footerPaddingPt / 2;
             // Push body bottomY up if footer overflows default margin.
             if ($effectiveBottomMargin > $ctx->bottomY) {

@@ -32,6 +32,20 @@ final class ContentStream
     private ?float $lastFillB = null;
 
     /**
+     * Последняя записанная разрядка (`Tc`).
+     *
+     * `Tc` — параметр состояния текста: он живёт до следующего `Tc`, а не до
+     * ближайшего `ET`. Пока его писали только при ненулевом значении, разрядка
+     * одного заголовка расползалась на весь дальнейший документ: строки
+     * становились шире доступной ширины, налезали друг на друга и уходили за
+     * край страницы. Поэтому значение отслеживается и сбрасывается явно.
+     *
+     * Начальное значение — ноль: таким `Tc` объявлен в спецификации на старте
+     * потока, и писать его отдельно не нужно.
+     */
+    private float $lastCharSpacing = 0.0;
+
+    /**
      * Text operation. Coordinates in pt from origin (bottom-left).
      */
     public function text(
@@ -43,9 +57,7 @@ final class ContentStream
         $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
-        if ($letterSpacingPt !== 0.0) {
-            $this->body .= sprintf("%s Tc\n", $this->formatNumber($letterSpacingPt));
-        }
+        $this->applyCharSpacing($letterSpacingPt);
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= sprintf("(%s) Tj\n", $escapedText);
         $this->body .= 'ET'."\n";
@@ -67,9 +79,7 @@ final class ContentStream
         $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
-        if ($letterSpacingPt !== 0.0) {
-            $this->body .= sprintf("%s Tc\n", $this->formatNumber($letterSpacingPt));
-        }
+        $this->applyCharSpacing($letterSpacingPt);
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= sprintf("%s Tj\n", $hexString);
         $this->body .= 'ET'."\n";
@@ -96,10 +106,12 @@ final class ContentStream
     public function textTjArray(
         string $fontName, float $sizePt, float $xPt, float $yPt, array $tjOps,
         ?float $r = null, ?float $g = null, ?float $b = null,
+        float $letterSpacingPt = 0,
     ): self {
         $this->openTextColor($r, $g, $b);
         $this->body .= 'BT'."\n";
         $this->body .= sprintf("/%s %s Tf\n", $fontName, $this->formatNumber($sizePt));
+        $this->applyCharSpacing($letterSpacingPt);
         $this->body .= sprintf("%s %s Td\n", $this->formatNumber($xPt), $this->formatNumber($yPt));
         $this->body .= '[';
         foreach ($tjOps as $op) {
@@ -114,6 +126,18 @@ final class ContentStream
         $this->closeTextColor($r);
 
         return $this;
+    }
+
+    /**
+     * Пишет `Tc` только когда разрядка изменилась — включая возврат к нулю.
+     */
+    private function applyCharSpacing(float $letterSpacingPt): void
+    {
+        if ($this->lastCharSpacing === $letterSpacingPt) {
+            return;
+        }
+        $this->body .= sprintf("%s Tc\n", $this->formatNumber($letterSpacingPt));
+        $this->lastCharSpacing = $letterSpacingPt;
     }
 
     /**

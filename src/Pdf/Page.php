@@ -430,14 +430,16 @@ final class Page
         if (count($tjOps) === 1) {
             $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0], $r, $g, $b, $letterSpacingPt);
         } else {
-            // textTjArray has no letter-spacing support (TJ kerning
-            // performs adjustments itself); when letter-spacing is set fall
-            // back to Tc + hex single string.
+            // Кернинг из TJ и разрядка через Tc не совмещаются: TJ уже двигает
+            // глифы сам. Поэтому при заданной разрядке идём простым путём —
+            // одна hex-строка с Tc.
             if ($letterSpacingPt !== 0.0) {
                 $hex = $font->encodeText($text);
                 $this->stream->textHexString($resourceName, $sizePt, $x, $y, $hex, $r, $g, $b, $letterSpacingPt);
             } else {
-                $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps, $r, $g, $b);
+                // Ноль передаётся явно: `Tc` живёт до следующего `Tc`, и без
+                // сброса разрядка предыдущего фрагмента досталась бы этому.
+                $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps, $r, $g, $b, $letterSpacingPt);
             }
         }
 

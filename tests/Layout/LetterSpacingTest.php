@@ -100,4 +100,54 @@ final class LetterSpacingTest extends TestCase
         // Different line-heights → different cursorY positions → different output.
         self::assertNotSame($b1, $b2);
     }
+
+    #[Test]
+    public function letter_spacing_does_not_leak_into_following_text(): void
+    {
+        // `Tc` — параметр состояния текста: он живёт до следующего `Tc`, а не
+        // до ближайшего `ET`. Пока значение писали только когда оно ненулевое,
+        // разрядка одного заголовка расползалась на весь документ: строки
+        // выходили шире колонки, налезали друг на друга и уходили за край
+        // страницы. Настоящий договор так печатался целиком нечитаемым.
+        $doc = new Document(new Section([
+            new Paragraph([
+                new Run('ЗАГОЛОВОК', (new RunStyle)->withLetterSpacingPt(3.1)),
+            ]),
+            new Paragraph([
+                new Run('обычный текст без разрядки'),
+            ]),
+        ]));
+
+        $bytes = $doc->toBytes(new Engine(
+            compressStreams: false,
+            defaultFont: $this->font(),
+        ));
+
+        // После разряженного фрагмента обязан идти явный возврат к нулю.
+        self::assertStringContainsString('3.1 Tc', $bytes);
+        self::assertStringContainsString('0 Tc', $bytes);
+
+        $spaced = strpos($bytes, '3.1 Tc');
+        $reset = strpos($bytes, '0 Tc', (int) $spaced);
+        self::assertIsInt($reset, 'разрядка не сброшена — она достанется следующему тексту');
+    }
+
+    #[Test]
+    public function repeated_zero_spacing_is_written_once(): void
+    {
+        // Сброс не должен превращаться в шум: `Tc` пишется только на смене
+        // значения, иначе поток пухнет на каждой строке документа.
+        $doc = new Document(new Section([
+            new Paragraph([new Run('первая строка')]),
+            new Paragraph([new Run('вторая строка')]),
+            new Paragraph([new Run('третья строка')]),
+        ]));
+
+        $bytes = $doc->toBytes(new Engine(
+            compressStreams: false,
+            defaultFont: $this->font(),
+        ));
+
+        self::assertSame(0, substr_count($bytes, ' Tc'), 'без разрядки оператор Tc не нужен вовсе');
+    }
 }
