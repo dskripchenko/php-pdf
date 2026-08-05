@@ -4358,7 +4358,6 @@ final class Engine
             pageSetup: $ctx->pageSetup,
             // Propagate skipParagraphTag (table cells suppress nested /P tagging).
             skipParagraphTag: $ctx->skipParagraphTag,
-            footnotes: $ctx->footnotes,
             inTableCell: true,
         );
 
@@ -4366,13 +4365,14 @@ final class Engine
             $this->renderBlock($block, $sub);
         }
 
-        // Сноски, встреченные в ячейке, принадлежат странице, а не ячейке:
-        // у ячейки свой контекст, и без переноса они выбрасывались вместе с
-        // ним. В анкете страхователя весь текст сносок лежит в таблице, и
-        // до низа полосы не доезжало ничего.
-        foreach (array_slice($sub->footnotes, count($ctx->footnotes)) as $note) {
-            $ctx->footnotes[] = $note;
-        }
+        // Сноска, встреченная в ячейке, до низа полосы пока не доезжает:
+        // у ячейки свой контекст, и собранное в нём уходит вместе с ним.
+        //
+        // Проверено и отвергнуто: переносить их в родительский контекст.
+        // Ячейка рендерится не один раз (измерение, разбиение строки между
+        // страницами), и список сносок при каждом проходе рос — на анкете в
+        // семь страниц это съедало полгигабайта и валило рендер. Прежде чем
+        // возвращаться, нужно понять, сколько раз и когда рендерится ячейка.
     }
 
     private function effectiveCellStyle(Table $t, Cell $cell): CellStyle
