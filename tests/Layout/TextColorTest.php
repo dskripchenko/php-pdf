@@ -139,4 +139,27 @@ final class TextColorTest extends TestCase
         // 0x88/255 ≈ 0.5333, 0x44/255 ≈ 0.2666
         self::assertMatchesRegularExpression('@0\.53\d+\s+0\.26\d+\s+0\s+rg@', $bytes);
     }
+
+    #[Test]
+    public function color_does_not_leak_into_following_text(): void
+    {
+        // Цвет заливки — состояние графики, он держится до следующего `rg`.
+        // Пока «цвет не задан» означало «ничего не писать», весь текст после
+        // цветного заголовка печатался тем же цветом: заявление страхователя
+        // выходило синим целиком, вместе с таблицами.
+        $doc = new Document(new Section([
+            new Paragraph([new Run('синий заголовок', (new RunStyle)->withColor('0066cc'))]),
+            new Paragraph([new Run('обычный текст без цвета')]),
+        ]));
+
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+
+        $colored = strpos($bytes, ' rg');
+        self::assertIsInt($colored);
+        self::assertMatchesRegularExpression(
+            '@0 0 0 rg@',
+            substr($bytes, $colored),
+            'после цветного фрагмента цвет обязан вернуться к чёрному',
+        );
+    }
 }

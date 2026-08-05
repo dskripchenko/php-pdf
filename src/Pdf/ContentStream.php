@@ -27,9 +27,11 @@ final class ContentStream
 
     // Cache last emitted graphics state. Drop redundant q/rg/Q
     // wraps when consecutive operations use the same fill color.
-    private ?float $lastFillR = null;
-    private ?float $lastFillG = null;
-    private ?float $lastFillB = null;
+    // Начальное состояние — чёрный: таким цвет заливки объявлен в
+    // спецификации на старте потока, поэтому обычному тексту `rg` не нужен.
+    private float $lastFillR = 0.0;
+    private float $lastFillG = 0.0;
+    private float $lastFillB = 0.0;
 
     /**
      * Последняя записанная разрядка (`Tc`).
@@ -153,11 +155,17 @@ final class ContentStream
      */
     private function openTextColor(?float $r, ?float $g, ?float $b): void
     {
-        if ($r === null) {
-            return;
-        }
-        $g ??= 0;
-        $b ??= 0;
+        // Цвет заливки — состояние графики: он держится до следующего `rg`.
+        // «Цвет не задан» означает чёрный, а не «оставить как было»: пока
+        // отсутствие цвета трактовалось как «ничего не писать», весь текст
+        // после цветного заголовка печатался тем же цветом. В заявлении
+        // страхователя так посинел весь документ, включая таблицы.
+        // Приведение к float обязательно: сравнение строгое, а `0 === 0.0`
+        // в PHP ложно — без него «чёрный» никогда не совпадал с состоянием и
+        // `rg` писался на каждой строке.
+        $r = (float) ($r ?? 0);
+        $g = (float) ($g ?? 0);
+        $b = (float) ($b ?? 0);
         // Skip emit if color is already in gstate.
         if ($this->lastFillR === $r && $this->lastFillG === $g && $this->lastFillB === $b) {
             return;
