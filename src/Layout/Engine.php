@@ -3085,6 +3085,43 @@ final class Engine
                 }
             }
 
+            // Слово, которое не помещается даже на пустой строке, рвём по
+            // символам. Иначе оно печатается как есть и вылезает за колонку:
+            // длинный URL в узкой ячейке заезжал на соседнюю. Так поступает и
+            // Word, и браузер — разорвать длинную строку лучше, чем потерять
+            // границу колонки.
+            if ($wordWidth > $availableWidth && $availableWidth > 0) {
+                if ($currentLine !== []) {
+                    $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
+                    $currentLine = [];
+                    $currentWidth = 0;
+                    $isFirstLine = false;
+                    $effectiveAvail = $availableWidth;
+                }
+                // Мягкий перенос — настоящая точка деления, она сильнее
+                // слепого разреза по символам.
+                $shy = $this->trySplitOnSoftHyphen($word, $style, $effectiveAvail);
+                [$head, $tail] = $shy ?? $this->splitOverlongWord($word, $style, $effectiveAvail);
+                if ($tail !== '') {
+                    $headItem = $item;
+                    $headItem['text'] = $head;
+                    $currentLine[] = $headItem;
+                    $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
+                    $currentLine = [];
+                    $currentWidth = 0;
+                    $isFirstLine = false;
+                    $effectiveAvail = $availableWidth;
+
+                    $tailItem = $item;
+                    $tailItem['text'] = $tail;
+                    // Хвост — уже «приклеенный»: пробела перед ним нет.
+                    $tailItem['glue'] = true;
+                    array_splice($items, $i + 1, 0, [$tailItem]);
+
+                    continue;
+                }
+            }
+
             if ($currentLine !== [] && $currentWidth + $sepWidth + $effectiveWordWidth > $effectiveAvail) {
                 // Try soft-hyphen split — if the word can be broken at SHY
                 // marker such that prefix + '-' fits in remaining space, place
@@ -3787,6 +3824,34 @@ final class Engine
     public static function stripSoftHyphens(string $text): string
     {
         return str_replace("\u{00AD}", '', $text);
+    }
+
+    /**
+     * Делит слово, которое не помещается на строке целиком.
+     *
+     * Возвращает [начало, остаток]; в начале всегда хотя бы один символ —
+     * иначе разбиение зациклится. Пустой остаток означает, что делить не
+     * потребовалось.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function splitOverlongWord(string $word, RunStyle $style, float $maxWidth): array
+    {
+        $chars = preg_split('//u', $word, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (count($chars) < 2) {
+            return [$word, ''];
+        }
+
+        $head = '';
+        foreach ($chars as $index => $char) {
+            $candidate = $head.$char;
+            if ($index > 0 && $this->measureWidth($candidate, $style) > $maxWidth) {
+                return [$head, mb_substr($word, $index, null, 'UTF-8')];
+            }
+            $head = $candidate;
+        }
+
+        return [$word, ''];
     }
 
     /**

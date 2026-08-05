@@ -4,6 +4,17 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.5] — 2026-08-05
+
+### Fixed
+- **A word too long for the line overflowed the column.** Greedy line breaking
+  only ever broke *between* words, so a single token wider than the available
+  width — a URL, a hash, a long number — was placed as it was and ran past the
+  column: in a narrow table cell it printed over its neighbour. Such a word is
+  now broken by characters, after a soft-hyphen point if the word offers one.
+  Breaking a long string is better than losing the column boundary — which is
+  what Word and browsers do too.
+
 ## [1.8.4] — 2026-08-05
 
 ### Fixed
