@@ -4576,6 +4576,9 @@ final class Engine
             $block instanceof HorizontalRule => 12.0, // 6 + 0 + 6
             $block instanceof Table => $this->measureTableHeight($block, $contentWidth),
             $block instanceof ListNode => $this->measureListNodeHeight($block, $contentWidth, 0),
+            // Векторный блок места не занимал: строка таблицы с одним знаком
+            // мерилась нулевой высотой, и рисунок вылезал за её пределы.
+            $block instanceof SvgElement => $block->spaceBeforePt + $block->heightPt + $block->spaceAfterPt,
             default => 0,
         };
     }

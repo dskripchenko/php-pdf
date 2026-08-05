@@ -4,6 +4,14 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] — 2026-08-05
+
+### Fixed
+- **A vector block took no room when measured.** `SvgElement` was missing from
+  height measurement, so a table row holding a logo measured as zero-height and
+  the drawing spilled out of it onto the row border. It now takes the height it
+  declares.
+
 ## [1.8.3] — 2026-08-05
 
 ### Fixed
