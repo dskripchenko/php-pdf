@@ -39,6 +39,16 @@ final class PdfImage
         public readonly string $colorSpace,     // /DeviceRGB or /DeviceGray
         public readonly int $bitsPerComponent,  // typically 8
         public readonly string $imageData,      // raw bytes for PDF stream
+        /**
+         * Альфа-канал отдельным потоком (Flate, 8 бит, DeviceGray).
+         *
+         * PDF не умеет прозрачность внутри самой картинки: она задаётся
+         * отдельным объектом-маской через `/SMask`. Раньше альфа просто
+         * отбрасывалась, и прозрачные точки печатались тем цветом, что лежал
+         * под ними — у подписей и печатей это чёрный прямоугольник вместо
+         * фона.
+         */
+        public readonly ?string $alphaData = null,
     ) {}
 
     public static function fromPath(string $path): self
@@ -67,16 +77,34 @@ final class PdfImage
         if ($this->objectId !== null) {
             return $this->objectId;
         }
+        // Маска регистрируется первой: её идентификатор нужен в словаре самой
+        // картинки. PDF не умеет прозрачность внутри изображения — она живёт
+        // отдельным объектом и подключается через `/SMask`.
+        $smask = '';
+        if ($this->alphaData !== null && $this->alphaData !== '') {
+            $maskId = $writer->addObject(sprintf(
+                "<< /Type /XObject /Subtype /Image /Width %d /Height %d "
+                ."/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length %d >>\nstream\n%s\nendstream",
+                $this->widthPx,
+                $this->heightPx,
+                strlen($this->alphaData),
+                $this->alphaData,
+            ));
+            $smask = sprintf(' /SMask %d 0 R', $maskId);
+        }
+
         $dict = sprintf(
             '<< /Type /XObject /Subtype /Image /Width %d /Height %d '
-            .'/ColorSpace %s /BitsPerComponent %d /Filter %s /Length %d >>',
+            .'/ColorSpace %s /BitsPerComponent %d /Filter %s%s /Length %d >>',
             $this->widthPx,
             $this->heightPx,
             $this->colorSpace,
             $this->bitsPerComponent,
             $this->filter,
+            $smask,
             strlen($this->imageData),
         );
+
         $this->objectId = $writer->addObject(sprintf(
             "%s\nstream\n%s\nendstream",
             $dict, $this->imageData,
@@ -250,22 +278,37 @@ final class PdfImage
             $prevRow = $unfilteredRow;
         }
 
-        // Strip alpha if RGBA → RGB.
+        // Альфа-канал отделяется от цвета: PDF держит прозрачность отдельным
+        // объектом-маской (`/SMask`), внутри самой картинки её быть не может.
+        // Раньше альфа просто выбрасывалась, и прозрачные точки печатались
+        // тем цветом, что лежал под ними — у подписей и печатей это чёрный
+        // прямоугольник вместо фона.
+        $alpha = null;
         if ($colorType === 6) {
             $stripped = '';
+            $alpha = '';
             for ($i = 0; $i < strlen($unfilteredRows); $i += 4) {
-                $stripped .= substr($unfilteredRows, $i, 3); // skip alpha
+                $stripped .= substr($unfilteredRows, $i, 3);
+                $alpha .= $unfilteredRows[$i + 3];
             }
             $unfilteredRows = $stripped;
             $components = 3;
         }
         if ($colorType === 4) {
             $stripped = '';
+            $alpha = '';
             for ($i = 0; $i < strlen($unfilteredRows); $i += 2) {
-                $stripped .= $unfilteredRows[$i]; // skip alpha
+                $stripped .= $unfilteredRows[$i];
+                $alpha .= $unfilteredRows[$i + 1];
             }
             $unfilteredRows = $stripped;
             $components = 1;
+        }
+
+        // Полностью непрозрачная картинка маски не требует — лишний объект в
+        // файле ничего не даёт.
+        if ($alpha !== null && strspn($alpha, "\xFF") === strlen($alpha)) {
+            $alpha = null;
         }
 
         $pdfStream = gzcompress($unfilteredRows);
@@ -277,6 +320,7 @@ final class PdfImage
             colorSpace: $colorSpace,
             bitsPerComponent: 8,
             imageData: $pdfStream,
+            alphaData: $alpha !== null ? (string) gzcompress($alpha) : null,
         );
     }
 
