@@ -71,4 +71,36 @@ final class FontFallbackTest extends TestCase
         self::assertIsArray($engine->fallbackFonts);
         self::assertCount(0, $engine->fallbackFonts);
     }
+
+    #[Test]
+    public function missing_characters_do_not_borrow_each_others_meaning(): void
+    {
+        // Все отсутствующие знаки рисуются одним глифом `.notdef`, и запись о
+        // нём в `ToUnicode` означала бы «этот глиф читается как последний из
+        // пропавших». Форма с пустым квадратом ☐ и галочкой ✔ так извлекалась
+        // как две галочки: незаполненный чекбокс, прочитанный как отмеченный,
+        // меняет смысл документа.
+        $path = __DIR__.'/../../.cache/fonts/liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf';
+        if (! is_readable($path)) {
+            self::markTestSkipped('Liberation Sans not cached.');
+        }
+        $font = new PdfFont(TtfFile::fromFile($path));
+
+        // В Liberation Sans этих знаков нет — оба дают глиф 0.
+        self::assertSame(0, $font->ttf()->glyphIdForChar(0x2610));
+        self::assertSame(0, $font->ttf()->glyphIdForChar(0x2714));
+
+        $missing = (new Document(new Section([new Paragraph([new Run('[☐✔]')])])))
+            ->toBytes(new Engine(compressStreams: false, defaultFont: $font));
+
+        // В карте извлечения не должно быть записи для глифа 0 — иначе один
+        // пропавший знак прочитается как другой. Проверяем именно таблицу
+        // соответствий: `<0000> <FFFF>` встречается ещё и в объявлении
+        // диапазона кодов, и сравнение по всему файлу ловило бы его.
+        preg_match_all('/beginbfchar(.*?)endbfchar/s', $missing, $tables);
+        foreach ($tables[1] as $table) {
+            self::assertStringNotContainsString('<0000>', $table, 'глиф .notdef попал в карту извлечения');
+        }
+
+    }
 }

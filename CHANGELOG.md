@@ -4,6 +4,21 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] — 2026-08-05
+
+### Fixed
+- **A missing character was extracted as a different one.** Every character
+  absent from the font is drawn with the single `.notdef` glyph, and a
+  `ToUnicode` entry for it meant "this glyph reads as the last character that
+  went missing". A form containing an empty ballot box ☐ and a check mark ✔
+  extracted as two check marks — an unticked checkbox read as ticked changes
+  what the document says. The glyph is no longer written into the extraction
+  map: a missing character stays missing.
+
+  Drawing is unchanged — a character the font lacks still comes out as
+  `.notdef`. Substituting it from a fallback font per character is a separate
+  matter: the chain currently picks one font per word.
+
 ## [1.7.3] — 2026-08-05
 
 ### Notes

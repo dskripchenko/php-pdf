@@ -530,8 +530,16 @@ final class PdfFont
         if ($ligatures === null) {
             // No GSUB liga - straight mapping.
             $out = [];
-            foreach ($decoded as $i => $entry) {
-                $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
+            foreach ($decoded as $entry) {
+        // Глиф 0 (`.notdef`) — «символа в шрифте нет». Он один на все
+        // отсутствующие знаки, поэтому запись о нём в `ToUnicode` означала бы:
+        // «этот глиф читается как последний из пропавших». Форма с пустым
+        // квадратом ☐ и галочкой ✔ так извлекалась как две галочки — а
+        // незаполненный чекбокс, прочитанный как отмеченный, меняет смысл
+        // документа. Пропущенный знак остаётся пропущенным.
+                if ($entry['gid'] !== 0) {
+                    $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
+                }
                 $out[] = ['gid' => $entry['gid'], 'sourceCps' => [$entry['cp']]];
             }
 
@@ -559,7 +567,9 @@ final class PdfFont
                 $sourceCps = [$codepoints[$sourceIdx]];
                 $sourceIdx++;
             }
-            $this->usedGlyphs[$shapedGid] = $sourceCps;
+            if ($shapedGid !== 0) {
+                $this->usedGlyphs[$shapedGid] = $sourceCps;
+            }
             $out[] = ['gid' => $shapedGid, 'sourceCps' => $sourceCps];
         }
 
@@ -577,7 +587,10 @@ final class PdfFont
     public function utf8ToGlyphs(string $utf8): iterable
     {
         foreach ($this->decodeUtf8($utf8) as $entry) {
-            $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
+            // Глиф 0 в `ToUnicode` не попадает — см. shapedGlyphs().
+            if ($entry['gid'] !== 0) {
+                $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
+            }
             yield $entry;
         }
     }
