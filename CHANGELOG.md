@@ -4,6 +4,15 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] — 2026-08-05
+
+### Fixed
+- **A footnote inside a table cell was discarded.** A cell renders in its own
+  layout context, and the footnotes collected there went away with it. They
+  belong to the page, not to the cell, so they are now carried back out. In
+  form-like documents, where the whole body lives inside a table, nothing
+  reached the foot of the page at all.
+
 ## [1.7.1] — 2026-08-05
 
 ### Changed

@@ -4358,11 +4358,20 @@ final class Engine
             pageSetup: $ctx->pageSetup,
             // Propagate skipParagraphTag (table cells suppress nested /P tagging).
             skipParagraphTag: $ctx->skipParagraphTag,
+            footnotes: $ctx->footnotes,
             inTableCell: true,
         );
 
         foreach ($cell->children as $block) {
             $this->renderBlock($block, $sub);
+        }
+
+        // Сноски, встреченные в ячейке, принадлежат странице, а не ячейке:
+        // у ячейки свой контекст, и без переноса они выбрасывались вместе с
+        // ним. В анкете страхователя весь текст сносок лежит в таблице, и
+        // до низа полосы не доезжало ничего.
+        foreach (array_slice($sub->footnotes, count($ctx->footnotes)) as $note) {
+            $ctx->footnotes[] = $note;
         }
     }
 
