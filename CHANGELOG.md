@@ -1,163 +1,166 @@
 # Changelog
 
-## 1.5.2
-
-### Fixed
-- **Цвет заливки протекал на весь дальнейший текст.** `rg` — состояние
-  графики, оно держится до следующего `rg`, а «цвет не задан» трактовалось как
-  «ничего не писать». После цветного заголовка тем же цветом печатался весь
-  документ: заявление страхователя выходило синим целиком, вместе с таблицами.
-  Теперь отсутствие цвета означает чёрный, а не «оставить как было».
-
-  Попутно исправлено сравнение состояния: `0 === 0.0` в PHP ложно, поэтому
-  чёрный никогда не совпадал с текущим состоянием и `rg` писался лишний раз на
-  каждой строке.
-
-## 1.5.1
-
-### Fixed
-- **Разрядка одного фрагмента расползалась на весь документ.** `Tc` —
-  параметр состояния текста: он живёт до следующего `Tc`, а не до ближайшего
-  `ET`. Оператор писался только когда разрядка ненулевая, и после разряженного
-  заголовка её наследовал весь дальнейший текст. На реальном договоре это
-  печаталось нечитаемым: строки выходили шире колонки, налезали друг на друга
-  и уходили за край страницы — извлечение текста давало обрывки в две буквы.
-
-  Теперь значение отслеживается и возвращается к нулю явно. Документы без
-  разрядки не изменились: `Tc` в них по-прежнему не пишется вовсе (начальное
-  значение по спецификации — ноль).
-
-- **Колонтитул отнимал у тела больше, чем занимал.** Решение «поднять низ
-  тела» принималось по формуле «высота колонтитула + 8pt зазора» против
-  нижнего поля страницы, без учёта того, на каком расстоянии от края
-  колонтитул объявлен. Зазор в этом сравнении лишний: тело сжималось ради
-  колонтитулов, которые прекрасно помещаются в поле. На A4 с однострочным
-  колонтитулом это стоило ~15pt высоты на каждой странице — около шести строк
-  на пяти страницах, чего хватало на лишнюю страницу.
-
-## 1.2.6
-
-### Performance
-- **`post` в сабсете больше не несёт имён глифов** (формат 3.0 вместо 2.0).
-  Имена всех глифов исходного шрифта оставались в сабсете целиком и были в нём
-  самой большой таблицей: на Liberation Sans 26 КБ из 61 КБ (43%), при том что
-  контуры занимали 6 КБ.
-
-  В PDF имена глифов не нужны: отображение идёт по идентификаторам, а
-  извлечение текста — по `ToUnicode` CMap, который эмиттер пишет отдельно.
-
-  **Документ у потребителя: 54.6 → 30.0 КБ (счёт), 73.6 → 49.0 КБ (договор
-  на 9 страниц).** Отрисовка не изменилась — проверено попиксельно через
-  poppler на всех страницах: ноль различий. Голдены перегенерации не требуют.
-
-  Заголовок таблицы (наклон, подчёркивание, моноширинность) сохраняется —
-  формат 3.0 отличается только отсутствием имён.
-
-## 1.2.5
-
-### Performance
-- **Сжатые тела шрифтов запоминаются.** `gzcompress` уровня 6 на теле шрифта —
-  самая дорогая часть встраивания: замер в приложении-потребителе показал
-  2.2 мс на документ при двух шрифтах по 62 КБ, тогда как весь рендер занимал
-  12.6 мс. Тело от документа к документу одно и то же.
-
-  **12.6 мс → 9.6 мс на документ (−24%).** Документ при этом не меняется:
-  встроенные тела шрифтов побайтово те же.
-
-  Ключ — хэш содержимого (`xxh3`), а не имя файла: он остаётся верным и для
-  сабсета, который у каждого документа свой. Хэширование 62 КБ стоит
-  микросекунды против миллисекунды сжатия.
-
-  Кэш ограничен `PdfFont::$compressedCacheLimit` (по умолчанию 24);
-  `PdfFont::forgetCompressedCache()` сбрасывает. Как и у кэша разобранных
-  шрифтов из 1.2.4, выигрыш достаётся долгоживущим процессам — воркеру
-  очереди и Octane.
-
-## 1.2.4
-
-### Performance
-- **Разобранные шрифты запоминаются.** `TtfFile::fromFile()` каждый раз читал
-  файл целиком и разбирал `cmap`/`hmtx`/`name`/`post` (а по требованию `GPOS`),
-  хотя для одного и того же файла результат всегда один, а объект неизменяем.
-
-  Замер в приложении-потребителе, где рендерер создаётся заново на каждый
-  документ: **14.6 мс → 8.4 мс на лёгкий документ (−43%)**, на тяжёлом —
-  −4.7 мс. Выигрыш достаётся долгоживущим процессам (воркер очереди, Octane);
-  в модели «процесс на запрос» состояние всё равно сбрасывается между
-  запросами.
-
-  Кэш ограничен `TtfFile::$cacheLimit` (по умолчанию 24 шрифта) — процесс,
-  обслуживающий много клиентов со своими наборами, иначе накапливал бы их
-  все. `TtfFile::forgetCache()` сбрасывает.
-
-  Ключ включает время изменения и размер файла: подменённый шрифт разбирается
-  заново.
-
 All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] — 2026-08-05
+
+### Fixed
+- **Fill colour leaked into all the text that followed.** `rg` is graphics
+  state: it holds until the next `rg`, yet "no colour given" was treated as
+  "emit nothing". Everything after a coloured heading was drawn in that
+  colour — an insurance application came out entirely blue, tables included.
+  Absence of a colour now means black rather than "keep whatever is set".
+
+  The state comparison was fixed along the way: `0 === 0.0` is false in PHP,
+  so black never matched the current state and `rg` was re-emitted on every
+  line.
+
+## [1.5.1] — 2026-08-05
+
+### Fixed
+- **Letter spacing from one run spread across the whole document.** `Tc` is a
+  text-state parameter: it lives until the next `Tc`, not until the nearest
+  `ET`. The operator was emitted only for non-zero spacing, so everything
+  after a tracked heading inherited it. On a real contract the result was
+  unreadable: lines grew wider than their column, overlapped each other and
+  ran off the page — text extraction returned two-letter fragments.
+
+  The value is now tracked and reset to zero explicitly. Documents without
+  letter spacing are unchanged: they still carry no `Tc` at all (the initial
+  value per the specification is zero).
+
+- **Footers took more from the body than they occupied.** The decision to
+  raise the body's bottom edge compared "footer height + 8pt gap" against the
+  page's bottom margin, ignoring the distance from the page edge at which the
+  footer is declared. That gap has no business in the comparison: the body was
+  shrinking for footers that fit into the margin perfectly well. On A4 with a
+  single-line footer this cost ~15pt of height on every page — roughly six
+  lines over five pages, enough to spill onto an extra page.
+
 ## [1.5.0] — 2026-08-05
 
 ### Fixed
-- **Прозрачность картинок терялась — фон печатался чёрным.** Альфа-канал PNG
-  (типы 6 и 4) при вставке просто отбрасывался, и прозрачные точки выходили
-  тем цветом, что лежал под ними: подпись и печать из импортированного
-  документа получали чёрный прямоугольник вместо фона. PDF держит
-  прозрачность отдельным объектом, поэтому альфа теперь выделяется в
-  8-битную маску `DeviceGray` и подключается через `/SMask`. Полностью
-  непрозрачная картинка маски не получает — лишний объект в файле ничего не
-  даёт.
+- **Image transparency was lost — backgrounds printed black.** The alpha
+  channel of a PNG (colour types 6 and 4) was simply dropped on insertion, so
+  transparent pixels came out in whatever colour sat underneath: a signature
+  and a stamp from an imported document ended up as black rectangles. PDF
+  keeps transparency in a separate object, so alpha is now extracted into an
+  8-bit `DeviceGray` mask and attached through `/SMask`. A fully opaque image
+  gets no mask — an extra object in the file buys nothing.
 
 ### Added
-- `PdfImage::$alphaData` — альфа-канал отдельным потоком.
+- `PdfImage::$alphaData` — the alpha channel as a separate stream.
 
 ## [1.4.0] — 2026-08-04
 
 ### Added
-- **Расстояние до колонтитулов** — `PageSetup::$headerDistancePt` /
-  `$footerDistancePt`. Word задаёт его отдельно от поля страницы (`w:header`,
-  `w:footer`), а движок прижимал шапку к самому краю листа: импортированный
-  документ ехал вверх относительно оригинала на два сантиметра. По умолчанию
-  4pt — прежнее поведение. Зона шапки теперь учитывает и расстояние, и её
-  высоту, поэтому при большом `w:header` текст не налезает на колонтитул.
+- **Header and footer distances** — `PageSetup::$headerDistancePt` /
+  `$footerDistancePt`. Word declares them separately from the page margin
+  (`w:header`, `w:footer`), while the engine pinned the header to the very
+  edge of the sheet: an imported document drifted two centimetres up relative
+  to the original. The default is 4pt — the previous behaviour. The header
+  zone now accounts for both the distance and its own height, so a large
+  `w:header` no longer lets body text run into the header.
 
 ## [1.3.1] — 2026-08-04
 
 ### Fixed
-- Типы в docblock'ах `renderRow()` — 1.3.0 ушла в тег с непройденным
-  статическим анализом (три `missingType.iterableValue`). Заодно снята
-  устаревшая запись baseline: она описывала прежний, менее точный тип
-  by-ref параметра.
+- Types in the `renderRow()` docblocks — 1.3.0 was tagged with static analysis
+  failing (three `missingType.iterableValue`). A stale baseline entry was
+  dropped along the way: it described the earlier, less precise type of a
+  by-reference parameter.
 
 ## [1.3.0] — 2026-08-04
 
 ### Added
-- **Высокая строка таблицы делится между страницами.** Раньше строка, не
-  помещавшаяся в остаток страницы, уносилась на следующую целиком — и
-  оставляла за собой полупустой лист. В разобранном страховом полисе так
-  выходила страница с 40 словами вместо семисот: длинный блок условий лежал
-  внутри таблицы. Теперь содержимое ячеек делится по границе страницы, шапка
-  таблицы повторяется на продолжении, а печать документа сошлась с оригиналом
-  по числу страниц.
+- **A tall table row is split across pages.** Previously a row that did not
+  fit into the remainder of a page was carried over whole — leaving a
+  half-empty sheet behind. In an insurance policy under study this produced a
+  page with 40 words instead of seven hundred: a long block of terms lived
+  inside a table. Cell content is now split at the page boundary, the table
+  header repeats on the continuation, and the printed document matched the
+  original in page count.
 
-  Делим по блокам: ячейка — список абзацев, граница проходит между ними.
-  Внутрь абзаца не лезем. Не делятся строки-шапки (их и так повторяют) и
-  строки с вертикальным объединением (`rowSpan`) — разрыв разъехался бы с
-  соседними ячейками. Если в остаток не помещается ни один блок, строка
-  переносится целиком, как раньше: иначе получился бы бесконечный перенос.
+  The split goes by blocks: a cell is a list of paragraphs and the boundary
+  runs between them. We do not descend into a paragraph. Header rows are not
+  split (they are repeated anyway), nor are rows with a vertical merge
+  (`rowSpan`) — the break would drift apart from the neighbouring cells. If
+  not a single block fits into the remainder, the row is carried over whole as
+  before: otherwise it would loop forever.
 
 ## [1.2.7] — 2026-08-04
 
 ### Fixed
-- **Соседние руны без пробела разъезжались.** Слова внутри руна режутся на
-  токены, а строка собирается обратно через пробел — и на стыке двух рунов
-  появлялся пробел, которого в тексте нет. Word режет строку по любой смене
-  начертания, поэтому «(» и «залогодатель» приезжают отдельными рунами, и
-  импортированный документ печатался как «СТРАХОВАТЕЛЬ ( залогодатель )».
-  Теперь стык, где ни один из рунов не кончался и не начинался пробелом,
-  склеивается. Найдено сравнением печати с эталонным документом в printable:
-  совпадение текста с оригиналом поднялось с 99.9% до 100%.
+- **Adjacent runs with no space between them drifted apart.** Words inside a
+  run are cut into tokens and the line is reassembled with spaces — so a space
+  that does not exist in the text appeared at the seam between two runs. Word
+  splits a line at every change of formatting, which is why "(" and
+  "залогодатель" arrive as separate runs, and the imported document printed as
+  "СТРАХОВАТЕЛЬ ( залогодатель )". A seam where neither run ended or started
+  with a space is now glued. Found by comparing print output against a
+  reference document in printable: text agreement with the original rose from
+  99.9% to 100%.
+
+## [1.2.6] — 2026-07-31
+
+### Performance
+- **The subset's `post` table no longer carries glyph names** (format 3.0
+  instead of 2.0). Names of every glyph in the source font survived into the
+  subset in full and were its largest table: 26 KB out of 61 KB on Liberation
+  Sans (43%), while the outlines took 6 KB.
+
+  A PDF has no use for glyph names: rendering goes by identifier and text
+  extraction by the `ToUnicode` CMap, which the emitter writes separately.
+
+  **Consumer-side documents: 54.6 → 30.0 KB (an invoice), 73.6 → 49.0 KB (a
+  nine-page contract).** Rendering is unchanged — verified pixel by pixel
+  through poppler on every page: zero differences. Goldens need no
+  regeneration.
+
+  The table header (slant, underline, monospace flags) is preserved — format
+  3.0 differs only in dropping the names.
+
+## [1.2.5] — 2026-07-31
+
+### Performance
+- **Compressed font bodies are remembered.** Level-6 `gzcompress` over a font
+  body is the most expensive part of embedding: a measurement in the consuming
+  application showed 2.2 ms per document with two 62 KB fonts, while the whole
+  render took 12.6 ms. The body is identical from document to document.
+
+  **12.6 ms → 9.6 ms per document (−24%).** The document itself does not
+  change: embedded font bodies are byte-for-byte the same.
+
+  The key is a content hash (`xxh3`) rather than a file name: it stays correct
+  for a subset, which differs per document. Hashing 62 KB costs microseconds
+  against a millisecond of compression.
+
+  The cache is bounded by `PdfFont::$compressedCacheLimit` (24 by default);
+  `PdfFont::forgetCompressedCache()` clears it. As with the parsed-font cache
+  from 1.2.4, the gain goes to long-lived processes — a queue worker and
+  Octane.
+
+## [1.2.4] — 2026-07-30
+
+### Performance
+- **Parsed fonts are remembered.** `TtfFile::fromFile()` read the whole file
+  and parsed `cmap`/`hmtx`/`name`/`post` (plus `GPOS` on demand) every time,
+  even though the result for a given file is always the same and the object is
+  immutable.
+
+  Measured in a consuming application that builds the renderer anew for each
+  document: **14.6 → 8.4 ms on a light document (−43%)**, −4.7 ms on a heavy
+  one. The gain goes to long-lived processes (queue worker, Octane); under
+  process-per-request the state is discarded between requests anyway.
+
+  The cache is bounded by `TtfFile::$cacheLimit` (24 fonts by default) — a
+  process serving many clients with their own font sets would otherwise
+  accumulate all of them. `TtfFile::forgetCache()` clears it.
+
+  The key includes the file's modification time and size: a replaced font is
+  parsed again.
 
 ## [1.2.3] — 2026-07-28
 
