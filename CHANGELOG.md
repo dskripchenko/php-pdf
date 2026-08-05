@@ -4,6 +4,17 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] — 2026-08-05
+
+### Added
+- **Floating objects** — `Image::$outOfFlow`. Word anchors stamps and
+  signatures to a paragraph and offsets them from the anchor point so they lie
+  over finished text. Such an object takes no room in the flow: while it stood
+  in the flow as a line of its own, the document was pushed apart by its
+  height, which cost an insurance policy an extra page. A floating image is
+  drawn where its offset puts it, the cursor returns to where it stood, and
+  the surrounding text does not move. Ordinary images are unaffected.
+
 ## [1.5.3] — 2026-08-05
 
 ### Fixed

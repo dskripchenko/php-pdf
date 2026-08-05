@@ -2815,8 +2815,11 @@ final class Engine
             $heightPt *= $ratio;
         }
 
-        // If there is not enough space on the current page → page break.
-        $this->ensureRoomFor($ctx, $heightPt);
+        // Плавающему объекту страница не переносится: он не занимает места,
+        // а значит и «не помещается» ему нечем.
+        if (! $img->outOfFlow) {
+            $this->ensureRoomFor($ctx, $heightPt);
+        }
 
         // X-position by alignment.
         $x = match ($img->alignment) {
@@ -2830,8 +2833,14 @@ final class Engine
         $y = $ctx->cursorY - $heightPt;
         $ctx->currentPage->drawImage($img->source, $x, $y, $widthPt, $heightPt);
 
-        $ctx->cursorY -= $heightPt;
-        $ctx->cursorY -= $img->spaceAfterPt;
+        if (! $img->outOfFlow) {
+            $ctx->cursorY -= $heightPt;
+            $ctx->cursorY -= $img->spaceAfterPt;
+        } else {
+            // Отступ до объекта был смещением привязки — возвращаем курсор
+            // туда, где он стоял: поток объекта не заметил.
+            $ctx->cursorY += $img->spaceBeforePt;
+        }
 
         // End Figure tag + register struct element with alt text.
         if ($taggedPdf && $mcid !== null) {
@@ -4517,6 +4526,12 @@ final class Engine
 
     private function measureImageHeight(Image $img, float $contentWidth): float
     {
+        // Плавающий объект места в потоке не занимает — и в измерении тоже,
+        // иначе ячейка или страница резервировали бы под него высоту.
+        if ($img->outOfFlow) {
+            return 0.0;
+        }
+
         [$w, $h] = $img->effectiveSizePt();
         if ($w > $contentWidth) {
             $h *= $contentWidth / $w;

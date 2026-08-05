@@ -32,6 +32,15 @@ final readonly class Image implements BlockElement, InlineElement
         public float $spaceBeforePt = 0,
         public float $spaceAfterPt = 0,
         public ?string $altText = null,
+        /**
+         * Плавающий объект: рисуется, но места в потоке не занимает.
+         *
+         * Word так ставит печати и подписи — привязывает к абзацу и смещает
+         * относительно точки привязки, поверх готового текста. Пока такой
+         * объект вставал в поток отдельной строкой, документ раздвигало на
+         * его высоту: у страхового полиса это стоило лишней страницы.
+         */
+        public bool $outOfFlow = false,
     ) {}
 
     public static function fromPath(
@@ -42,6 +51,7 @@ final readonly class Image implements BlockElement, InlineElement
         float $spaceBeforePt = 0,
         float $spaceAfterPt = 0,
         ?string $altText = null,
+        bool $outOfFlow = false,
     ): self {
         return new self(
             source: PdfImage::fromPath($path),
@@ -51,6 +61,7 @@ final readonly class Image implements BlockElement, InlineElement
             spaceBeforePt: $spaceBeforePt,
             spaceAfterPt: $spaceAfterPt,
             altText: $altText,
+            outOfFlow: $outOfFlow,
         );
     }
 
@@ -62,6 +73,7 @@ final readonly class Image implements BlockElement, InlineElement
         float $spaceBeforePt = 0,
         float $spaceAfterPt = 0,
         ?string $altText = null,
+        bool $outOfFlow = false,
     ): self {
         return new self(
             source: PdfImage::fromBytes($bytes),
@@ -71,6 +83,7 @@ final readonly class Image implements BlockElement, InlineElement
             spaceBeforePt: $spaceBeforePt,
             spaceAfterPt: $spaceAfterPt,
             altText: $altText,
+            outOfFlow: $outOfFlow,
         );
     }
 

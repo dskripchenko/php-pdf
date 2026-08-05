@@ -134,4 +134,61 @@ final class ImageRenderTest extends TestCase
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertStringStartsWith('%PDF', $bytes);
     }
+
+    #[Test]
+    public function out_of_flow_image_does_not_move_the_text(): void
+    {
+        // Word так ставит печати и подписи: объект привязан к абзацу, смещён
+        // относительно точки привязки и лежит поверх текста. Пока он вставал
+        // в поток отдельной строкой, документ раздвигало на его высоту — у
+        // страхового полиса это стоило лишней страницы.
+        $withImage = new Document(new Section([
+            new Paragraph([new Run('над печатью')]),
+            Image::fromPath($this->pngPath, widthPt: 120, heightPt: 90, outOfFlow: true),
+            new Paragraph([new Run('под печатью')]),
+        ]));
+        $withoutImage = new Document(new Section([
+            new Paragraph([new Run('над печатью')]),
+            new Paragraph([new Run('под печатью')]),
+        ]));
+
+        $a = $withImage->toBytes(new Engine(compressStreams: false));
+        $b = $withoutImage->toBytes(new Engine(compressStreams: false));
+
+        // Картинка нарисована...
+        self::assertStringContainsString('/Subtype /Image', $a);
+        // ...а текст стоит там же, где стоял бы без неё.
+        self::assertSame($this->textPositions($b), $this->textPositions($a));
+    }
+
+    #[Test]
+    public function ordinary_image_still_takes_its_place(): void
+    {
+        $withImage = new Document(new Section([
+            new Paragraph([new Run('над картинкой')]),
+            Image::fromPath($this->pngPath, widthPt: 120, heightPt: 90),
+            new Paragraph([new Run('под картинкой')]),
+        ]));
+        $withoutImage = new Document(new Section([
+            new Paragraph([new Run('над картинкой')]),
+            new Paragraph([new Run('под картинкой')]),
+        ]));
+
+        $a = $withImage->toBytes(new Engine(compressStreams: false));
+        $b = $withoutImage->toBytes(new Engine(compressStreams: false));
+
+        self::assertNotSame($this->textPositions($b), $this->textPositions($a));
+    }
+
+    /**
+     * Позиции текстовых операторов — по ним видно, сдвинулся ли текст.
+     *
+     * @return list<string>
+     */
+    private function textPositions(string $pdf): array
+    {
+        preg_match_all('/([-\d.]+ [-\d.]+) Td/', $pdf, $m);
+
+        return $m[1];
+    }
 }
