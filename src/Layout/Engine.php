@@ -288,7 +288,11 @@ final class Engine
             // Render header/footer on the section's new first page.
             $this->renderHeaderFooter($context);
 
-            foreach ($section->body as $block) {
+            // Имя переменной цикла намеренно своё: снаружи идёт обход
+            // секций по $idx, и общее имя затёрло бы его.
+            $bodyBlocks = array_values($section->body);
+            foreach ($bodyBlocks as $blockIdx => $block) {
+                $this->keepWithNextBreak($block, $bodyBlocks[$blockIdx + 1] ?? null, $context);
                 $this->renderBlock($block, $context);
             }
 
@@ -1863,6 +1867,58 @@ final class Engine
 
         $ctx->cursorY -= $totalHeight;
         $ctx->cursorY -= $field->spaceAfterPt;
+    }
+
+    /**
+     * Переносит абзац «не отрывать от следующего» на новую страницу, если
+     * вместе со следующим блоком он туда уже не помещается.
+     *
+     * Смотрим не на весь следующий блок, а на его первую строку: требование
+     * Word — чтобы за заголовком осталось хоть что-то. Требовать целиком
+     * значило бы выбрасывать полстраницы ради длинной таблицы.
+     */
+    private function keepWithNextBreak(BlockElement $block, ?BlockElement $next, LayoutContext $ctx): void
+    {
+        if ($next === null || $ctx->inTableCell || $ctx->inHeaderFooterRender) {
+            return;
+        }
+        if (! $block instanceof Paragraph || ! $block->style->keepWithNext) {
+            return;
+        }
+        // Абзац в начале страницы переносить некуда — он и так первый.
+        if ($ctx->cursorY >= $ctx->topY) {
+            return;
+        }
+
+        $needed = $this->measureBlockHeight($block, $ctx->contentWidth)
+            + $this->firstLineHeight($next, $ctx->contentWidth);
+
+        if ($ctx->cursorY - $needed < $ctx->bottomY) {
+            $this->forcePageBreak($ctx);
+        }
+    }
+
+    /**
+     * Высота первой строки блока — сколько места нужно, чтобы за заголовком
+     * осталось хоть что-то.
+     */
+    private function firstLineHeight(BlockElement $block, float $contentWidth): float
+    {
+        $full = $this->measureBlockHeight($block, $contentWidth);
+
+        if ($block instanceof Table) {
+            $rows = $block->rows;
+            if ($rows === []) {
+                return $full;
+            }
+            $tableWidth = $this->computeTableWidth($block->style, $contentWidth);
+            $colWidths = $this->computeColumnWidths($block, $tableWidth, $block->columnCount());
+
+            return min($full, $this->measureRowHeight($block, $rows[0], $colWidths));
+        }
+
+        // Для прочих блоков хватает одной строки текста обычного кегля.
+        return min($full, $this->defaultFontSizePt * 1.5);
     }
 
     private function forcePageBreak(LayoutContext $ctx): void

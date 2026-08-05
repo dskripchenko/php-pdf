@@ -25,6 +25,16 @@ final readonly class ParagraphStyle
         /** Absolute line height in pt. Overrides `lineHeightMult` when set. */
         public ?float $lineHeightPt = null,
         public bool $pageBreakBefore = false,
+        /**
+         * «Не отрывать от следующего» (`w:keepNext`).
+         *
+         * Заголовок не должен оставаться последней строкой страницы: если
+         * следом за ним ничего не помещается, на новую страницу переезжают
+         * оба. Без этого должностная инструкция расходилась с оригиналом уже
+         * на первой странице — Word уносил заголовок раздела вместе с
+         * таблицей, а мы оставляли его внизу.
+         */
+        public bool $keepWithNext = false,
         public ?BorderSet $borders = null,
         public float $paddingTopPt = 0,
         public float $paddingRightPt = 0,

@@ -20,6 +20,7 @@ use Dskripchenko\PhpPdf\Style\Border;
 use Dskripchenko\PhpPdf\Style\BorderSet;
 use Dskripchenko\PhpPdf\Style\BorderStyle;
 use Dskripchenko\PhpPdf\Style\CellStyle;
+use Dskripchenko\PhpPdf\Style\ParagraphStyle;
 use Dskripchenko\PhpPdf\Style\TableStyle;
 use Dskripchenko\PhpPdf\Style\VerticalAlignment;
 use PHPUnit\Framework\Attributes\Test;
@@ -330,4 +331,46 @@ final class TableRenderTest extends TestCase
 
         self::assertSame(2, substr_count($bytes, '/Type /Page '));
     }
+
+    #[Test]
+    public function keep_with_next_moves_a_heading_to_its_content(): void
+    {
+        // Заголовок раздела не должен оставаться последней строкой страницы:
+        // Word уносит его на следующую вместе с содержимым. В должностной
+        // инструкции без этого расхождение начиналось уже с первой страницы.
+        $withoutKeep = $this->headingBeforeTable(keepWithNext: false);
+        $withKeep = $this->headingBeforeTable(keepWithNext: true);
+
+        // Без флага заголовок дожимается к низу страницы...
+        self::assertLessThan(200.0, $withoutKeep);
+        // ...а с флагом уезжает наверх следующей, к своей таблице.
+        self::assertGreaterThan(700.0, $withKeep);
+    }
+
+    /** Вертикальная позиция заголовка, стоящего вплотную к нижнему краю. */
+    private function headingBeforeTable(bool $keepWithNext): float
+    {
+        $blocks = [];
+        for ($i = 0; $i < 53; $i++) {
+            $blocks[] = new Paragraph([new Run('Filler line number '.$i.'.')]);
+        }
+        $blocks[] = new Paragraph(
+            [new Run('Qualification requirements')],
+            new ParagraphStyle(keepWithNext: $keepWithNext),
+        );
+        $blocks[] = new Table([
+            new Row([new Cell([new Paragraph([new Run('WORK EXPERIENCE')])])]),
+        ]);
+
+        $bytes = (new Document(new Section($blocks)))->toBytes(new Engine(compressStreams: false));
+
+        self::assertSame(
+            1,
+            preg_match('/([\d.]+) ([\d.]+) Td\s*\n\(Qualification requirements\)/', $bytes, $m),
+            'заголовок не нашёлся в потоке',
+        );
+
+        return (float) $m[2];
+    }
+
 }

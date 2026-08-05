@@ -4,6 +4,15 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] — 2026-08-05
+
+### Added
+- **`ParagraphStyle::$keepWithNext` — "keep with next".** A section heading
+  must not be left as the last line of a page: when nothing fits after it,
+  both it and the following block move to the next page. The check looks at
+  the first line of the next block rather than the whole of it — demanding the
+  entire block would throw away half a page for the sake of a long table.
+
 ## [1.6.0] — 2026-08-05
 
 ### Added
