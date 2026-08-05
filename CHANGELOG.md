@@ -4,6 +4,17 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] — 2026-08-05
+
+### Fixed
+- **A forced page break inside a table cell is ignored, as Word ignores it.**
+  Word cannot start a page in the middle of a cell, so such a break survives
+  in the file as a leftover of editing and renders as nothing. Acting on it
+  tore a real application form apart: the row carrying the break went to a
+  page of its own and everything after it began on the following page. Two
+  such leftovers turned a seven-page document into nine. Breaks outside tables
+  work exactly as before.
+
 ## [1.5.2] — 2026-08-05
 
 ### Fixed

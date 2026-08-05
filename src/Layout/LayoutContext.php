@@ -67,5 +67,12 @@ final class LayoutContext
          * rendered at page bottom on page break.
          */
         public int $pageFootnoteStart = 0,
+        /**
+         * Rendering inside a table cell. A forced page break has no effect
+         * there: Word ignores a `w:br w:type="page"` placed inside a cell,
+         * and honouring it would leave a single row alone on a page while
+         * everything after it starts on the next one.
+         */
+        public bool $inTableCell = false,
     ) {}
 }

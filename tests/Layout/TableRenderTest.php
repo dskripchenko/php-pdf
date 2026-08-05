@@ -6,6 +6,7 @@ namespace Dskripchenko\PhpPdf\Tests\Layout;
 
 use Dskripchenko\PhpPdf\Document;
 use Dskripchenko\PhpPdf\Element\Cell;
+use Dskripchenko\PhpPdf\Element\PageBreak;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
@@ -290,5 +291,43 @@ final class TableRenderTest extends TestCase
         } finally {
             @unlink($tmp);
         }
+    }
+
+    #[Test]
+    public function forced_page_break_inside_a_cell_is_ignored(): void
+    {
+        // Word cannot start a page in the middle of a cell, so such a break
+        // stays in the file as a leftover of editing and renders as nothing.
+        // Acting on it tore a real application form apart: the row carrying
+        // the break went to a page of its own and everything after it began
+        // on the following page.
+        $doc = new Document(new Section([
+            new Table([
+                new Row([new Cell([new Paragraph([new Run('first row')])])]),
+                new Row([new Cell([
+                    new PageBreak,
+                    new Paragraph([new Run('row with a break inside')]),
+                ])]),
+                new Row([new Cell([new Paragraph([new Run('third row')])])]),
+            ]),
+        ]));
+
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+
+        self::assertSame(1, substr_count($bytes, '/Type /Page '), 'таблица обязана остаться на одной странице');
+    }
+
+    #[Test]
+    public function forced_page_break_outside_a_table_still_works(): void
+    {
+        $doc = new Document(new Section([
+            new Paragraph([new Run('before')]),
+            new PageBreak,
+            new Paragraph([new Run('after')]),
+        ]));
+
+        $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+
+        self::assertSame(2, substr_count($bytes, '/Type /Page '));
     }
 }

@@ -1877,6 +1877,15 @@ final class Engine
             return;
         }
 
+        // A forced break inside a table cell is ignored — as Word ignores it.
+        // Word cannot start a page in the middle of a cell, so such a break
+        // stays in the file as a leftover of editing. Acting on it tore a
+        // form apart: the row carrying the break went to a page of its own,
+        // and everything after it began on the following page.
+        if ($ctx->inTableCell) {
+            return;
+        }
+
         // Per-page footnote bottom — flush current page's
         // footnotes before switching pages.
         if ($ctx->footnoteReserveBottomPt !== null) {
@@ -4247,6 +4256,7 @@ final class Engine
             pageSetup: $ctx->pageSetup,
             // Propagate skipParagraphTag (table cells suppress nested /P tagging).
             skipParagraphTag: $ctx->skipParagraphTag,
+            inTableCell: true,
         );
 
         foreach ($cell->children as $block) {
