@@ -1882,7 +1882,8 @@ final class Engine
         if ($next === null || $ctx->inTableCell || $ctx->inHeaderFooterRender) {
             return;
         }
-        if (! $block instanceof Paragraph || ! $block->style->keepWithNext) {
+        $trailing = $this->trailingParagraph($block);
+        if ($trailing === null || ! $trailing->style->keepWithNext) {
             return;
         }
         // Абзац в начале страницы переносить некуда — он и так первый.
@@ -1896,6 +1897,36 @@ final class Engine
         if ($ctx->cursorY - $needed < $ctx->bottomY) {
             $this->forcePageBreak($ctx);
         }
+    }
+
+    /**
+     * Последний абзац блока — тот, к которому относится «не отрывать».
+     *
+     * Заголовок раздела нередко оформлен пунктом нумерованного списка: тогда
+     * требование несёт список, а держать вместе со следующим блоком нужно его
+     * целиком.
+     */
+    private function trailingParagraph(BlockElement $block): ?Paragraph
+    {
+        if ($block instanceof Paragraph) {
+            return $block;
+        }
+
+        if ($block instanceof ListNode) {
+            $items = $block->items;
+            if ($items === []) {
+                return null;
+            }
+            $last = $items[count($items) - 1];
+            for ($i = count($last->children) - 1; $i >= 0; $i--) {
+                $child = $last->children[$i];
+                if ($child instanceof Paragraph) {
+                    return $child;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -3883,6 +3914,12 @@ final class Engine
                 // пробуем разделить: строка выше страницы иначе оставляет за
                 // собой полупустой лист, а строка, которая ВООБЩЕ не влезает
                 // в страницу, уходила бы в бесконечный перенос.
+                //
+                // Проверено и отвергнуто: «строку, помещающуюся на чистой
+                // странице, переносить целиком» (так поступает Word в
+                // разобранном случае) — на корпусе это дало минус три
+                // страницы сходства и разъехало ещё два документа. Правило
+                // Word здесь сложнее одного условия.
                 $available = $ctx->cursorY - $ctx->bottomY;
                 $split = $this->splitRowForPage($t, $row, $colWidths, $available);
 

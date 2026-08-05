@@ -4,6 +4,20 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] — 2026-08-05
+
+### Changed
+- `keepWithNext` now also applies when the heading is a list item: the
+  requirement is then carried by the list, and the whole list moves with the
+  block that follows it.
+
+### Notes
+- Tried and rejected: "a row that fits on an empty page moves there whole
+  instead of being split" — that is what Word did in the case under study, but
+  across the corpus it cost three pages of agreement and pushed two more
+  documents apart. Word's rule here is more than a single condition; the note
+  is left in the code so the attempt is not repeated.
+
 ## [1.7.0] — 2026-08-05
 
 ### Added
