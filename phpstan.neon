@@ -1,5 +1,9 @@
 parameters:
     level: 6
+    # Анализируем под МИНИМАЛЬНУЮ поддерживаемую версию: на машине разработчика
+    # стоит 8.5, и синтаксис новее 8.2 проходит локально, а сборка падает
+    # разбором файла у пользователя.
+    phpVersion: 80200
     paths:
         - src
     # Pre-existing findings across the (large) core are frozen in the baseline
