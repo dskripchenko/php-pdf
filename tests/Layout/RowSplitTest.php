@@ -156,6 +156,37 @@ final class RowSplitTest extends TestCase
     }
 
     #[Test]
+    public function a_header_row_does_not_end_a_page_alone(): void
+    {
+        // Шапка объясняет колонки: оставшись последней строкой страницы, она
+        // объясняет то, чего на этой странице уже нет, — а на следующей
+        // повторяется заново. Уходит вместе с первой строкой данных.
+        //
+        // Маркеры латиницей: сверяемся с выводом pdftotext, и кириллица здесь
+        // только добавила бы кодировочного шума к проверке раскладки.
+        $filler = [];
+        for ($i = 0; $i < 47; $i++) {
+            $filler[] = new Paragraph([new Run('Filler paragraph number '.$i.'.')]);
+        }
+
+        $fixture = __DIR__.'/../fixtures/sample.jpg';
+        if (! is_readable($fixture)) {
+            self::markTestSkipped('Sample JPEG fixture missing.');
+        }
+
+        $table = new Table([
+            new Row([new Cell([new Paragraph([new Run('COLUMN-HEADER')])])], isHeader: true),
+            new Row([new Cell([new Image(PdfImage::fromPath($fixture), widthPt: 160, heightPt: 160)])]),
+        ]);
+
+        $pages = $this->pageTexts(new Section([...$filler, $table]));
+
+        self::assertGreaterThan(1, count($pages), 'ожидалось больше одной страницы');
+        self::assertStringNotContainsString('COLUMN-HEADER', $pages[0], 'шапка осталась одна в конце страницы');
+        self::assertStringContainsString('COLUMN-HEADER', $pages[1]);
+    }
+
+    #[Test]
     public function a_row_that_fits_is_not_split(): void
     {
         $table = new Table([new Row([$this->tallCell(3)])]);

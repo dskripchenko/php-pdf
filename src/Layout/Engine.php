@@ -3909,6 +3909,19 @@ final class Engine
             $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
             $isLastRow = $rowIdx === $totalRows - 1;
 
+            // Шапка таблицы не остаётся последней строкой страницы: она
+            // объясняет колонки, которых на этой странице уже не будет, а
+            // на следующей повторится заново. Уходим на новую страницу
+            // вместе с первой строкой данных.
+            $next = $t->rows[$rowIdx + 1] ?? null;
+            if ($row->isHeader && $next !== null && ! $next->isHeader) {
+                $together = $rowHeight + $this->measureRowHeight($t, $next, $colWidths);
+                if ($ctx->cursorY - $rowHeight >= $ctx->bottomY && $ctx->cursorY - $together < $ctx->bottomY) {
+                    $this->forcePageBreak($ctx);
+                    $prevRowBottomByCol = [];
+                }
+            }
+
             if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
                 // Строка не помещается. Прежде чем уносить её целиком —
                 // пробуем разделить: строка выше страницы иначе оставляет за

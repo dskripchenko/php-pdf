@@ -4,6 +4,14 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] — 2026-08-05
+
+### Fixed
+- **A table header row could be left alone at the foot of a page.** It
+  explains columns that are no longer on that page, and repeats itself at the
+  top of the next one. The header now moves to the next page together with the
+  first row of data.
+
 ## [1.8.2] — 2026-08-05
 
 ### Fixed
