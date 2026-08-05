@@ -113,4 +113,5 @@ final class LineBreakerTest extends TestCase
         // Текст должен полностью присутствовать.
         self::assertSame($text, implode(' ', $lines));
     }
+
 }
