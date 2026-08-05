@@ -4,6 +4,19 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] — 2026-08-05
+
+### Fixed
+- **Encrypted streams declared the length of their plaintext.** Encryption
+  grows a stream — AES prepends a 16-byte IV and pads to the block size — but
+  the `/Length` written before encryption was left untouched. A reader that
+  believes `/Length`, and §7.3.8.2 entitles it to, reads a truncated stream; a
+  reader that falls back to scanning for `endstream` has to guess where the
+  preceding EOL begins, and guesses wrong whenever the last ciphertext byte is
+  a CR. That is roughly one encrypted file in 256, which is how it surfaced:
+  an intermittently failing decryption test. `/Length` now counts the bytes
+  actually written, and a test asserts that for every algorithm.
+
 ## [1.8.0] — 2026-08-05
 
 ### Fixed

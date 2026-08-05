@@ -762,15 +762,34 @@ final class Writer
         $body = $this->encryptLiteralStrings($body, $objId);
 
         // Encrypt stream content: `stream\n<bytes>\nendstream`.
-        return preg_replace_callback(
+        $encryptedLength = null;
+        $result = preg_replace_callback(
             '@stream\n(.*?)\nendstream@s',
-            function (array $m) use ($enc, $objId): string {
+            function (array $m) use ($enc, $objId, &$encryptedLength): string {
                 $encrypted = $enc->encryptObject($m[1], $objId);
+                $encryptedLength = strlen($encrypted);
 
                 return 'stream'."\n".$encrypted."\n".'endstream';
             },
             $body,
         ) ?? $body;
+
+        // Encryption grows the stream (IV + padding), so the /Length written
+        // for the plaintext no longer describes what is on disk. A reader that
+        // believes /Length — and per §7.3.8.2 it is entitled to — reads a
+        // truncated stream; one that falls back to scanning for `endstream`
+        // has to guess where the preceding EOL ends, and guesses wrong
+        // whenever the last ciphertext byte is CR (~1 file in 256).
+        if ($encryptedLength !== null) {
+            $result = preg_replace(
+                '@/Length \d+@',
+                '/Length '.$encryptedLength,
+                $result,
+                1,
+            ) ?? $result;
+        }
+
+        return $result;
     }
 
     /**
