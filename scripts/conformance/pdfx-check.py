@@ -107,8 +107,12 @@ def check_file(pdf: Path, variant: str, min_version: tuple[int, int],
 
     if not re.search(rb"/GTS_PDFXVersion \(" + re.escape(variant.encode()) + rb"\)", data):
         errors.append(f"/Info lacks /GTS_PDFXVersion ({variant})")
+    # A string object may be written literally or as hex; a text string
+    # outside ASCII must be UTF-16BE, which is only expressible in hex form
+    # (ISO 32000-1 §7.9.2.2). Accepting the literal form alone reported a
+    # conformant file as broken the moment its title gained an em dash.
     for key in (b"/Title", b"/CreationDate", b"/ModDate"):
-        if key + b" (" not in data:
+        if not re.search(re.escape(key) + rb"\s*[(<]", data):
             errors.append(f"/Info lacks {key.decode()}")
     if not re.search(rb"/Trapped\s*/(True|False)(?![\w])", data):
         errors.append("/Trapped must be /True or /False")
