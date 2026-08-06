@@ -703,6 +703,13 @@ final class Document
      * Set PDF metadata (/Info dict). All parameters are optional; only the
      * non-null fields are emitted. CreationDate is auto-populated if not
      * provided.
+     *
+     * `$custom` carries keys beyond the standard set — §14.3.3 explicitly
+     * allows them, and readers show them alongside the rest. Useful for an
+     * application's own document identifier, which otherwise has nowhere to
+     * live inside the file.
+     *
+     * @param  array<string, string>  $custom  Extra /Info entries
      */
     public function metadata(
         ?string $title = null,
@@ -712,6 +719,7 @@ final class Document
         ?string $creator = null,
         ?string $producer = null,
         ?\DateTimeInterface $creationDate = null,
+        array $custom = [],
     ): self {
         if ($title !== null) {
             $this->metadata['Title'] = $title;
@@ -733,6 +741,18 @@ final class Document
         }
         if ($creationDate !== null) {
             $this->metadata['CreationDate'] = $this->formatPdfDate($creationDate);
+        }
+
+        foreach ($custom as $key => $value) {
+            // A PDF name has no room for delimiters or whitespace; letting
+            // them through would produce a dictionary readers cannot parse,
+            // and the damage would surface far from here.
+            if (preg_match('/^[A-Za-z][A-Za-z0-9_]*$/', (string) $key) !== 1) {
+                throw new \InvalidArgumentException(
+                    'Invalid /Info key "'.$key.'": expected a name of letters, digits and underscores.',
+                );
+            }
+            $this->metadata[(string) $key] = $value;
         }
 
         return $this;

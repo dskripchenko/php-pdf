@@ -264,6 +264,8 @@ final readonly class Document
             $pdf->pdfVersion($this->pdfVersion);
         }
         if ($this->metadata !== []) {
+            $standard = ['Title', 'Author', 'Subject', 'Keywords', 'Creator', 'Producer'];
+
             $pdf->metadata(
                 title: $this->metadata['Title'] ?? null,
                 author: $this->metadata['Author'] ?? null,
@@ -271,6 +273,10 @@ final readonly class Document
                 keywords: $this->metadata['Keywords'] ?? null,
                 creator: $this->metadata['Creator'] ?? null,
                 producer: $this->metadata['Producer'] ?? null,
+                // Everything else goes through as a custom /Info entry: the
+                // spec allows it, and an application identifier has nowhere
+                // else to live inside the file.
+                custom: array_diff_key($this->metadata, array_flip($standard)),
             );
         }
         if ($this->pdfA !== null) {

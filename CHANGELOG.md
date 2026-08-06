@@ -4,6 +4,18 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] — 2026-08-06
+
+### Added
+- **Custom `/Info` entries.** The metadata dictionary accepted only the six
+  well-known fields, so an application's own document identifier had nowhere
+  to live inside the file. ISO 32000-1 §14.3.3 allows extra keys and readers
+  display them alongside the rest; any key beyond the standard set now goes
+  through. Keys are validated against the PDF name grammar — a space or a
+  delimiter would produce a dictionary readers cannot parse, and the damage
+  would surface far from the call that caused it. Values follow the same
+  encoding rule as the standard fields: non-ASCII is written as UTF-16BE.
+
 ## [1.8.6] — 2026-08-06
 
 ### Fixed
