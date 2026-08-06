@@ -7,6 +7,8 @@
 
 # dskripchenko/php-pdf
 
+> 🌐 **English** · [Deutsch](docs/de/README.md) · [Русский](docs/ru/README.md) · [中文](docs/zh/README.md)
+
 > **Replaces mpdf + FPDI with a single MIT package — no GPL friction, and
 > [faster](docs/en/BENCHMARKS.md).** Pure-PHP toolkit to **generate, read,
 > and merge** PDFs: a GPL-free mpdf alternative for HTML→PDF and a free

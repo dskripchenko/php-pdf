@@ -10,7 +10,7 @@
 [![Conformance](https://img.shields.io/github/actions/workflow/status/dskripchenko/php-pdf/conformance.yml?branch=main&label=PDF%2FA%20%C2%B7%20PDF%2FX%20%C2%B7%20visual&logo=github)](../en/CONFORMANCE.md)
 [![Latest Version](https://img.shields.io/packagist/v/dskripchenko/php-pdf?logo=packagist&logoColor=white)](https://packagist.org/packages/dskripchenko/php-pdf)
 [![Total Downloads](https://img.shields.io/packagist/dt/dskripchenko/php-pdf)](https://packagist.org/packages/dskripchenko/php-pdf)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-purple.svg)](https://www.php.net)
 
 **语言：** [English](../en/README.md) · [Русский](../ru/README.md) · [中文](README.md) · [Deutsch](../de/README.md)
@@ -264,6 +264,6 @@ vendor/bin/phpunit
 
 ## 许可证
 
-MIT —— 见 [LICENSE](LICENSE)。
+MIT —— 见 [LICENSE](../../LICENSE)。
 
 版权所有 © 2026 Denis Skripchenko。

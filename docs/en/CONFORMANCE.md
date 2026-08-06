@@ -3,7 +3,7 @@
 **A PDF library's claims are only as good as the independent tools that
 verify them.** Every push to `main` regenerates a set of reference documents
 and validates them with third-party validators in the
-[`conformance` workflow](../../../../actions/workflows/conformance.yml).
+[`conformance` workflow](https://github.com/dskripchenko/php-pdf/actions/workflows/conformance.yml).
 Per-run reports (validator output, rendered pages, diffs) are attached to
 each workflow run as artifacts; the summary tables are printed on the run's
 summary page.
