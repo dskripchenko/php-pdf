@@ -1191,7 +1191,7 @@ final class Document
             // JavaScript actions + collect field object IDs.
             foreach ($page->formFields() as $field) {
                 $tooltipPart = $field['tooltip'] !== null
-                    ? ' /TU '.$this->pdfString($field['tooltip'])
+                    ? ' /TU '.$this->pdfTextString($field['tooltip'])
                     : '';
                 $namePart = '/T '.$this->pdfString($field['name']);
 
@@ -1475,7 +1475,7 @@ final class Document
                     : $structRootId;
                 $altPart = '';
                 if (! empty($elem['altText'])) {
-                    $altPart = ' /Alt '.$this->pdfString((string) $elem['altText']);
+                    $altPart = ' /Alt '.$this->pdfTextString((string) $elem['altText']);
                 }
                 if (! empty($elem['objr'])) {
                     $kPart = sprintf('<< /Type /OBJR /Obj %d 0 R >>', $elem['objr']);
@@ -1789,7 +1789,7 @@ final class Document
         ];
         $entries = [];
         foreach ($meta as $key => $value) {
-            $entries[] = '/'.$key.' '.$this->pdfString((string) $value);
+            $entries[] = '/'.$key.' '.$this->pdfTextString((string) $value);
         }
         // PDF/X requires /GTS_PDFXVersion, /ModDate and /Trapped in /Info.
         if ($this->pdfX !== null) {
@@ -1800,10 +1800,10 @@ final class Document
             $entries[] = '/Trapped /'.$this->pdfX->trapped;
             // Title from PdfXConfig if not set in metadata.
             if (! isset($this->metadata['Title']) && $this->pdfX->title !== '') {
-                $entries[] = '/Title '.$this->pdfString($this->pdfX->title);
+                $entries[] = '/Title '.$this->pdfTextString($this->pdfX->title);
             }
             if (! isset($this->metadata['Author']) && $this->pdfX->author !== '') {
-                $entries[] = '/Author '.$this->pdfString($this->pdfX->author);
+                $entries[] = '/Author '.$this->pdfTextString($this->pdfX->author);
             }
         }
         $infoId = $writer->addObject('<< '.implode(' ', $entries).' >>');
@@ -1967,7 +1967,7 @@ final class Document
                 $pageObjId, $this->fmt($entry['x']), $this->fmt($entry['y']));
 
             $parts = [
-                '/Title '.$this->pdfString($entry['title']),
+                '/Title '.$this->pdfTextString($entry['title']),
                 '/Parent '.$parentRef,
                 '/Dest '.$dest,
             ];
@@ -2321,6 +2321,34 @@ final class Document
     private function pdfString(string $s): string
     {
         return '('.strtr($s, ['\\' => '\\\\', '(' => '\\(', ')' => '\\)']).')';
+    }
+
+    /**
+     * Encodes a PDF *text string* (ISO 32000-1 §7.9.2.2).
+     *
+     * A literal string is read as PDFDocEncoding, so UTF-8 bytes for
+     * anything outside ASCII surface as mojibake in every viewer — a
+     * Cyrillic /Info Author showed up as `ÐžÐžÐž`. Non-ASCII therefore goes
+     * out as UTF-16BE with a byte order mark, which the spec defines for
+     * exactly this case.
+     *
+     * Used only where the spec says "text string": /Info values, outline
+     * titles, tooltips, alternate descriptions. URIs, file specifications
+     * and ICC profile names keep the literal form — they are ASCII strings
+     * by definition, and UTF-16 would break them.
+     */
+    private function pdfTextString(string $s): string
+    {
+        if (preg_match('/[^\x20-\x7E\x09\x0A\x0D]/', $s) !== 1) {
+            return $this->pdfString($s);
+        }
+
+        $utf16 = @iconv('UTF-8', 'UTF-16BE', $s);
+        if ($utf16 === false) {
+            return $this->pdfString($s);
+        }
+
+        return '<'.strtoupper(bin2hex("\xFE\xFF".$utf16)).'>';
     }
 
     /**

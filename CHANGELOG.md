@@ -4,6 +4,18 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.6] — 2026-08-06
+
+### Fixed
+- **Non-ASCII text strings reached readers as mojibake.** Metadata, outline
+  titles, form-field tooltips and alternate descriptions were written as
+  literal strings, which a reader decodes as PDFDocEncoding — so a Cyrillic
+  `/Info` Author came out as `ÐžÐžÐž` in Acrobat, Preview and `pdfinfo` alike.
+  Text strings outside ASCII are now emitted as UTF-16BE with a byte order
+  mark, the form ISO 32000-1 §7.9.2.2 defines for the purpose. URIs, file
+  specifications and ICC profile names keep the literal form: they are ASCII
+  strings by definition and UTF-16 would break them.
+
 ## [1.8.5] — 2026-08-05
 
 ### Fixed
