@@ -3008,7 +3008,7 @@ final class Engine
         // only to the first line; the rest use indentLeft).
         $isFirstLine = true;
         $availableWidth = $ctx->contentWidth - $p->style->indentLeftPt - $p->style->indentRightPt;
-        $firstLineExtraIndent = $p->style->indentFirstLinePt;
+        $firstLineExtraIndent = $p->style->indentFirstLinePt + $this->leadingSpaceIndent($p, $effectiveDefault);
 
         // Greedy line breaking.
         /** @var list<array{type: string, text?: string, style?: RunStyle}> $currentLine */
@@ -3802,6 +3802,39 @@ final class Engine
      * Measures width in pt — uses resolveEmbeddedFont for precise
      * metrics of the bold/italic variant.
      */
+    /**
+     * Width of the whitespace a paragraph opens with.
+     *
+     * Word processors position headings with runs of spaces instead of an
+     * alignment: a document may carry twenty spaces before "Statement" and
+     * expect it in the middle of the line. Words are split on whitespace and
+     * the run is discarded, so such a heading printed hard against the left
+     * margin. Measured here and added to the first-line indent, which is
+     * exactly the mechanism it stands for.
+     *
+     * Only the opening whitespace of the paragraph counts: whitespace between
+     * words is a separator, and treating it as position would change how
+     * every line breaks.
+     */
+    private function leadingSpaceIndent(Paragraph $p, RunStyle $default): float
+    {
+        foreach ($p->children as $child) {
+            if (! $child instanceof Run) {
+                return 0.0;
+            }
+            if ($child->text === '') {
+                continue;
+            }
+            if (preg_match('/^[ \x{00A0}]+/u', $child->text, $m) !== 1) {
+                return 0.0;
+            }
+
+            return $this->measureWidth($m[0], $child->style->inheritFrom($default));
+        }
+
+        return 0.0;
+    }
+
     private function measureWidth(string $text, RunStyle $style): float
     {
         // SHY is invisible → strip for width estimation.

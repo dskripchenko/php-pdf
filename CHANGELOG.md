@@ -4,6 +4,21 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] — 2026-08-06
+
+### Fixed
+- **A paragraph opening with spaces ignored them.** Word processors place a
+  heading in the middle of a line with a run of spaces rather than an
+  alignment, and documents built that way are common — an insurance form in
+  the corpus positions every one of its headings this way. Words are split on
+  whitespace, so the run was discarded and the heading printed hard against
+  the left margin. The opening whitespace is now measured and added to the
+  first-line indent, the mechanism it stands for. Whitespace *between* words
+  stays a separator: giving it width would change how every line breaks.
+
+  Measured on the form: indentation now agrees with the reference PDF on 21
+  of 33 matched lines, against 18 before.
+
 ## [1.9.0] — 2026-08-06
 
 ### Added
