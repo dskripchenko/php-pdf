@@ -82,6 +82,32 @@ final class FootnoteInTableTest extends TestCase
         self::assertStringContainsString('2. Second', $text);
     }
 
+    #[Test]
+    public function aFullFootnoteZoneDoesNotRecurse(): void
+    {
+        // Зона сносок рисуется обычными абзацами, а те умеют переносить
+        // страницу. Пока страница не помечалась выведенной до отрисовки,
+        // повторный вход сюда с тем же списком уходил в бесконечную
+        // рекурсию и съедал память до фатальной ошибки.
+        $body = [];
+        for ($i = 0; $i < 12; $i++) {
+            $body[] = new Paragraph([
+                new Run('строка '.$i),
+                new Footnote('Довольно длинный текст сноски номер '.$i.', чтобы зона переполнилась.'),
+            ]);
+        }
+
+        $before = memory_get_peak_usage(true);
+        $text = $this->render($body);
+
+        self::assertStringContainsString('12', $text);
+        self::assertLessThan(
+            256 * 1024 * 1024,
+            memory_get_peak_usage(true) - $before + 1,
+            'рендер зоны сносок съел неожиданно много памяти',
+        );
+    }
+
     /** @param  list<mixed>  $body */
     private function render(array $body): string
     {

@@ -2901,11 +2901,18 @@ final class Engine
             return;
         }
 
-        $numbers = $this->pageFootnotes[spl_object_id($ctx->currentPage)] ?? [];
+        $pageId = spl_object_id($ctx->currentPage);
+        $numbers = $this->pageFootnotes[$pageId] ?? [];
         if ($numbers === []) {
             return; // no footnotes on current page
         }
         sort($numbers);
+
+        // Страница помечается выведенной ДО отрисовки: сама зона сносок
+        // рисуется обычными абзацами, а те умеют переносить страницу — и
+        // повторный вход сюда с тем же списком уходил в бесконечную
+        // рекурсию, съедая память.
+        unset($this->pageFootnotes[$pageId]);
 
         $savedCursorY = $ctx->cursorY;
         $savedBottomY = $ctx->bottomY;

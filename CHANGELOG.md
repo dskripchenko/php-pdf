@@ -4,6 +4,16 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] — 2026-08-06
+
+### Fixed
+- **Rendering the footnote zone could recurse until memory ran out.** The
+  zone is drawn with ordinary paragraphs, and those may break the page —
+  which asks for the page's footnotes again, with the same list still
+  pending. A page is now marked as flushed before its notes are drawn.
+  Shipped broken in 1.9.2: the package's own suite passed and the fault
+  surfaced only in an application's, on a document whose zone overflowed.
+
 ## [1.9.2] — 2026-08-06
 
 ### Fixed
