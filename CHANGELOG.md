@@ -4,6 +4,25 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] — 2026-08-06
+
+### Fixed
+- **A footnote inside a table cell never reached the foot of the page.**
+  Form-like documents keep their whole body in a table, so for them footnotes
+  did not work at all. A cell is laid out more than once — measured, and
+  re-laid when a row is split across pages — and the 1.7.2 attempt collected
+  notes as they were met: the list grew on every pass, numbering drifted
+  upward and a seven-page form ate half a gigabyte (reverted in 1.7.3).
+
+  Numbers are now handed out in a single walk of the tree, in document order,
+  and are keyed by the footnote element itself, so visiting a cell again
+  changes nothing. Which notes belong to a page is decided by the markers
+  actually painted on it rather than by a range in a running list — a range
+  is what lost the cell's notes along with the cell's own layout context.
+
+  Measured on the seven-page form that caused the revert: 0.7 s, peak memory
+  87 MB.
+
 ## [1.9.1] — 2026-08-06
 
 ### Fixed

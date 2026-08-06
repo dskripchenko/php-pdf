@@ -90,6 +90,25 @@ final class Engine
     private ?int $totalPagesHint = null;
 
     /**
+     * Footnote bookkeeping, keyed by the footnote element itself.
+     *
+     * A cell is laid out more than once — measured, and re-rendered when a
+     * row is split across pages — so collecting footnotes as they are met
+     * appended the same note again on every pass: numbering drifted upward
+     * and a seven-page form ate half a gigabyte. Keyed by the element, the
+     * same note keeps the same number however often it is visited.
+     *
+     * @var array<int, int> spl_object_id → footnote number
+     */
+    private array $footnoteNumbers = [];
+
+    /** @var array<int, string> footnote number → its text */
+    private array $footnoteTexts = [];
+
+    /** @var array<int, list<int>> page spl_object_id → numbers placed on it */
+    private array $pageFootnotes = [];
+
+    /**
      * Current Section during render — needed for header/footer access.
      */
     private ?Section $currentSection = null;
@@ -218,8 +237,80 @@ final class Engine
         return $finalPass;
     }
 
+    /** Walks the tree once and gives every footnote its number. */
+    private function assignFootnoteNumbers(AstDocument $document): void
+    {
+        $this->footnoteNumbers = [];
+        $this->footnoteTexts = [];
+        $this->pageFootnotes = [];
+
+        foreach ($document->sections() as $section) {
+            $this->collectFootnotes($section->body);
+        }
+    }
+
+    /** @param  iterable<mixed>  $nodes */
+    private function collectFootnotes(iterable $nodes): void
+    {
+        foreach ($nodes as $node) {
+            if ($node instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
+                $id = spl_object_id($node);
+                if (! isset($this->footnoteNumbers[$id])) {
+                    $number = count($this->footnoteNumbers) + 1;
+                    $this->footnoteNumbers[$id] = $number;
+                    $this->footnoteTexts[$number] = $node->content;
+                }
+
+                continue;
+            }
+
+            foreach (['children', 'body', 'rows', 'cells', 'items'] as $prop) {
+                if (isset($node->{$prop}) && is_iterable($node->{$prop})) {
+                    $this->collectFootnotes($node->{$prop});
+                }
+            }
+        }
+    }
+
+    /**
+     * Number of a footnote; assigns one if the pre-pass could not reach it
+     * (a tree shape the walk does not know about).
+     */
+    private function footnoteNumberFor(\Dskripchenko\PhpPdf\Element\Footnote $footnote): int
+    {
+        $id = spl_object_id($footnote);
+        if (! isset($this->footnoteNumbers[$id])) {
+            $number = count($this->footnoteNumbers) + 1;
+            $this->footnoteNumbers[$id] = $number;
+            $this->footnoteTexts[$number] = $footnote->content;
+        }
+
+        return $this->footnoteNumbers[$id];
+    }
+
+    /**
+     * Remembers that a marker was painted on this page.
+     *
+     * Recorded when the marker is drawn rather than when it is tokenized:
+     * a cell may be tokenized and thrown away when a row does not fit, and
+     * a note that never appeared must not claim space at the page foot.
+     */
+    private function registerFootnoteOnPage(Page $page, int $number): void
+    {
+        $pageId = spl_object_id($page);
+        if (! in_array($number, $this->pageFootnotes[$pageId] ?? [], true)) {
+            $this->pageFootnotes[$pageId][] = $number;
+        }
+    }
+
     private function renderOnce(AstDocument $document): PdfDocument
     {
+        // Numbers are handed out in a single walk of the tree, in document
+        // order, before anything is laid out. Assigning them as footnotes
+        // are met would tie numbering to the order of layout passes, and a
+        // measured table would claim numbers before the paragraph above it.
+        $this->assignFootnoteNumbers($document);
+
         // Iterate through all sections. First section initializes the
         // PDF document; subsequent sections — force new page with their PageSetup.
         $sections = $document->sections();
@@ -299,13 +390,11 @@ final class Engine
             if ($section->footnoteBottomReservedPt !== null) {
                 // Flush last page's footnotes at its bottom.
                 $this->renderPageBottomFootnotes($context);
-                $context->footnotes = [];
                 // Restore bottomY (next section may not have a reservation).
                 $context->bottomY -= $section->footnoteBottomReservedPt;
-            } elseif ($context->footnotes !== []) {
+            } elseif ($this->footnoteTexts !== []) {
                 // Emit collected endnotes per section (if any).
                 $this->renderEndnotes($context);
-                $context->footnotes = [];
             }
             $sectionPageRanges[$idx] = [$sectionStartIdx, count($pdf->pages()) - 1];
         }
@@ -2799,18 +2888,24 @@ final class Engine
      * Render current page's footnotes at page bottom (per-page mode).
      *
      * Saves cursorY, jumps to reserved zone Y, renders separator + numbered
-     * footnotes, restores cursorY. Footnotes drawn from
-     * `footnotes[pageFootnoteStart..end]`.
+     * footnotes, restores cursorY.
+     *
+     * Which notes belong here is decided by the markers actually painted on
+     * this page, not by a range in a running list: a marker inside a table
+     * cell is laid out in the cell's own context, and a range would lose it
+     * along with that context.
      */
     private function renderPageBottomFootnotes(LayoutContext $ctx): void
     {
         if ($ctx->footnoteReserveBottomPt === null) {
             return;
         }
-        $start = $ctx->pageFootnoteStart;
-        if ($start >= count($ctx->footnotes)) {
+
+        $numbers = $this->pageFootnotes[spl_object_id($ctx->currentPage)] ?? [];
+        if ($numbers === []) {
             return; // no footnotes on current page
         }
+        sort($numbers);
 
         $savedCursorY = $ctx->cursorY;
         $savedBottomY = $ctx->bottomY;
@@ -2833,11 +2928,10 @@ final class Engine
         );
         $ctx->cursorY -= 6.0;
 
-        // Render footnotes (1-indexed numbering across whole section's
-        // accumulated $footnotes — keeps consistent reference numbers).
-        for ($idx = $start; $idx < count($ctx->footnotes); $idx++) {
-            $marker = ($idx + 1).'. ';
-            $p = new Paragraph([new Run($marker.$ctx->footnotes[$idx])]);
+        // Numbers are the ones handed out by the pre-pass, so a reference in
+        // the text and its note at the foot always carry the same figure.
+        foreach ($numbers as $number) {
+            $p = new Paragraph([new Run($number.'. '.($this->footnoteTexts[$number] ?? ''))]);
             // Use renderBlock but avoid recursion on footnote rendering itself.
             $this->renderBlock($p, $ctx);
         }
@@ -2866,8 +2960,8 @@ final class Engine
         );
         $ctx->cursorY -= 8.0;
 
-        foreach ($ctx->footnotes as $idx => $content) {
-            $marker = ($idx + 1).'. ';
+        foreach ($this->footnoteTexts as $number => $content) {
+            $marker = $number.'. ';
             $p = new Paragraph([new Run($marker.$content)]);
             $this->renderBlock($p, $ctx);
         }
@@ -3281,14 +3375,19 @@ final class Engine
                     'link' => $currentLink,
                 ];
             } elseif ($child instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
-                // Collect footnote text + insert auto-numbered
-                // superscript marker (Run with superscript=true).
-                if ($ctx !== null) {
-                    $ctx->footnotes[] = $child->content;
-                    $marker = (string) count($ctx->footnotes);
-                    $markerStyle = $effectiveDefault->withSuperscript(true);
-                    $items[] = ['type' => 'word', 'text' => $marker, 'style' => $markerStyle, 'link' => $currentLink];
-                }
+                // Number comes from the register, so tokenizing the same
+                // cell again yields the same marker instead of a new one.
+                // The item carries the number: the page it belongs to is
+                // only known when the marker is actually painted.
+                $number = $this->footnoteNumberFor($child);
+                $markerStyle = $effectiveDefault->withSuperscript(true);
+                $items[] = [
+                    'type' => 'word',
+                    'text' => (string) $number,
+                    'style' => $markerStyle,
+                    'link' => $currentLink,
+                    'footnote' => $number,
+                ];
             }
         }
     }
@@ -3434,6 +3533,10 @@ final class Engine
         for ($i = 0; $i < $countWords; $i++) {
             $item = $wordItems[$i];
             $style = $item['style'] ?? $defaultStyle;
+
+            if (isset($item['footnote'])) {
+                $this->registerFootnoteOnPage($ctx->currentPage, (int) $item['footnote']);
+            }
             $type = $item['type'] ?? null;
             if ($type === 'image') {
                 $totalContentWidth += $item['width'];
