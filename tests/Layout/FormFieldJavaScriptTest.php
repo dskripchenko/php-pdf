@@ -24,9 +24,9 @@ final class FormFieldJavaScriptTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // /AA dict с /V reference.
+        // An /AA dict with a /V reference.
         self::assertMatchesRegularExpression('@/AA << /V\s+\d+\s+0\s+R >>@', $bytes);
-        // Action object с /S /JavaScript + script.
+        // An action object with /S /JavaScript plus the script.
         self::assertStringContainsString('/Type /Action /S /JavaScript /JS (', $bytes);
         self::assertStringContainsString('Invalid email', $bytes);
     }

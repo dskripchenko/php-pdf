@@ -59,7 +59,7 @@ final class LinkRenderTest extends TestCase
 
         self::assertStringContainsString('/Subtype /Link', $bytes);
         self::assertStringContainsString('/Dest (chapter1)', $bytes);
-        // Named-dests tree должен быть emit'ed в Catalog.
+        // The named-dests tree has to be emitted into the catalog.
         self::assertStringContainsString('/Names', $bytes);
         self::assertStringContainsString('/Dests', $bytes);
         self::assertStringContainsString('(chapter1)', $bytes);
@@ -114,7 +114,7 @@ final class LinkRenderTest extends TestCase
     #[Test]
     public function bookmark_only_no_visible_content(): void
     {
-        // Bookmark без children — просто marker в потоке.
+        // A bookmark without children is just a marker in the flow.
         $doc = new Document(new Section([
             new Paragraph([
                 new Run('Before '),
@@ -130,7 +130,7 @@ final class LinkRenderTest extends TestCase
             $text = (string) shell_exec('pdftotext '.escapeshellarg($tmp).' - 2>&1');
             self::assertStringContainsString('Before', $text);
             self::assertStringContainsString('after.', $text);
-            // Bookmark name НЕ должен быть visible.
+            // The bookmark name must NOT be visible.
             self::assertStringNotContainsString('marker1', $text);
         } finally {
             @unlink($tmp);

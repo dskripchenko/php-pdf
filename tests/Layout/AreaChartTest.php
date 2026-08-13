@@ -23,7 +23,7 @@ final class AreaChartTest extends TestCase
         $doc = new Document(new Section([$chart]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Polygon fill (h + f) для area.
+        // The polygon fill (h + f) of the area.
         self::assertMatchesRegularExpression('@\nh\nf\n@', $bytes);
         self::assertStringContainsString('(Sales) Tj', $bytes);
         // X-axis labels.

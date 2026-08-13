@@ -68,7 +68,7 @@ final class FormFieldExtensionsTest extends TestCase
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         self::assertStringContainsString('/FT /Ch', $bytes);
-        // List = /Ch без Combo flag — /Ff 0 (или not present).
+        // A list is /Ch without the Combo flag — /Ff 0 (or absent).
         self::assertDoesNotMatchRegularExpression('@/Ff\s+131072\b@', $bytes);
     }
 
@@ -82,7 +82,7 @@ final class FormFieldExtensionsTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Parent — Button с Radio (32768) + NoToggleToOff (16384) = 49152 flag.
+        // The parent is a Button with Radio (32768) + NoToggleToOff (16384) = the 49152 flag.
         self::assertMatchesRegularExpression('@/Ff\s+49152\b@', $bytes);
         // /Kids array references 3 child widgets.
         self::assertMatchesRegularExpression('@/Kids \[\d+\s+0\s+R\s+\d+\s+0\s+R\s+\d+\s+0\s+R\]@', $bytes);
@@ -135,7 +135,7 @@ final class FormFieldExtensionsTest extends TestCase
         self::assertStringContainsString('/FT /Tx', $bytes);
         self::assertStringContainsString('(name)', $bytes);
         self::assertStringContainsString('(John)', $bytes);
-        // Не должно быть multiline/password flags.
+        // There must be no multiline or password flags.
         self::assertDoesNotMatchRegularExpression('@/Ff\s+(?:4096|8192|131072)\b@', $bytes);
     }
 }

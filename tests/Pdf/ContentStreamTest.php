@@ -29,14 +29,14 @@ final class ContentStreamTest extends TestCase
         $cs = (new ContentStream)->text('F1', 12, 0, 0, '(hello)\\world');
         $s = $cs->toString();
 
-        // ( ) \ должны быть escape'нуты обратным слешем.
+        // ( ) \ have to be escaped with a backslash.
         self::assertStringContainsString('(\\(hello\\)\\\\world) Tj', $s);
     }
 
     #[Test]
     public function non_ascii_bytes_become_octal_escape(): void
     {
-        // Cyrillic Й (U+0419, UTF-8: 0xD0 0x99) → octal \320\231.
+        // The Cyrillic Й (U+0419, UTF-8: 0xD0 0x99) → the octal \320\231.
         $cs = (new ContentStream)->text('F1', 12, 0, 0, 'Й');
         $s = $cs->toString();
         self::assertStringContainsString('\\320\\231', $s);
@@ -51,7 +51,7 @@ final class ContentStreamTest extends TestCase
         self::assertStringContainsString('1 0 0 rg', $s);
         self::assertStringContainsString('10 20 100 50 re', $s);
         self::assertStringContainsString("f\n", $s);
-        // q…Q обрамляют, чтобы не загрязнять graphics state.
+        // q…Q wrap it so that the graphics state is not polluted.
         self::assertStringContainsString("q\n", $s);
         self::assertStringContainsString("Q\n", $s);
     }

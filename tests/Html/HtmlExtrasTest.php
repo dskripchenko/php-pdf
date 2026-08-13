@@ -104,7 +104,7 @@ final class HtmlExtrasTest extends TestCase
         $fixtureDir = __DIR__.'/../fixtures';
         $imgFile = $fixtureDir.'/1x1.png';
         if (! is_readable($imgFile)) {
-            // Create tiny fixture on-the-fly если не exists.
+            // Create a tiny fixture on the fly when it does not exist.
             @mkdir($fixtureDir, 0755, true);
             $pngBytes = base64_decode(
                 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
@@ -141,7 +141,7 @@ final class HtmlExtrasTest extends TestCase
         self::assertCount(0, $images);
     }
 
-    // ---- <address> и <details> in HTML5 context ----
+    // ---- <address> and <details> in an HTML5 context ----
 
     #[Test]
     public function address_in_footer(): void

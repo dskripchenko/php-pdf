@@ -96,10 +96,10 @@ final class SignatureTest extends TestCase
     public function pkcs7_blob_is_valid_signed_data_with_our_cert(): void
     {
         // We don't use openssl_pkcs7_verify directly — its PHP wrapper has
-        // bizarre engine config issues с PEM-wrapped DER. Instead verify
+        // bizarre engine config issues with PEM-wrapped DER. Instead verify
         // structurally: DER parses, length matches, contains our cert.
         // (Full cryptographic round-trip confirmed via `openssl smime -verify`
-        // CLI — see manual debug в Phase 108 commit message.)
+        // CLI — see the manual debug in the Phase 108 commit message.)
         $bytes = $this->signSampleDoc(new SignatureConfig($this->certPem, $this->keyPem));
         if (! preg_match('@/Contents <([0-9A-Fa-f]+)>@', $bytes, $cm)) {
             self::fail('No /Contents hex');
@@ -121,7 +121,7 @@ final class SignatureTest extends TestCase
             'PKCS#7 SignedData OID must be present',
         );
 
-        // The signer cert DER должна быть embedded в SignedData.certificates.
+        // The signer cert DER has to be embedded in SignedData.certificates.
         $certDer = self::pemToDer($this->certPem);
         // Cert appears whole within SignedData blob.
         self::assertStringContainsString($certDer, $fullDer, 'Signer cert embedded in PKCS#7');

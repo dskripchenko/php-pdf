@@ -151,9 +151,10 @@ final class Ean13AddOnTest extends TestCase
         // "51299" check = 8 → LGLLG parity.
         // First digit '5' under L-code = '0110001'.
         // Module 108 = 0, module 109 = 1.
-        // Under G-code '5' = '0110001' — wait those differ.
+        // Under the G-code '5' = '0110001' — those differ.
         // Module 109 under L: digit 5 L='0110001' → pos 109 = 1.
-        // Skip strict bit assertion — just check it encodes без exception.
+        // Skip the strict bit assertion — just check that it encodes without an
+        // exception.
         $enc2 = new Ean13Encoder('400638133393', addOn: '51299');
         self::assertSame(151, $enc2->moduleCount());
     }
@@ -172,7 +173,7 @@ final class Ean13AddOnTest extends TestCase
     #[Test]
     public function ean5_has_four_separators(): void
     {
-        // 5-digit add-on has 4 separators между digits.
+        // A 5-digit add-on has 4 separators between the digits.
         // Each separator = '01' at positions:
         //   115-116 (after digit 1), 124-125 (after digit 2),
         //   133-134 (after digit 3), 142-143 (after digit 4).

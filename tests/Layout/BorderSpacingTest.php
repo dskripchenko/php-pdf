@@ -62,7 +62,7 @@ final class BorderSpacingTest extends TestCase
         $doc8 = new Document(new Section([$this->table(8, collapse: true)]));
         $b0 = $doc0->toBytes(new Engine(compressStreams: false));
         $b8 = $doc8->toBytes(new Engine(compressStreams: false));
-        // В collapse mode spacing не должен влиять.
+        // In collapse mode the spacing must have no effect.
         self::assertSame($b0, $b8);
     }
 }

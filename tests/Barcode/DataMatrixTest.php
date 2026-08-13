@@ -38,7 +38,7 @@ final class DataMatrixTest extends TestCase
         // 4 digits = 2 paired codewords + extras.
         $enc = new DataMatrixEncoder('1234');
         // 2 codewords (12 → 130+12=142, 34 → 164).
-        // Fits в 10×10.
+        // It fits into 10×10.
         self::assertSame(10, $enc->size());
     }
 

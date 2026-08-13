@@ -53,7 +53,7 @@ final class OutlineTest extends TestCase
         self::assertStringContainsString('/Title (A)', $bytes);
         self::assertStringContainsString('/Title (B)', $bytes);
         self::assertStringContainsString('/Title (C)', $bytes);
-        // B должна иметь /Prev и /Next.
+        // B has to have /Prev and /Next.
         self::assertMatchesRegularExpression(
             '@/Title \(B\)[^>]*/Prev \d+ 0 R[^>]*/Next \d+ 0 R@s',
             $bytes,
@@ -71,7 +71,7 @@ final class OutlineTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        // Chapter 1 должен иметь /First (children).
+        // Chapter 1 has to have /First (children).
         self::assertMatchesRegularExpression(
             '@/Title \(Chapter 1\)[^>]*?/First \d+ 0 R[^>]*?/Last \d+ 0 R[^>]*?/Count 2@s',
             $bytes,

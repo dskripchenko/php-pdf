@@ -16,7 +16,7 @@ final class SvgArcTest extends TestCase
     #[Test]
     public function arc_emits_cubic_beziers(): void
     {
-        // Quarter circle от (50, 50) до (100, 100) — large-arc=0, sweep=1.
+        // A quarter circle from (50, 50) to (100, 100) — large-arc=0, sweep=1.
         $svg = '<svg width="100" height="100"><path d="M50 50 A 50 50 0 0 1 100 100" stroke="#000" fill="none"/></svg>';
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
@@ -58,7 +58,7 @@ final class SvgArcTest extends TestCase
     #[Test]
     public function arc_with_rotation(): void
     {
-        // Arc с x-axis rotation 45°.
+        // An arc with an x-axis rotation of 45°.
         $svg = '<svg width="100" height="100"><path d="M20 50 A 30 15 45 0 1 80 50" stroke="#000" fill="none"/></svg>';
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
@@ -92,7 +92,7 @@ final class SvgArcTest extends TestCase
     public function large_arc_flag_changes_content_stream(): void
     {
         // Same endpoints + radii, different large-arc-flag → different path.
-        // Even если segment count same, output bytes должны отличаться.
+        // Even at the same segment count the output bytes have to differ.
         $svgSmall = '<svg width="100" height="100"><path d="M30 50 A 25 25 0 0 1 70 50" stroke="#000" fill="none"/></svg>';
         $svgLarge = '<svg width="100" height="100"><path d="M30 50 A 25 25 0 1 1 70 50" stroke="#000" fill="none"/></svg>';
 

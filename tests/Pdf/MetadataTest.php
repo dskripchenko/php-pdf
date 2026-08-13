@@ -43,7 +43,7 @@ final class MetadataTest extends TestCase
     #[Test]
     public function default_info_dict_has_producer_and_date(): void
     {
-        // Phase 213: /Info теперь всегда emitted с default Producer +
+        // Phase 213: /Info is now always emitted, with the default Producer plus
         // CreationDate even if user-set metadata empty.
         $doc = PdfDocument::new(compressStreams: false);
         $doc->addPage();

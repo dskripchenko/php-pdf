@@ -41,7 +41,7 @@ final class UpcEEncoderTest extends TestCase
     #[Test]
     public function expansion_d6_4_inserts_5_zeros_before_d5(): void
     {
-        // Для D6=4 формула: NSD D1 D2 D3 D4 + "00000" + D5.
+        // For D6=4 the formula is NSD D1 D2 D3 D4 + "00000" + D5.
         // body "123454" → "0" "1" "2" "3" "4" "00000" "5" = "01234000005".
         $enc = new UpcEEncoder('123454');
         self::assertSame('01234000005', $enc->upcA);

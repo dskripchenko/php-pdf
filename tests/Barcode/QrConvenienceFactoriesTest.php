@@ -48,7 +48,7 @@ final class QrConvenienceFactoriesTest extends TestCase
     #[Test]
     public function vcard_escapes_special_chars(): void
     {
-        // vCard 3.0 spec: escape commas, semicolons, backslashes (но не spaces).
+        // The vCard 3.0 spec: escape commas, semicolons and backslashes (but not spaces).
         $qr = QrEncoder::vCard(['name' => 'Smith, John; CEO']);
         self::assertStringContainsString('FN:Smith\, John\; CEO', $qr->data);
     }

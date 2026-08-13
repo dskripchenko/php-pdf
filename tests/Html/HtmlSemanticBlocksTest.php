@@ -27,7 +27,7 @@ final class HtmlSemanticBlocksTest extends TestCase
     public function header_flattens_children(): void
     {
         $blocks = $this->parse('<header><h1>Logo</h1><p>Tagline</p></header>');
-        // Header transparent — both children promoted к top level.
+        // The header is transparent — both children are promoted to the top level.
         self::assertCount(2, $blocks);
         self::assertInstanceOf(Heading::class, $blocks[0]);
         self::assertInstanceOf(Paragraph::class, $blocks[1]);
@@ -98,7 +98,7 @@ final class HtmlSemanticBlocksTest extends TestCase
     public function dt_renders_bold(): void
     {
         $blocks = $this->parse('<dl><dt>Term</dt><dd>Def</dd></dl>');
-        // First block = DT в bold.
+        // The first block is the DT in bold.
         $dt = $blocks[0];
         self::assertInstanceOf(Paragraph::class, $dt);
         $run = $dt->children[0];

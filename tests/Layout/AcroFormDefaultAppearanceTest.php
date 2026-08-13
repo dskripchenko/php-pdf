@@ -21,7 +21,7 @@ final class AcroFormDefaultAppearanceTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // /DA с font reference + size + color.
+        // A /DA with a font reference, a size and a colour.
         self::assertStringContainsString('/DA (/Helv 11 Tf 0 g)', $bytes);
     }
 

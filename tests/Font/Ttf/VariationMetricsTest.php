@@ -76,10 +76,10 @@ final class VariationMetricsTest extends TestCase
         if ($ttf === null) {
             self::markTestSkipped('System variable font not available');
         }
-        // wght axis range typically 400..1000 для NewYork.
+        // The wght axis range is typically 400..1000 for NewYork.
         $gid = $ttf->glyphIdForChar(ord('A'));
         $atMax = $ttf->advanceWidthForInstance($gid, ['wght' => 1000]);
-        // Над max должно дать тот же результат (clamped).
+        // Above the max it has to give the same result (clamped).
         $overMax = $ttf->advanceWidthForInstance($gid, ['wght' => 9999]);
         self::assertSame($atMax, $overMax);
         $atMin = $ttf->advanceWidthForInstance($gid, ['wght' => 400]);
@@ -142,7 +142,7 @@ final class VariationMetricsTest extends TestCase
 
         $gid = $ttf->glyphIdForChar(ord('A'));
         $base = $ttf->advanceWidth($gid);
-        // Even с custom userCoords, non-variable font returns static width.
+        // Even with custom userCoords a non-variable font returns the static width.
         $instance = $ttf->advanceWidthForInstance($gid, ['wght' => 700]);
         self::assertSame($base, $instance);
     }

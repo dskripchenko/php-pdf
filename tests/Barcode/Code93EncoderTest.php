@@ -196,7 +196,7 @@ final class Code93EncoderTest extends TestCase
     public function check_digit_weight_cycles(): void
     {
         // Long data triggers weight cycling. For 22-char input, C weights
-        // cycle: 1..20, 1, 2. Verify это produces deterministic result.
+        // The cycle is 1..20, 1, 2. Verify that this produces a deterministic result.
         $value = str_repeat('A', 22);
         $c = Code93Encoder::computeCheckDigit($value, 20);
         // Without verifying exact value, just ensure result is in [0, 47).

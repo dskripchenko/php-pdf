@@ -63,7 +63,7 @@ final class PdfA2uTest extends TestCase
     #[Test]
     public function pdfa_1u_not_allowed(): void
     {
-        // PDF/A-1 supports только A или B, не U.
+        // PDF/A-1 supports A or B only, not U.
         $this->expectException(\InvalidArgumentException::class);
         new PdfAConfig(
             $this->iccPath,

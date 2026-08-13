@@ -26,7 +26,7 @@ final class PdfUaArtifactsTest extends TestCase
 
         // /Artifact BDC wraps header.
         self::assertStringContainsString('/Artifact << /Type /Pagination >> BDC', $bytes);
-        // Header text не в struct tree (no /P для header).
+        // The header text is not in the struct tree (no /P for the header).
         self::assertSame(1, substr_count($bytes, '/Type /StructElem'));
     }
 

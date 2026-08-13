@@ -42,7 +42,7 @@ final class Ean13EncoderTest extends TestCase
     public function rejects_invalid_checksum(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        // 13-digit с неправильной checksum.
+        // 13 digits with the wrong checksum.
         new Ean13Encoder('4006381333930');
     }
 
@@ -94,9 +94,9 @@ final class Ean13EncoderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Caption должен быть canonical (с checksum).
+        // The caption has to be canonical (with the checksum).
         self::assertStringContainsString('(4006381333931) Tj', $bytes);
-        // Многократные fillRect для bars.
+        // Repeated fillRects for the bars.
         $count = preg_match_all('@^f$@m', $bytes);
         self::assertGreaterThan(10, $count);
     }

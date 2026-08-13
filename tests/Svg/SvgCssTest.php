@@ -59,7 +59,7 @@ SVG;
     #[Test]
     public function inline_attribute_overrides_css(): void
     {
-        // CSS rect { fill: red } но inline fill="green" — inline wins.
+        // A CSS rect { fill: red } against an inline fill="green" — inline wins.
         $svg = <<<'SVG'
 <svg width="100" height="100">
   <style>rect { fill: #ff0000; }</style>
@@ -102,7 +102,7 @@ SVG;
 SVG;
         $bytes = (new Document(new Section([new SvgElement($svg)])))
             ->toBytes(new Engine(compressStreams: false));
-        // Both fill (0 0 0 rg) и stroke (1 0 0 RG) applied.
+        // Both the fill (0 0 0 rg) and the stroke (1 0 0 RG) are applied.
         self::assertMatchesRegularExpression('@0\s+0\s+0\s+rg@', $bytes);
         self::assertMatchesRegularExpression('@1\s+0\s+0\s+RG@', $bytes);
     }

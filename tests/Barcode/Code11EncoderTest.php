@@ -96,7 +96,7 @@ final class Code11EncoderTest extends TestCase
     #[Test]
     public function check_digit_weight_cycles(): void
     {
-        // 11+ char input — weight cycles back к 1.
+        // An input of 11+ chars makes the weight cycle back to 1.
         $val = str_repeat('1', 11);
         $c = Code11Encoder::computeCheckDigit($val, 10);
         self::assertGreaterThanOrEqual(0, $c);
@@ -113,7 +113,7 @@ final class Code11EncoderTest extends TestCase
     #[Test]
     public function with_double_check_appends_c_and_k(): void
     {
-        // "1234" → C=9, "12349" → K computed на maxWeight 9.
+        // "1234" → C=9; "12349" → K computed at a maxWeight of 9.
         // "12349": 9,4,3,2,1 × 1,2,3,4,5 = 9+8+9+8+5 = 39; 39%11 = 6.
         $enc = new Code11Encoder('1234', doubleCheck: true);
         self::assertSame('123496', $enc->canonical);

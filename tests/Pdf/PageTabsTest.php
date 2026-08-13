@@ -100,7 +100,7 @@ final class PageTabsTest extends TestCase
         $page3 = $pdf->addPage(); // no tab order
         $bytes = $pdf->toBytes();
 
-        // Both /R и /S present.
+        // Both /R and /S are present.
         self::assertStringContainsString('/Tabs /R', $bytes);
         self::assertStringContainsString('/Tabs /S', $bytes);
     }

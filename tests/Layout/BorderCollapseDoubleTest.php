@@ -94,14 +94,14 @@ final class BorderCollapseDoubleTest extends TestCase
         $sCount = substr_count($bytes, "S\n");
         self::assertSame(8, $sCount);
 
-        // Каждый sub-stroke имеет width = totalWidth/3 = 3/3 = 1pt.
+        // Every sub-stroke has width = totalWidth/3 = 3/3 = 1pt.
         self::assertStringContainsString("\n1 w", $bytes);
     }
 
     #[Test]
     public function double_line_width_third_of_total(): void
     {
-        // total width 6pt → каждая sub-line = 2pt.
+        // A total width of 6pt makes each sub-line 2pt.
         $border = new Border(BorderStyle::Double, 48, '000000');  // 6pt
         $doc = new Document(new Section([
             new Table([

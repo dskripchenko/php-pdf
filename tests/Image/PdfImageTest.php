@@ -33,7 +33,7 @@ final class PdfImageTest extends TestCase
         self::assertSame('/DCTDecode', $img->filter);
         self::assertSame('/DeviceRGB', $img->colorSpace);
         self::assertSame(8, $img->bitsPerComponent);
-        // Для JPEG — pass-through, imageData = whole JPEG bytes.
+        // For JPEG it is a pass-through: imageData is the whole JPEG bytes.
         self::assertSame($jpg, $img->imageData);
     }
 
@@ -53,7 +53,7 @@ final class PdfImageTest extends TestCase
         self::assertSame(4, $img->heightPx);
         self::assertSame('/FlateDecode', $img->filter);
         self::assertSame('/DeviceRGB', $img->colorSpace);
-        // PNG re-encoded через Flate, размер ≠ original.
+        // A PNG is re-encoded through Flate, so the size differs from the original.
         self::assertNotSame($png, $img->imageData);
     }
 

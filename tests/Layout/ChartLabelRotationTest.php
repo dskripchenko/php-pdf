@@ -45,7 +45,7 @@ final class ChartLabelRotationTest extends TestCase
     #[Test]
     public function bar_chart_zero_rotation_skips_tm_matrix_for_labels(): void
     {
-        // Without rotation и без yAxisTitle, no Tm matrix appears in output.
+        // Without rotation and without a yAxisTitle no Tm matrix appears in the output.
         $chart = new BarChart(
             bars: [['label' => 'January', 'value' => 10]],
             xLabelRotationDeg: 0.0,
@@ -107,7 +107,7 @@ final class ChartLabelRotationTest extends TestCase
         self::assertGreaterThanOrEqual(3, $tmCount);
     }
 
-    // -------- Phase 141: rotation на остальные charts --------
+    // -------- Phase 141: rotation on the remaining charts --------
 
     #[Test]
     public function line_chart_rotated_labels(): void

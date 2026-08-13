@@ -36,9 +36,9 @@ final class PdfUaParentTreeTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // /ParentTree reference в StructTreeRoot.
+        // The /ParentTree reference in StructTreeRoot.
         self::assertMatchesRegularExpression('@/ParentTree\s+\d+\s+0\s+R@', $bytes);
-        // /ParentTreeNextKey соответствует pages count.
+        // /ParentTreeNextKey matches the page count.
         self::assertMatchesRegularExpression('@/ParentTreeNextKey\s+\d+@', $bytes);
     }
 
@@ -51,7 +51,7 @@ final class PdfUaParentTreeTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // /Nums entry в parent tree: page index 0 → array of struct refs.
+        // A /Nums entry in the parent tree: page index 0 → an array of struct refs.
         self::assertMatchesRegularExpression('@/Nums \[0 \[\d+\s+0\s+R\]@', $bytes);
     }
 

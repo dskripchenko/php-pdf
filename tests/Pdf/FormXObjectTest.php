@@ -88,7 +88,7 @@ final class FormXObjectTest extends TestCase
     #[Test]
     public function non_origin_bbox_translates_correctly(): void
     {
-        // BBox 10..30 (w=20, h=20), draw at (50, 60) с size 40×40 → sx=sy=2,
+        // BBox 10..30 (w=20, h=20), drawn at (50, 60) at a size of 40×40 → sx=sy=2,
         //   tx = 50 - 10*2 = 30; ty = 60 - 10*2 = 40.
         $form = new PdfFormXObject("\n", 10, 10, 30, 30);
         $pdf = PdfDocument::new(compressStreams: false);

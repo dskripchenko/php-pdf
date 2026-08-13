@@ -19,7 +19,7 @@ final class DocumentTest extends TestCase
         $doc = Document::new(compressStreams: false);
         $pdf = $doc->toBytes();
         self::assertStringStartsWith('%PDF-1.7', $pdf);
-        // PDF спека требует ≥ 1 page.
+        // The PDF spec requires at least 1 page.
         self::assertMatchesRegularExpression('/\/Count 1\b/', $pdf);
     }
 
@@ -57,7 +57,7 @@ final class DocumentTest extends TestCase
         $doc->addPage()->showText('C', 72, 720, StandardFont::Helvetica, 12);
 
         $pdf = $doc->toBytes();
-        // /BaseFont /Helvetica появляется ровно один раз (один font object).
+        // /BaseFont /Helvetica appears exactly once (a single font object).
         self::assertSame(1, substr_count($pdf, '/BaseFont /Helvetica'));
     }
 
@@ -95,7 +95,7 @@ final class DocumentTest extends TestCase
         $doc->addPage()->fillRect(72, 700, 100, 50, 1, 0, 0)->strokeRect(72, 700, 100, 50, 1);
 
         $pdf = $doc->toBytes();
-        // Fill (rg + re + f) и stroke (RG + re + S) operators в content stream.
+        // The fill (rg + re + f) and stroke (RG + re + S) operators in the content stream.
         self::assertStringContainsString(' rg', $pdf);
         self::assertStringContainsString(' RG', $pdf);
         self::assertStringContainsString(' re', $pdf);

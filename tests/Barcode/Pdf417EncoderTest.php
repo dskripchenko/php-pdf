@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Phase 124: PDF417 encoder structural correctness tests.
  *
- * Pattern table values are facts из ISO/IEC 15438:2006 Annex 3 — verified
+ * The pattern table values are facts from ISO/IEC 15438:2006 Annex 3 — verified
  * by independent extraction from public reference data. RS arithmetic
  * over GF(929) — verified algorithmically.
  */
@@ -181,7 +181,7 @@ final class Pdf417EncoderTest extends TestCase
         // ECL 0 = 2 ECC codewords.
         $enc2 = new Pdf417Encoder('Short', eccLevel: 8);
         self::assertSame(8, $enc2->eccLevel);
-        // Higher ECL → больше overall codewords.
+        // A higher ECL means more codewords overall.
         self::assertGreaterThan(count($enc->codewords), count($enc2->codewords));
     }
 
@@ -231,7 +231,7 @@ final class Pdf417EncoderTest extends TestCase
     #[Test]
     public function rs_factors_first_known_values(): void
     {
-        // Spot-check known values из ISO/IEC 15438 Annex F: ECL 0 = {27, 917}.
+        // Spot-check the known values from ISO/IEC 15438 Annex F: ECL 0 = {27, 917}.
         self::assertSame(27, Pdf417Patterns::RS_FACTORS[0][0]);
         self::assertSame(917, Pdf417Patterns::RS_FACTORS[0][1]);
     }

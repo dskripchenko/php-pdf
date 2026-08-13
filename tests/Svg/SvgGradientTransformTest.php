@@ -72,7 +72,7 @@ SVG;
         $bytes = (new Document(new Section([new SvgElement($svg)])))
             ->toBytes(new Engine(compressStreams: false));
 
-        // No /Matrix entry в pattern.
+        // No /Matrix entry in the pattern.
         self::assertDoesNotMatchRegularExpression('@/Pattern[^/]*/Matrix@', $bytes);
     }
 

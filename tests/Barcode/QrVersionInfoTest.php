@@ -30,15 +30,15 @@ final class QrVersionInfoTest extends TestCase
     {
         // Trigger V7 (45×45). ECC=H, byte data ~84 bytes max.
         $enc = new QrEncoder(str_repeat('a', 80), QrEccLevel::H);
-        // V7 capacity: ECC H byte ≤ 64. 80 chars overflows V7H → bumps к V8+.
-        // Use shorter input для V7.
+        // The V7 capacity: ECC H byte ≤ 64. 80 chars overflow V7H → it bumps to
+        // V8+. Use a shorter input for V7.
         $enc = new QrEncoder(str_repeat('a', 64), QrEccLevel::H);
         self::assertGreaterThanOrEqual(7, $enc->version);
 
         $modules = $enc->modules();
         $size = $enc->size();
         // Version info region: top-right 6×3 block at rows 0..5, cols size-11..size-9.
-        // Some module в этой region должен быть true (version info bits non-zero).
+        // Some module in that region has to be true (the version info bits are non-zero).
         $hasModule = false;
         for ($row = 0; $row < 6; $row++) {
             for ($col = $size - 11; $col <= $size - 9; $col++) {

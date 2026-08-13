@@ -46,7 +46,7 @@ final class DocumentTopLevelEncryptionTest extends TestCase
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         self::assertStringContainsString('/Encrypt', $bytes);
-        // Plain text не должен быть visible (encrypted streams).
+        // The plain text must not be visible (the streams are encrypted).
         self::assertStringNotContainsString('Secret content', $bytes);
     }
 
@@ -80,7 +80,7 @@ final class DocumentTopLevelEncryptionTest extends TestCase
         );
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // R6 bumps PDF version к 2.0.
+        // R6 bumps the PDF version to 2.0.
         self::assertStringStartsWith('%PDF-2.0', $bytes);
         self::assertStringContainsString('/V 5', $bytes);
         self::assertStringContainsString('/R 6', $bytes);
@@ -166,7 +166,7 @@ final class DocumentTopLevelEncryptionTest extends TestCase
 
     private function findIccProfile(): ?string
     {
-        // Use bundled dummy ICC от existing PdfATest.
+        // Use the bundled dummy ICC from the existing PdfATest.
         $path = __DIR__.'/fixtures/dummy.icc';
         if (is_readable($path)) {
             return $path;

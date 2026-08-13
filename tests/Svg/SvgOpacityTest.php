@@ -89,7 +89,7 @@ final class SvgOpacityTest extends TestCase
     #[Test]
     public function out_of_range_opacity_clamped(): void
     {
-        // opacity > 1 clamped к 1 (no /ca emitted).
+        // An opacity above 1 is clamped to 1 (no /ca is emitted).
         $svg = '<svg width="100" height="100"><rect x="0" y="0" width="50" height="50" fill="#f00" fill-opacity="1.5"/></svg>';
         $bytes = (new Document(new Section([new SvgElement($svg)])))
             ->toBytes(new Engine(compressStreams: false));

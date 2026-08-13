@@ -66,7 +66,7 @@ final class OutlineStyleTest extends TestCase
         $bytes = $pdf->toBytes();
 
         self::assertStringNotContainsString('/C [', $bytes);
-        // /F не emitted (default 0).
+        // /F is not emitted (the default is 0).
         self::assertDoesNotMatchRegularExpression('@/F\s+\d+@', $bytes);
     }
 

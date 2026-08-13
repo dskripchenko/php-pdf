@@ -86,7 +86,7 @@ final class FieldResolutionTest extends TestCase
     #[Test]
     public function numpages_reflects_multi_page_document(): void
     {
-        // Stuff 80 paragraphs так что multi-page document.
+        // Stuff in 80 paragraphs so that the document spans several pages.
         $blocks = [
             new Paragraph([new Run('Total pages: '), Field::totalPages()]),
         ];
@@ -98,7 +98,7 @@ final class FieldResolutionTest extends TestCase
         $doc = new Document(new Section($blocks));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $text = $this->pdftotext($bytes);
-        // NUMPAGES должен match'ить актуальное число pages.
+        // NUMPAGES has to match the actual number of pages.
         preg_match('/^\/Type \/Page /m', $bytes);
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount);

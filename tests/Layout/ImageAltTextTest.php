@@ -29,7 +29,7 @@ final class ImageAltTextTest extends TestCase
         // /Figure struct element + /Alt entry.
         self::assertStringContainsString('/S /Figure', $bytes);
         self::assertStringContainsString('/Alt (Sample photo)', $bytes);
-        // BDC/EMC wrapping в content stream.
+        // The BDC/EMC wrapping in the content stream.
         self::assertStringContainsString('/Figure << /MCID 0 >> BDC', $bytes);
         self::assertStringContainsString('EMC', $bytes);
     }

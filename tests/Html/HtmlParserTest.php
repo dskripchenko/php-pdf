@@ -421,7 +421,7 @@ final class HtmlParserTest extends TestCase
 
         self::assertStringStartsWith('%PDF-', $bytes);
         self::assertStringContainsString('Title', $bytes);
-        // Tagged content includes our text strings (perhaps в TJ arrays).
+        // The tagged content includes our text strings (perhaps in TJ arrays).
         self::assertGreaterThan(1000, strlen($bytes));
     }
 

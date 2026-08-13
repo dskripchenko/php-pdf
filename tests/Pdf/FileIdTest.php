@@ -24,7 +24,7 @@ final class FileIdTest extends TestCase
         $doc = new Document(new Section([new Paragraph([new Run('Test')])]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // /ID present в trailer.
+        // /ID is present in the trailer.
         self::assertMatchesRegularExpression('@/ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\]@', $bytes);
     }
 
@@ -77,7 +77,7 @@ final class FileIdTest extends TestCase
         );
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // XRef stream dict должен contain /ID.
+        // The XRef stream dict has to contain /ID.
         self::assertMatchesRegularExpression('@/Type /XRef.*?/ID \[<[0-9a-f]{32}>@s', $bytes);
     }
 

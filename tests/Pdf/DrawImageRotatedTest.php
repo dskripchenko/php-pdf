@@ -52,7 +52,7 @@ final class DrawImageRotatedTest extends TestCase
 
         // a = cos(90)·w ≈ 0; b = sin(90)·w ≈ 50.
         self::assertStringContainsString(' Do', $bytes);
-        // Wrap в q ... Q для local CTM.
+        // Wrapped in q ... Q for a local CTM.
         self::assertStringContainsString("\nq\n", $bytes);
         self::assertStringContainsString("\nQ\n", $bytes);
     }

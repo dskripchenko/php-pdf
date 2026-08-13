@@ -29,7 +29,7 @@ final class ChartGridLinesTest extends TestCase
         $b1 = (new Document(new Section([$without])))->toBytes(new Engine(compressStreams: false));
         $b2 = (new Document(new Section([$with])))->toBytes(new Engine(compressStreams: false));
 
-        // С grid lines — 3 extra stroke ops (25%/50%/75%).
+        // With grid lines there are 3 extra stroke ops (25%/50%/75%).
         $s1 = preg_match_all('@\nS\n@', $b1);
         $s2 = preg_match_all('@\nS\n@', $b2);
         self::assertSame(3, $s2 - $s1);
@@ -44,7 +44,7 @@ final class ChartGridLinesTest extends TestCase
         );
         $bytes = (new Document(new Section([$with])))->toBytes(new Engine(compressStreams: false));
 
-        // Grid lines emitted с light gray 0.85 0.85 0.85 RG.
+        // The grid lines are emitted in light grey, 0.85 0.85 0.85 RG.
         self::assertMatchesRegularExpression('@0\.85\s+0\.85\s+0\.85\s+RG@', $bytes);
     }
 

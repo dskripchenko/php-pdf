@@ -40,7 +40,7 @@ final class LigatureSubstitutionsTest extends TestCase
         $sub->add(10, [11], 100);
         $sub->add(10, [10, 11], 200);
 
-        // Input: f, f, i → должно match'нуть ffi первым
+        // Input: f, f, i → ffi has to match first
         $result = $sub->apply([10, 10, 11]);
         self::assertSame([200], $result['glyphs']);
         self::assertSame([10, 10, 11], $result['sourceMap'][200]);
@@ -63,7 +63,7 @@ final class LigatureSubstitutionsTest extends TestCase
         $sub = new LigatureSubstitutions;
         $sub->add(10, [11, 12], 100); // need [11, 12] after 10
 
-        // Last position — нет места для 2 components
+        // The last position — no room for 2 components
         $result = $sub->apply([10, 11]);
         self::assertSame([10, 11], $result['glyphs']);
     }

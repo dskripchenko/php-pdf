@@ -29,7 +29,7 @@ final class HeadingAnchorTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Named destination "chapter-1" в /Names tree.
+        // The named destination "chapter-1" in the /Names tree.
         self::assertStringContainsString('(chapter-1)', $bytes);
     }
 
@@ -40,7 +40,7 @@ final class HeadingAnchorTest extends TestCase
             new Heading(1, [new Run('No anchor')]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // No /Dests entry для no anchor.
+        // No /Dests entry when there is no anchor.
         self::assertStringNotContainsString('/Dests', $bytes);
     }
 

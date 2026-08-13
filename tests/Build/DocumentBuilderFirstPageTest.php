@@ -47,7 +47,7 @@ final class DocumentBuilderFirstPageTest extends TestCase
             ->paragraph('body')
             ->build();
 
-        // First-page header не задан явно → возвращает обычный.
+        // No first-page header is set explicitly → the ordinary one comes back.
         self::assertCount(1, $doc->section->effectiveHeaderBlocksFor(1));
         self::assertCount(1, $doc->section->effectiveHeaderBlocksFor(5));
     }

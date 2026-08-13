@@ -50,10 +50,10 @@ final class OpenActionTest extends TestCase
         $pdf->addPage();
         $pdf->addPage();
         $pdf->addPage();
-        // Open на page 2 (index 1).
+        // Open at page 2 (index 1).
         $pdf->setOpenAction('fit-page', pageIndex: 2);
         $bytes = $pdf->toBytes();
-        // Должна reference object of 2nd page.
+        // It has to reference the object of the 2nd page.
         self::assertStringContainsString('/OpenAction', $bytes);
     }
 

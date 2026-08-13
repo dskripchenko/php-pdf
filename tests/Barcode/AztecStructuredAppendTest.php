@@ -123,7 +123,7 @@ final class AztecStructuredAppendTest extends TestCase
         $sym2 = AztecEncoder::structuredAppend('LO ', 2, 3);
         $sym3 = AztecEncoder::structuredAppend('WORLD', 3, 3);
 
-        // Decoder would strip headers и concatenate data parts.
+        // A decoder would strip the headers and concatenate the data parts.
         // Verify each symbol carries correct header + payload.
         self::assertStringStartsWith(' AC', $sym1->data);
         self::assertStringStartsWith(' BC', $sym2->data);

@@ -100,7 +100,7 @@ final class FormFieldTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Fields array должен иметь 3 references.
+        // The Fields array has to hold 3 references.
         preg_match('@/Fields \[([^\]]+)\]@', $bytes, $m);
         self::assertNotEmpty($m);
         $refs = preg_match_all('@\d+\s+0\s+R@', $m[1]);

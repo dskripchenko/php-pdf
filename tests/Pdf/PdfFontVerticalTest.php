@@ -47,7 +47,7 @@ final class PdfFontVerticalTest extends TestCase
     public function has_vertical_metrics_query(): void
     {
         $ttf = $this->font();
-        // Should return bool без exception.
+        // It should return a bool without an exception.
         self::assertIsBool($ttf->hasVerticalMetrics());
     }
 

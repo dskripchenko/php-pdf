@@ -67,8 +67,8 @@ final class DocumentBuilderHeaderFooterTest extends TestCase
 
         // Just a sanity smoke — bytes start with %PDF + content present.
         self::assertStringStartsWith('%PDF', $bytes);
-        // Verify по pdftotext'у (без embedded шрифта текст эмитится в
-        // WinAnsi, не как plain ASCII в bytes).
+        // Verified through pdftotext (without an embedded font the text is
+        // emitted as WinAnsi rather than plain ASCII in the bytes).
         $tmp = tempnam(sys_get_temp_dir(), 'hf-');
         file_put_contents($tmp, $bytes);
         try {

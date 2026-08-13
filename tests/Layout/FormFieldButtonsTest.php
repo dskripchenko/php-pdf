@@ -27,7 +27,7 @@ final class FormFieldButtonsTest extends TestCase
         self::assertStringContainsString('https://api.example.com/form', $bytes);
         // Pushbutton flag (bit 17 = 65536).
         self::assertMatchesRegularExpression('@/Ff\s+65536@', $bytes);
-        // Caption в MK dict.
+        // The caption in the MK dict.
         self::assertStringContainsString('/CA (Send)', $bytes);
     }
 

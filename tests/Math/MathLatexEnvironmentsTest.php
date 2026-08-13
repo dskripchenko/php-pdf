@@ -31,7 +31,7 @@ final class MathLatexEnvironmentsTest extends TestCase
         self::assertStringContainsString('(x) Tj', $bytes);
         self::assertStringContainsString('(a) Tj', $bytes);
         self::assertStringContainsString('(b) Tj', $bytes);
-        // Fraction line drawn — стрelfие path emit.
+        // The fraction line is drawn — a stroke path is emitted.
         self::assertStringContainsString(' l', $bytes);  // line-to operator
     }
 
@@ -48,7 +48,7 @@ final class MathLatexEnvironmentsTest extends TestCase
     public function align_environment_strips_begin_end(): void
     {
         // Phase 174: \begin{align}...\end{align} → multi-line.
-        // Content concatenated в text tokens per-row by MathRenderer.
+        // The content is concatenated into text tokens per row by MathRenderer.
         $bytes = $this->render('\\begin{align}a + b \\\\ c + d\\end{align}');
         self::assertStringContainsString('a', $bytes);
         self::assertStringContainsString('b', $bytes);
@@ -74,7 +74,7 @@ final class MathLatexEnvironmentsTest extends TestCase
         self::assertStringContainsString('2', $bytes);
         self::assertStringContainsString('3', $bytes);
         self::assertStringContainsString('4', $bytes);
-        // pmatrix renders с parens — emit path commands.
+        // pmatrix renders with parens — path commands are emitted.
         self::assertNotEmpty($bytes);
     }
 

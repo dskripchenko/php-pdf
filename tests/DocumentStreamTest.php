@@ -13,7 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Phase 216: Document::toStream() и toFile() convenience methods.
+ * Phase 216: the Document::toStream() and toFile() convenience methods.
  */
 final class DocumentStreamTest extends TestCase
 {
@@ -122,7 +122,7 @@ final class DocumentStreamTest extends TestCase
     #[Test]
     public function to_stream_propagates_metadata(): void
     {
-        // Без Object Streams metadata visible в raw bytes.
+        // Without object streams the metadata is visible in the raw bytes.
         $doc = new Document(
             new Section([new Paragraph([new Run('test')])]),
             metadata: ['Title' => 'Stream Test', 'Author' => 'Tester'],

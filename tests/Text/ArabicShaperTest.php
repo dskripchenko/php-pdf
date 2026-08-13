@@ -109,7 +109,7 @@ final class ArabicShaperTest extends TestCase
     #[Test]
     public function dal_only_has_isolated_and_final(): void
     {
-        // د (DAL, R-only) — initial/medial forms не exist (gracefully fall back).
+        // د (DAL, R-only) — the initial and medial forms do not exist (fall back gracefully).
         // د + ب: DAL would be isol/fina (DAL is R, doesn't join left), ب joins
         // depending on right neighbor.
         // Just د alone → FEA9 isolated.

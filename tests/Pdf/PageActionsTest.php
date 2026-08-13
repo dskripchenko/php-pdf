@@ -59,7 +59,7 @@ final class PageActionsTest extends TestCase
         $bytes = $pdf->toBytes();
 
         // Page dict should not contain /AA when no action set. Other
-        // /AA usages may exist (e.g., form fields) — restrict check к
+        // Other /AA usages may exist (form fields, say) — restrict the check to
         // page dict via /Type /Page lookbehind would be fragile, so
         // checking the simpler page-only setup is sufficient.
         self::assertStringNotContainsString('/AA <<', $bytes);

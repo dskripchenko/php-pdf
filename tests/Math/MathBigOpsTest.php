@@ -18,7 +18,7 @@ final class MathBigOpsTest extends TestCase
     public function sum_with_limits_creates_bigop(): void
     {
         $tokens = MathRenderer::parse('\\sum_{i=1}^{n} i');
-        // First token = bigop с symbol ∑ + sub + sup.
+        // The first token is a bigop with the symbol ∑ plus sub and sup.
         self::assertSame('bigop', $tokens[0]['type']);
         self::assertSame('∑', $tokens[0]['symbol']);
         self::assertNotNull($tokens[0]['sub']);
@@ -58,7 +58,7 @@ final class MathBigOpsTest extends TestCase
         $bytes = (new Document(new Section([new MathExpression($tex)])))
             ->toBytes(new Engine(compressStreams: false));
         self::assertNotEmpty($bytes);
-        // sub "i=1" and sup "n" rendered как text.
+        // The sub "i=1" and the sup "n" are rendered as text.
         self::assertStringContainsString('(i=1) Tj', $bytes);
         self::assertStringContainsString('(n) Tj', $bytes);
     }

@@ -35,9 +35,9 @@ SVG;
         self::assertStringContainsString('/PatternType 2', $bytes);
         self::assertStringContainsString('/ShadingType 2', $bytes);
         self::assertStringContainsString('/FunctionType 2', $bytes);
-        // Pattern resource в Page Resources.
+        // The pattern resource in the page resources.
         self::assertMatchesRegularExpression('@/Pattern <<\s*/P1\s+\d+\s+0\s+R@', $bytes);
-        // Pattern fill operator в content stream.
+        // The pattern fill operator in the content stream.
         self::assertStringContainsString('/Pattern cs', $bytes);
         self::assertStringContainsString('/P1 scn', $bytes);
     }
@@ -96,7 +96,7 @@ SVG;
 
         // No pattern emitted.
         self::assertStringNotContainsString('/Type /Pattern', $bytes);
-        // Fill='url(#missing)' parsed как color "unknown" → falls к black.
+        // Fill='url(#missing)' is parsed as the colour "unknown" → it falls back to black.
         self::assertMatchesRegularExpression('@\b0\s+0\s+0\s+rg@', $bytes);
     }
 

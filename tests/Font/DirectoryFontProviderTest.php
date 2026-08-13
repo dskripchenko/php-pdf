@@ -25,7 +25,7 @@ final class DirectoryFontProviderTest extends TestCase
     {
         $provider = new DirectoryFontProvider($this->fontsDir);
         $known = $provider->knownFonts();
-        // Должно быть 12 шрифтов (Sans/Serif/Mono × Regular/Bold/Italic/BoldItalic).
+        // There have to be 12 fonts (Sans/Serif/Mono × Regular/Bold/Italic/BoldItalic).
         self::assertCount(12, $known);
         self::assertArrayHasKey('LiberationSans', $known);
         self::assertArrayHasKey('LiberationSerif-Bold', $known);
@@ -71,7 +71,7 @@ final class DirectoryFontProviderTest extends TestCase
         $provider = new DirectoryFontProvider($this->fontsDir);
         $first = $provider->resolve('LiberationSans');
         $second = $provider->resolve('LiberationSans');
-        // Идемпотентность: same TtfFile instance возвращается.
+        // Idempotence: the same TtfFile instance comes back.
         self::assertSame($first, $second);
     }
 }

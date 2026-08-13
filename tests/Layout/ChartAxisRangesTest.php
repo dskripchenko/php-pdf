@@ -18,7 +18,7 @@ final class ChartAxisRangesTest extends TestCase
     #[Test]
     public function bar_chart_ymax_overrides_auto_scale(): void
     {
-        // Data max = 50, но yMax = 100 — y-axis label should show 100.
+        // The data max is 50 but yMax is 100 — the y-axis label should show 100.
         $chart = new BarChart(
             bars: [['label' => 'A', 'value' => 50]],
             yMax: 100,
@@ -73,7 +73,7 @@ final class ChartAxisRangesTest extends TestCase
     #[Test]
     public function ymax_lower_than_data_clips_visually(): void
     {
-        // Если yMax < data, bars exceed plot area, но не throw.
+        // When yMax is below the data the bars exceed the plot area, but nothing throws.
         $chart = new BarChart(
             bars: [['label' => 'A', 'value' => 100]],
             yMax: 50,

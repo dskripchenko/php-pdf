@@ -20,7 +20,7 @@ final class MathMatricesTest extends TestCase
         $tex = '\\matrix{1 & 2 \\\\ 3 & 4}';
         $bytes = (new Document(new Section([new MathExpression($tex)])))
             ->toBytes(new Engine(compressStreams: false));
-        // Все 4 cells rendered.
+        // All 4 cells are rendered.
         self::assertStringContainsString('(1) Tj', $bytes);
         self::assertStringContainsString('(2) Tj', $bytes);
         self::assertStringContainsString('(3) Tj', $bytes);
@@ -33,7 +33,7 @@ final class MathMatricesTest extends TestCase
         $tex = '\\pmatrix{a & b \\\\ c & d}';
         $bytes = (new Document(new Section([new MathExpression($tex)])))
             ->toBytes(new Engine(compressStreams: false));
-        // PDF escapes `(` и `)` literal с backslash.
+        // PDF escapes a literal `(` and `)` with a backslash.
         self::assertStringContainsString('(\\() Tj', $bytes);
         self::assertStringContainsString('(\\)) Tj', $bytes);
     }
@@ -63,7 +63,7 @@ final class MathMatricesTest extends TestCase
         $tex = '\\matrix{\\frac{1}{2} & x \\\\ y & \\frac{3}{4}}';
         $bytes = (new Document(new Section([new MathExpression($tex)])))
             ->toBytes(new Engine(compressStreams: false));
-        // Both fraction lines (2 strokeLine для fracs) + cell text.
+        // Both fraction lines (2 strokeLines for the fracs) plus the cell text.
         self::assertStringContainsString('(1) Tj', $bytes);
         self::assertStringContainsString('(2) Tj', $bytes);
         self::assertStringContainsString('(x) Tj', $bytes);

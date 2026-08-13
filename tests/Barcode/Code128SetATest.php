@@ -35,8 +35,8 @@ final class Code128SetATest extends TestCase
     #[Test]
     public function control_with_lowercase_handled_via_auto_switch(): void
     {
-        // Phase 164: auto-mode handles это через CODE_A switch:
-        // Set B "Hello" → CODE_A → Set A "\x01". Раньше throw'или.
+        // Phase 164: auto mode handles this through a CODE_A switch:
+        // Set B "Hello" → CODE_A → Set A "\x01". It used to throw.
         $enc = new Code128Encoder("Hello\x01");
         self::assertGreaterThan(0, $enc->moduleCount());
     }
@@ -44,8 +44,8 @@ final class Code128SetATest extends TestCase
     #[Test]
     public function set_a_rejects_bytes_above_95(): void
     {
-        // Non-ASCII byte (e.g. 0xC3 — Cyrillic UTF-8 lead) → falls back к
-        // path that throws. Mixed control + high byte hits Set A path
+        // A non-ASCII byte (0xC3, a Cyrillic UTF-8 lead, say) falls back to the
+        // path that throws. A mix of a control and a high byte hits the Set A path
         // which validates 0..95 range.
         $this->expectException(\InvalidArgumentException::class);
         new Code128Encoder("\x01"."Привет");

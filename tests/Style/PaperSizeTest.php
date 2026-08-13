@@ -37,7 +37,7 @@ final class PaperSizeTest extends TestCase
     public function a3_relates_to_a4_per_iso_216(): void
     {
         // ISO 216: A3 width = A4 height; A3 height = 2 × A4 width
-        // (A_n derived от A0 половинным разрезанием wider side'а).
+        // (A_n is derived from A0 by halving the wider side.)
         self::assertGreaterThan(PaperSize::A4->heightPt(), PaperSize::A3->heightPt());
         self::assertEqualsWithDelta(PaperSize::A4->heightPt(), PaperSize::A3->widthPt(), 0.01);
         self::assertEqualsWithDelta(2 * PaperSize::A4->widthPt(), PaperSize::A3->heightPt(), 0.01);

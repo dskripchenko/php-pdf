@@ -40,7 +40,7 @@ final class ChartAxisTitlesTest extends TestCase
         );
         $doc = new Document(new Section([$chart]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // Rotated text использует Tm matrix.
+        // Rotated text uses a Tm matrix.
         self::assertStringContainsString('(Revenue) Tj', $bytes);
         self::assertStringContainsString(' Tm', $bytes);
     }
@@ -82,11 +82,11 @@ final class ChartAxisTitlesTest extends TestCase
         );
         $doc = new Document(new Section([$chart]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // No rotated text matrix (rotated only когда y title set).
+        // No rotated text matrix (rotation happens only when the y title is set).
         self::assertStringNotContainsString(' Tm', $bytes);
     }
 
-    // -------- Phase 142: axis titles на остальных charts --------
+    // -------- Phase 142: axis titles on the remaining charts --------
 
     #[Test]
     public function grouped_bar_chart_axis_titles(): void

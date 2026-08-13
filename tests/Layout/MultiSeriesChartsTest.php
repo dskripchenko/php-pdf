@@ -90,7 +90,7 @@ final class MultiSeriesChartsTest extends TestCase
         // 2 polylines + 2 axes lines + legend = many strokes.
         $sCount = preg_match_all('@\nS\n@', $bytes);
         self::assertGreaterThanOrEqual(4, $sCount);
-        // Series names в legend.
+        // The series names in the legend.
         self::assertStringContainsString('(Sales) Tj', $bytes);
         self::assertStringContainsString('(Costs) Tj', $bytes);
         // X-axis labels.

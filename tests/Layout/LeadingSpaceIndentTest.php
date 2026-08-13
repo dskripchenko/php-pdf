@@ -43,7 +43,7 @@ final class LeadingSpaceIndentTest extends TestCase
         $ten = $this->firstTextX(str_repeat(' ', 10).'X');
         $twenty = $this->firstTextX(str_repeat(' ', 20).'X');
 
-        // Вдвое больше пробелов — примерно вдвое больший отступ.
+        // Twice as many spaces give roughly twice the indent.
         $left = $this->firstTextX('X');
         self::assertEqualsWithDelta(($ten - $left) * 2, $twenty - $left, 1.0);
     }
@@ -51,14 +51,14 @@ final class LeadingSpaceIndentTest extends TestCase
     #[Test]
     public function spacesBetweenWordsStayASeparator(): void
     {
-        // Иначе изменилось бы разбиение каждой строки документа.
+        // Otherwise the breaking of every line in the document would change.
         $single = $this->firstTextX('X       Y');
         $plain = $this->firstTextX('X Y');
 
         self::assertEqualsWithDelta($plain, $single, 0.01);
     }
 
-    /** X первой позиции текста на странице. */
+    /** The X of the first text position on the page. */
     private function firstTextX(string $text): float
     {
         $pdf = (new Document(new Section(body: [new Paragraph([new Run($text)])])))->toBytes();

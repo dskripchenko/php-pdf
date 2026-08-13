@@ -61,7 +61,7 @@ final class PdfVersionTest extends TestCase
     #[Test]
     public function xref_stream_bumps_version_when_lower(): void
     {
-        // pdfVersion 1.4 + useXrefStream — should bump к 1.5 minimum.
+        // pdfVersion 1.4 plus useXrefStream should bump to 1.5 at least.
         $doc = new Document(
             new Section([new Paragraph([new Run('Hello')])]),
             useXrefStream: true,

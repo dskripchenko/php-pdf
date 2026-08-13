@@ -42,7 +42,7 @@ final class SvgTextTest extends TestCase
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Font size emitted в Tf operator: /F1 24 Tf (scaled by box width).
+        // The font size is emitted in the Tf operator: /F1 24 Tf (scaled by the box width).
         self::assertMatchesRegularExpression('@/F1\s+\d+(?:\.\d+)?\s+Tf@', $bytes);
         self::assertStringContainsString('(Big) Tj', $bytes);
     }

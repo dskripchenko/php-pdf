@@ -47,7 +47,7 @@ final class FvarReaderTest extends TestCase
         $axes = $ttf->variationAxes();
         self::assertNotEmpty($axes);
 
-        // Expected axes для NewYork: opsz, wght, GRAD.
+        // The axes expected for NewYork: opsz, wght, GRAD.
         $tags = array_column($axes, 'tag');
         self::assertContains('wght', $tags, 'Should have Weight axis');
         self::assertContains('opsz', $tags, 'Should have Optical Size axis');
@@ -101,7 +101,7 @@ final class FvarReaderTest extends TestCase
         self::assertNotNull($axisName);
         self::assertNotSame('', $axisName);
 
-        // First instance имеет subfamily name.
+        // The first instance has a subfamily name.
         $instances = $ttf->namedInstances();
         $instName = $ttf->nameById($instances[0]['nameId']);
         self::assertNotNull($instName);

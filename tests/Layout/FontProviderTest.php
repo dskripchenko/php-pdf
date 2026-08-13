@@ -139,7 +139,7 @@ final class FontProviderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, fontProvider: $this->provider()));
 
-        // 4 разных variant'а LiberationSans should embedded.
+        // 4 different variants of LiberationSans should be embedded.
         $count = substr_count($bytes, '/Subtype /Type0');
         self::assertGreaterThanOrEqual(4, $count);
     }
@@ -147,7 +147,7 @@ final class FontProviderTest extends TestCase
     #[Test]
     public function engine_falls_back_to_default_when_family_unknown(): void
     {
-        // Provider returns null → engine использует defaultFont.
+        // The provider returns null → the engine uses the defaultFont.
         $regular = new PdfFont(TtfFile::fromFile(
             $this->fontsDir().'/LiberationSans-Regular.ttf'
         ));

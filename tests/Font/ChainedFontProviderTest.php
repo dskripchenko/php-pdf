@@ -98,8 +98,8 @@ final class ChainedFontProviderTest extends TestCase
 
     private function stubTtf(string $tag): TtfFile
     {
-        // Use real Liberation TTF — заглушку парсить лень.
-        // Но мы переиспользуем разные FILES.
+        // Use the real Liberation TTF — parsing a stub is not worth the effort.
+        // Different FILES are reused instead.
         $path = __DIR__.'/../../.cache/fonts/liberation-fonts-ttf-2.1.5/Liberation'
             .match ($tag) {
                 'A' => 'Sans-Regular.ttf',

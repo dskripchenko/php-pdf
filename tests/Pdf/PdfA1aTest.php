@@ -57,7 +57,7 @@ final class PdfA1aTest extends TestCase
 
         self::assertStringContainsString('<pdfaid:part>1</pdfaid:part>', $bytes);
         self::assertStringContainsString('<pdfaid:conformance>A</pdfaid:conformance>', $bytes);
-        // Tagged flag set; actual /MarkInfo emit зависит от content (нужен tagged blocks).
+        // The tagged flag is set; whether /MarkInfo is actually emitted depends on the content (tagged blocks are needed).
         self::assertTrue($pdf->isTagged());
     }
 

@@ -21,7 +21,7 @@ final class QrAutoMaskTest extends TestCase
     #[Test]
     public function different_inputs_могут_select_different_masks(): void
     {
-        // Smoke: каждое значение из 0..7 selected for some input across many trials.
+        // Smoke: every value of 0..7 is selected for some input across many trials.
         // Just verify range varies across diverse inputs.
         $masks = [];
         $inputs = ['A', 'BB', 'HELLO WORLD', '123456', 'test123!', 'abc-def', 'XYZ123ABC'];
@@ -29,7 +29,7 @@ final class QrAutoMaskTest extends TestCase
             $enc = new QrEncoder($input);
             $masks[] = $enc->selectedMask;
         }
-        // At least 2 different masks для variety of inputs (probabilistic).
+        // At least 2 different masks over a variety of inputs (probabilistic).
         self::assertGreaterThan(1, count(array_unique($masks)));
     }
 

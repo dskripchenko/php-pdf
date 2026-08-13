@@ -49,7 +49,7 @@ final class AztecEciTest extends TestCase
         $base = new AztecEncoder('TEST');
         $withEci = AztecEncoder::withEci(26, 'TEST');
 
-        // Both encode без exception.
+        // Both encode without an exception.
         self::assertGreaterThan(0, $base->matrixSize());
         self::assertGreaterThan(0, $withEci->matrixSize());
     }

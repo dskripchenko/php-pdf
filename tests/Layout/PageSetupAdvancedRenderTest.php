@@ -159,7 +159,7 @@ final class PageSetupAdvancedRenderTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        // Sanity: pdf still валиден.
+        // Sanity: the PDF is still valid.
         self::assertStringStartsWith('%PDF', $bytes);
         $tmp = tempnam(sys_get_temp_dir(), 'mm-');
         file_put_contents($tmp, $bytes);

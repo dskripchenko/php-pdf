@@ -32,7 +32,7 @@ final class ImageDedupTest extends TestCase
     #[Test]
     public function different_instances_same_content_dedup(): void
     {
-        // Phase 29: load same file twice → 2 instances но 1 XObject.
+        // Phase 29: loading the same file twice gives 2 instances but 1 XObject.
         $img1 = PdfImage::fromPath($this->jpegPath);
         $img2 = PdfImage::fromPath($this->jpegPath);
         self::assertNotSame($img1, $img2);

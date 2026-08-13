@@ -50,7 +50,7 @@ final class DocumentLangTest extends TestCase
     #[Test]
     public function tagged_pdf_with_lang(): void
     {
-        // Tagged PDF + /Lang ⇒ both в Catalog.
+        // A tagged PDF plus /Lang ⇒ both are in the catalog.
         $ast = new AstDocument(
             new Section([new Paragraph([new Run('Tagged')])]),
             tagged: true,

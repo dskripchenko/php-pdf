@@ -34,7 +34,7 @@ final class PdfATest extends TestCase
         $pdf->enablePdfA(new PdfAConfig($this->iccPath, lang: 'ru'));
         $bytes = $pdf->toBytes();
 
-        // Catalog должен содержать /Metadata + /OutputIntents + /Lang.
+        // The catalog has to contain /Metadata + /OutputIntents + /Lang.
         self::assertMatchesRegularExpression('@/Metadata\s+\d+\s+0\s+R@', $bytes);
         self::assertMatchesRegularExpression('@/OutputIntents \[\d+\s+0\s+R\]@', $bytes);
         self::assertStringContainsString('/Lang (ru)', $bytes);
@@ -111,7 +111,7 @@ final class PdfATest extends TestCase
         $pdf->enablePdfA(new PdfAConfig($this->iccPath, title: 'My Doc', author: 'Author Name'));
         $bytes = $pdf->toBytes();
 
-        // PDF compiles successfully + содержит markers + content.
+        // The PDF compiles successfully and holds the markers and the content.
         self::assertStringContainsString('Archive content', $bytes);
         self::assertStringContainsString('GTS_PDFA1', $bytes);
         self::assertStringContainsString('Author Name', $bytes);

@@ -84,7 +84,7 @@ final class StackedBarChartTest extends TestCase
         $b1 = (new Document(new Section([$chart1])))->toBytes(new Engine(compressStreams: false));
         $b2 = (new Document(new Section([$chart2])))->toBytes(new Engine(compressStreams: false));
 
-        // Chart 1 имеет 1 segment skipped (Zero) → fewer fillRects.
+        // Chart 1 has 1 segment skipped (Zero) → fewer fillRects.
         self::assertLessThan(preg_match_all('@^f$@m', $b2), preg_match_all('@^f$@m', $b1));
     }
 

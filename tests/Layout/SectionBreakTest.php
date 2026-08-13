@@ -27,7 +27,7 @@ final class SectionBreakTest extends TestCase
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         self::assertStringContainsString('(SingleSection) Tj', $bytes);
-        // Один Page object.
+        // A single page object.
         self::assertSame(1, substr_count($bytes, '/Type /Page '));
     }
 
@@ -60,7 +60,7 @@ final class SectionBreakTest extends TestCase
 
         // A4 portrait: 595.28 × 841.89.
         // A4 landscape: 841.89 × 595.28.
-        // Должны быть обе MediaBox dimensions в bytes.
+        // Both MediaBox dimensions have to be in the bytes.
         self::assertMatchesRegularExpression('@MediaBox\s*\[0\s+0\s+595\.28\s+841\.89\]@', $bytes);
         self::assertMatchesRegularExpression('@MediaBox\s*\[0\s+0\s+841\.89\s+595\.28\]@', $bytes);
     }

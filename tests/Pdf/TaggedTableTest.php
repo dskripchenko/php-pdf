@@ -68,7 +68,7 @@ final class TaggedTableTest extends TestCase
     #[Test]
     public function cell_paragraph_does_not_emit_separate_p_tag(): void
     {
-        // Внутри tagged cell, paragraph не должен emit нестoднем /P.
+        // Inside a tagged cell a paragraph must not emit a nested /P.
         $table = new Table([new Row([$this->makeCell('X')])]);
         $ast = new AstDocument(new Section([$table]), tagged: true);
         $bytes = $ast->toBytes(new Engine(compressStreams: false));

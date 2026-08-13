@@ -31,7 +31,7 @@ final class MathMultiLineTest extends TestCase
     #[Test]
     public function nested_matrix_double_backslash_preserved(): void
     {
-        // \\\\ inside \matrix{} — должен НЕ split outer.
+        // A \\\\ inside \matrix{} must NOT split the outer one.
         $rows = MathRenderer::parseLines('\\matrix{1 & 2 \\\\ 3 & 4}');
         self::assertCount(1, $rows);
         self::assertSame('matrix', $rows[0][0]['type']);

@@ -9,7 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Phase 165: GS1-128 (Code 128 с FNC1 + Application Identifiers) tests.
+ * Phase 165: GS1-128 (Code 128 with FNC1 + Application Identifiers) tests.
  */
 final class Code128Gs1Test extends TestCase
 {
@@ -86,11 +86,11 @@ final class Code128Gs1Test extends TestCase
     #[Test]
     public function gs1_with_two_variable_ais_separated_by_fnc1(): void
     {
-        // Two variable AIs: (10) batch и (21) serial → FNC1 между.
+        // Two variable AIs: (10) batch and (21) serial → an FNC1 between them.
         $encTwo = Code128Encoder::gs1('(10)ABC(21)DEF');
         $encSingleConcat = new Code128Encoder('10ABC21DEF');
-        // GS1 includes start-FNC1 + variable-separator-FNC1 → больше CW чем
-        // pure concatenation.
+        // GS1 includes a start FNC1 plus a variable-separator FNC1 → more
+        // codewords than a pure concatenation.
         self::assertGreaterThan($encSingleConcat->moduleCount(), $encTwo->moduleCount());
     }
 }

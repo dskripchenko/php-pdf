@@ -89,9 +89,9 @@ final class BorderRadiusTest extends TestCase
             )])]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // Square fallback (no 'c' ops для borders).
-        // Note: bg can still produce curves если backgroundColor set, но
-        // здесь нет bg, only borders.
+        // The square fallback (no 'c' ops for the borders).
+        // Note: the background can still produce curves when backgroundColor is
+        // set, but there is no background here, only borders.
         self::assertStringNotContainsString(" c\n", $bytes);
     }
 }

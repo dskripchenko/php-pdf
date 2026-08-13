@@ -45,7 +45,7 @@ final class SmoothedLineChartTest extends TestCase
         $bytes = (new Document(new Section([$chart])))
             ->toBytes(new Engine(compressStreams: false));
 
-        // No c operator (только straight l).
+        // No c operator (straight l only).
         self::assertDoesNotMatchRegularExpression('@\sc\n@', $bytes);
         self::assertMatchesRegularExpression('@\sl\n@', $bytes);
     }
@@ -70,7 +70,7 @@ final class SmoothedLineChartTest extends TestCase
     #[Test]
     public function smoothed_with_two_points_only(): void
     {
-        // Edge case — 2 points, single Bezier с virtual endpoints.
+        // An edge case — 2 points, a single Bezier with virtual endpoints.
         $chart = new LineChart(
             points: [
                 ['label' => 'A', 'value' => 1],

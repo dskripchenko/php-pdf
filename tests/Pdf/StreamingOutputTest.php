@@ -92,7 +92,7 @@ final class StreamingOutputTest extends TestCase
     public function toFile_returns_byte_count_matching_filesize(): void
     {
         $pdf = PdfDocument::new(compressStreams: false);
-        // Multi-page document для non-trivial size.
+        // A multi-page document, for a non-trivial size.
         for ($i = 0; $i < 5; $i++) {
             $page = $pdf->addPage();
             $page->showText("Page $i", 100, 700, StandardFont::Helvetica, 12);

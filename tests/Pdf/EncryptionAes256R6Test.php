@@ -63,7 +63,7 @@ final class EncryptionAes256R6Test extends TestCase
         $userHash = substr($enc->uValue, 0, 32);
         $userValSalt = substr($enc->uValue, 32, 8);
 
-        // R6 hash = Algorithm 2.B (iterative), не single SHA-256.
+        // The R6 hash is Algorithm 2.B (iterative), not a single SHA-256.
         $expected = Encryption::computeR6Hash('mypassword', $userValSalt);
         self::assertSame(bin2hex($expected), bin2hex($userHash));
 

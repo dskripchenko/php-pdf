@@ -38,7 +38,7 @@ final class PageTest extends TestCase
         $fonts = $p->standardFonts();
         self::assertCount(1, $fonts);
         self::assertContainsOnlyInstancesOf(StandardFont::class, $fonts);
-        // Имя ресурса начинается с F.
+        // The resource name starts with F.
         $name = array_key_first($fonts);
         self::assertMatchesRegularExpression('/^F\d+$/', $name);
     }

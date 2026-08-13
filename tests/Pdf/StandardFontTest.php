@@ -13,7 +13,7 @@ final class StandardFontTest extends TestCase
     #[Test]
     public function all_14_fonts_present(): void
     {
-        // Adobe base-14 (PDF спека ISO 32000-1 §9.6.2.2).
+        // The Adobe base-14 (the PDF spec, ISO 32000-1 §9.6.2.2).
         self::assertCount(14, StandardFont::cases());
     }
 
@@ -38,7 +38,7 @@ final class StandardFontTest extends TestCase
     #[Test]
     public function symbol_and_zapfdingbats_have_no_explicit_encoding(): void
     {
-        // Symbol и ZapfDingbats имеют built-in encoding, не WinAnsi.
+        // Symbol and ZapfDingbats have a built-in encoding rather than WinAnsi.
         self::assertStringNotContainsString('WinAnsiEncoding', StandardFont::Symbol->pdfDictionary());
         self::assertStringNotContainsString('WinAnsiEncoding', StandardFont::ZapfDingbats->pdfDictionary());
     }

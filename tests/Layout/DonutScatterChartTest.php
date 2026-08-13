@@ -85,7 +85,7 @@ final class DonutScatterChartTest extends TestCase
         $doc = new Document(new Section([$chart]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // ≥3 fillRects для markers + axes + legend.
+        // ≥3 fillRects for the markers, the axes and the legend.
         $count = preg_match_all('@^f$@m', $bytes);
         self::assertGreaterThanOrEqual(3, $count);
         self::assertStringContainsString('(A) Tj', $bytes);

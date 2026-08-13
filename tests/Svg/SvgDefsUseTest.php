@@ -52,7 +52,7 @@ SVG;
     #[Test]
     public function use_with_modern_href_attribute(): void
     {
-        // SVG 2 syntax — `href` без xlink: prefix.
+        // The SVG 2 syntax — `href` without the xlink: prefix.
         $svg = <<<'SVG'
 <svg width="100" height="100">
   <defs>
@@ -72,14 +72,14 @@ SVG;
         $svg = '<svg width="100" height="100"><use href="#nonexistent"/></svg>';
         $bytes = (new Document(new Section([new SvgElement($svg)])))
             ->toBytes(new Engine(compressStreams: false));
-        // Не throws — пустой output OK.
+        // It does not throw — an empty output is fine.
         self::assertNotEmpty($bytes);
     }
 
     #[Test]
     public function style_inside_defs_applied_к_use(): void
     {
-        // <style> at top + <defs> с element — class style should apply.
+        // A <style> at the top plus <defs> with an element — the class style should apply.
         $svg = <<<'SVG'
 <svg width="100" height="100" xmlns:xlink="http://www.w3.org/1999/xlink">
   <style>.dot { fill: #0000ff; }</style>

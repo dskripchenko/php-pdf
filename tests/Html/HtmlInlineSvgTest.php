@@ -63,7 +63,7 @@ final class HtmlInlineSvgTest extends TestCase
     #[Test]
     public function inline_svg_within_paragraph(): void
     {
-        // SVG inside <p> — parser extracts inline или wraps somehow.
+        // An SVG inside <p> — the parser extracts it inline or wraps it somehow.
         $blocks = $this->parse(
             '<p>Before <svg width="20" height="20"></svg> after</p>'
         );
@@ -105,7 +105,7 @@ final class HtmlInlineSvgTest extends TestCase
                 $hasSvg = true;
                 break;
             }
-            // Or might be wrapped в Paragraph if treated as inline-ish.
+            // Or it might be wrapped in a Paragraph when treated as inline-ish.
             if ($b instanceof Paragraph) {
                 foreach ($b->children as $inner) {
                     if ($inner instanceof SvgElement) {

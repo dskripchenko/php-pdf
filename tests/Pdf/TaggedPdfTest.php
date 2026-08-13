@@ -54,7 +54,7 @@ final class TaggedPdfTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // BDC ops + EMC ops счёт.
+        // The count of the BDC and EMC ops.
         $bdcCount = substr_count($bytes, 'BDC');
         $emcCount = substr_count($bytes, 'EMC');
         self::assertSame(3, $bdcCount);

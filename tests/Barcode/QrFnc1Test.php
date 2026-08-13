@@ -86,7 +86,7 @@ final class QrFnc1Test extends TestCase
         // FNC1 mode 1 adds 4 bits → may bump version.
         $base = new QrEncoder('01095060001343528200', QrEccLevel::H);
         $fnc1 = new QrEncoder('01095060001343528200', QrEccLevel::H, fnc1Mode: 1);
-        // Should encode без exception.
+        // It should encode without an exception.
         self::assertGreaterThan(0, $fnc1->size());
         // Both should be valid; FNC1 version may differ if at capacity boundary.
         self::assertGreaterThanOrEqual($base->version, $fnc1->version);
@@ -118,7 +118,7 @@ final class QrFnc1Test extends TestCase
     #[Test]
     public function fnc1_combines_with_eci(): void
     {
-        // FNC1 + ECI together is unusual но technically allowed by spec.
+        // FNC1 and ECI together are unusual but technically allowed by the spec.
         $enc = new QrEncoder('data', fnc1Mode: 1, eciDesignator: 26);
         self::assertSame(1, $enc->fnc1Mode);
         self::assertSame(26, $enc->eciDesignator);

@@ -103,7 +103,7 @@ SVG;
         $bytes = (new Document(new Section([new SvgElement($svg)])))
             ->toBytes(new Engine(compressStreams: false));
 
-        // Encode array — для 2 sub funcs = 4 entries: [0 1 0 1].
+        // The Encode array — for 2 sub-functions it is 4 entries: [0 1 0 1].
         self::assertMatchesRegularExpression('@/Encode \[0\s+1\s+0\s+1\]@', $bytes);
     }
 }

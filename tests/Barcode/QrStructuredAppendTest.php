@@ -71,8 +71,8 @@ final class QrStructuredAppendTest extends TestCase
     #[Test]
     public function structured_append_uses_more_capacity_than_plain(): void
     {
-        // 20-bit header adds к capacity requirements; structured append symbol
-        // может go в higher version если plain fits.
+        // The 20-bit header adds to the capacity requirements; a structured
+        // append symbol can go to a higher version where a plain one fits.
         $sa = QrEncoder::structuredAppend('A', 0, 2, 0);
         $plain = new QrEncoder('A');
         // SA version >= plain version (extra 20 bits).
@@ -157,7 +157,7 @@ final class QrStructuredAppendTest extends TestCase
     #[Test]
     public function eci_increases_capacity_requirement(): void
     {
-        // 'A' fits в V1; same input с ECI header may stay at V1 (extra ~12 bits).
+        // 'A' fits into V1; the same input with an ECI header may stay at V1 (~12 extra bits).
         $plain = new QrEncoder('A');
         $withEci = new QrEncoder('A', eciDesignator: 26);
         self::assertGreaterThanOrEqual($plain->version, $withEci->version);

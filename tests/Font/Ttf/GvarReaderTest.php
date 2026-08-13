@@ -62,7 +62,7 @@ final class GvarReaderTest extends TestCase
         // Default normalized coords = all zeros → no variation applied.
         $deltas = $gvar->glyphDeltas($gid, [0 => 0.0, 1 => 0.0, 2 => 0.0], 100);
 
-        // Sum of all deltas должен быть 0 (regions с peak != 0 give 0 scalar at coord 0).
+        // The sum of all the deltas has to be 0 (regions with a peak != 0 give a 0 scalar at coord 0).
         $sumX = 0.0;
         $sumY = 0.0;
         foreach ($deltas as $d) {
