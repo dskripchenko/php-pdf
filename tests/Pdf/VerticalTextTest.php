@@ -90,8 +90,8 @@ final class VerticalTextTest extends TestCase
         $page->showTextVertical('AB', 100, 700, StandardFont::Helvetica, 12, r: 1.0, g: 0.0, b: 0.0);
         $bytes = $pdf->toBytes();
 
-        // Phase 160: rg emitted один раз для consecutive same-color chars
-        // (gstate persistence). Раньше: 1 rg per char.
+        // Phase 160: rg is emitted once for consecutive same-colour chars
+        // (gstate persistence). It used to be 1 rg per char.
         self::assertGreaterThanOrEqual(1, preg_match_all('@1 0 0 rg@m', $bytes));
     }
 
@@ -100,8 +100,8 @@ final class VerticalTextTest extends TestCase
     {
         $pdf = PdfDocument::new(compressStreams: false);
         $page = $pdf->addPage();
-        // Cyrillic "Привет" — 6 multi-byte UTF-8 chars. Standard fonts
-        // не поддерживают Cyrillic, но мы проверяем что char count правильный.
+        // The Cyrillic "Привет" is 6 multi-byte UTF-8 chars. The standard fonts
+        // do not support Cyrillic, but what is checked is the character count.
         $page->showTextVertical('Привет', 100, 700, StandardFont::Helvetica, 12);
         $bytes = $pdf->toBytes();
 
@@ -127,7 +127,7 @@ final class VerticalTextTest extends TestCase
 
         // 3 chars → 3 Td operations.
         self::assertSame(3, preg_match_all('@^100 [0-9.]+ Td$@m', $bytes));
-        // Cyrillic А = U+0410. Encoded as hex string in PDF.
+        // The Cyrillic А is U+0410, encoded as a hex string in the PDF.
         // Expect at least one Tj per char with hex content.
         self::assertGreaterThanOrEqual(3, preg_match_all('@<[0-9a-fA-F]+> Tj@', $bytes));
     }

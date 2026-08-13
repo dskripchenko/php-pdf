@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 final class CompositeGlyphTest extends TestCase
 {
     /**
-     * Build a minimal composite glyph: 1 component с byte args (dx=10, dy=20).
+     * Build a minimal composite glyph: 1 component with byte args (dx=10, dy=20).
      */
     private function buildSimpleComposite(int $dx = 10, int $dy = 20): string
     {
@@ -118,12 +118,12 @@ final class CompositeGlyphTest extends TestCase
     {
         $bytes = $this->buildSimpleComposite(dx: 10, dy: 20);
         $composite = CompositeGlyph::parse($bytes);
-        // Offset > 127 — promote из int8 к int16.
+        // An offset above 127 is promoted from int8 to int16.
         $modified = $composite->serialize([0 => ['dx' => 1000, 'dy' => -500]]);
 
         $reparsed = CompositeGlyph::parse($modified);
         self::assertNotNull($reparsed);
-        // Args promoted к int16.
+        // The args are promoted to int16.
         self::assertSame(2, $reparsed->components[0]['argSize']);
         self::assertSame(1000, $reparsed->components[0]['arg1']);
         self::assertSame(-500, $reparsed->components[0]['arg2']);
@@ -134,7 +134,7 @@ final class CompositeGlyphTest extends TestCase
     {
         $bytes = $this->buildMultiComponentComposite();
         $composite = CompositeGlyph::parse($bytes);
-        // Modify только second component.
+        // Modify the second component only.
         $modified = $composite->serialize([1 => ['dx' => 60, 'dy' => 110]]);
 
         $reparsed = CompositeGlyph::parse($modified);

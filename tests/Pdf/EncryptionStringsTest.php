@@ -22,10 +22,11 @@ final class EncryptionStringsTest extends TestCase
         $pdf->encrypt('password', algorithm: EncryptionAlgorithm::Aes_128);
         $bytes = $pdf->toBytes();
 
-        // Title metadata string должен быть зашифрован — не plaintext.
+        // The title metadata string has to be encrypted, not plaintext.
         self::assertStringNotContainsString('Confidential Title', $bytes);
-        // Literal string parens (...) в objects replaced на hex form <...>.
-        // Encrypt dict /O /U still hex (correct), но other strings now encrypted hex.
+        // The literal string parens (...) in the objects are replaced with the
+        // hex form <...>. The /O /U of the Encrypt dict are still hex (which is
+        // right), but the other strings are now encrypted hex.
         self::assertStringContainsString('AESV2', $bytes);
     }
 
@@ -56,7 +57,7 @@ final class EncryptionStringsTest extends TestCase
     #[Test]
     public function encrypt_dict_strings_remain_plain(): void
     {
-        // /Encrypt object excluded — /O /U values остаются hex как было.
+        // The /Encrypt object is excluded — its /O /U values stay hex as before.
         $pdf = PdfDocument::new(compressStreams: false);
         $pdf->addPage();
         $pdf->encrypt('pw', algorithm: EncryptionAlgorithm::Aes_128);

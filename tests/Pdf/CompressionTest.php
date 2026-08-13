@@ -55,8 +55,8 @@ final class CompressionTest extends TestCase
             defaultFont: $this->font(),
             compressStreams: false,
         ));
-        // FlateDecode может присутствовать для image streams, но не для
-        // content streams. Проверим что raw text operators видны.
+        // FlateDecode may be present for the image streams but not for the
+        // content ones. Check that the raw text operators are visible.
         self::assertStringContainsString('BT', $bytes);
         self::assertStringContainsString('ET', $bytes);
     }
@@ -72,7 +72,7 @@ final class CompressionTest extends TestCase
         ));
 
         $ratio = strlen($compressed) / strlen($raw);
-        // Text-heavy → compression обычно даёт ≥2× reduction; ≤80% size.
+        // Text-heavy input usually compresses ≥2× — to ≤80% of the size.
         self::assertLessThan(0.8, $ratio,
             sprintf('Compressed (%dB) should be < 80%% of raw (%dB), got %.1f%%',
                 strlen($compressed), strlen($raw), $ratio * 100));
@@ -86,7 +86,7 @@ final class CompressionTest extends TestCase
         self::assertStringStartsWith('%PDF', $bytes);
         self::assertStringEndsWith("%%EOF\n", $bytes);
 
-        // pdftotext должен извлечь text через decompression.
+        // pdftotext has to extract the text through the decompression.
         $tmp = tempnam(sys_get_temp_dir(), 'comp-');
         file_put_contents($tmp, $bytes);
         try {
@@ -101,7 +101,7 @@ final class CompressionTest extends TestCase
     #[Test]
     public function empty_content_stream_not_compressed(): void
     {
-        // Edge case: пустой документ → content stream пустой → skipped
+        // An edge case: an empty document gives an empty content stream, skipped
         $doc = new AstDocument(new Section);
         $bytes = $doc->toBytes(new Engine);
         self::assertStringStartsWith('%PDF', $bytes);

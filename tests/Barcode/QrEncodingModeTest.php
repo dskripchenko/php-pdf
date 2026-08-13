@@ -85,8 +85,8 @@ final class QrEncodingModeTest extends TestCase
     #[Test]
     public function numeric_mode_more_compact_than_byte(): void
     {
-        // 17-digit string in numeric mode помещается в V1 ECC L;
-        // 17 chars в byte mode тоже V1, но более compact bit usage.
+        // A 17-digit string in numeric mode fits into V1 ECC L; 17 chars in byte
+        // mode are V1 too, but with more compact bit usage.
         $numericInput = '12345678901234567';
         $enc = new QrEncoder($numericInput);
         self::assertSame(QrEncodingMode::Numeric, $enc->mode);
@@ -96,8 +96,8 @@ final class QrEncodingModeTest extends TestCase
     #[Test]
     public function alphanumeric_more_compact_than_byte(): void
     {
-        // 18 chars uppercase → V1 alphanumeric ECC L (cap ~25),
-        // тогда как byte cap=17 потребует V2.
+        // 18 uppercase chars → V1 alphanumeric ECC L (a cap of ~25), whereas the
+        // byte cap of 17 would require V2.
         $enc = new QrEncoder('ABCDEFGHIJKLMNOPQR');
         self::assertSame(QrEncodingMode::Alphanumeric, $enc->mode);
         self::assertSame(1, $enc->version);
@@ -129,7 +129,7 @@ final class QrEncodingModeTest extends TestCase
     {
         $numeric = new QrEncoder('12345');
         $byte = new QrEncoder('12345', mode: QrEncodingMode::Byte);
-        // Both V1, but matrix content differs из-за encoding mode.
+        // Both are V1, but the matrix content differs because of the encoding mode.
         self::assertNotEquals($numeric->modules(), $byte->modules());
     }
 

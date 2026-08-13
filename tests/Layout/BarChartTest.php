@@ -26,7 +26,7 @@ final class BarChartTest extends TestCase
         $doc = new Document(new Section([$chart]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // 3 bars → ≥3 fillRects (плюс возможно метки).
+        // 3 bars → ≥3 fillRects (plus the labels, possibly).
         $count = preg_match_all('@^f$@m', $bytes);
         self::assertGreaterThanOrEqual(3, $count);
     }
@@ -111,9 +111,10 @@ final class BarChartTest extends TestCase
     #[Test]
     public function bar_height_proportional_to_value(): void
     {
-        // Bar с value=max → height = plot height. Smaller value → proportional.
-        // Не легко проверить exactly height; assume rendering correct если
-        // PDF собирается без exception для variety данных.
+        // A bar with value=max gets height = the plot height; a smaller value is
+        // proportional. Checking the exact height is not easy; assume the
+        // rendering is correct as long as the PDF assembles without an exception
+        // for a variety of data.
         $chart = new BarChart(
             bars: [
                 ['label' => 'X', 'value' => 0.1],

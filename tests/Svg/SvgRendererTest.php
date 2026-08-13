@@ -121,12 +121,12 @@ SVG;
     #[Test]
     public function viewbox_scaling_applied(): void
     {
-        // viewBox 0 0 10 10 — coords scaled 10× к фактическому widthPt=100.
+        // A viewBox of 0 0 10 10 scales the coordinates 10× to the actual widthPt=100.
         $svg = '<svg viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10" fill="#000"/></svg>';
         $doc = new Document(new Section([new SvgElement($svg, widthPt: 100, heightPt: 100)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Rect должен занимать весь 100×100 block. Width 100 в PDF coords.
+        // The rect has to fill the whole 100×100 block. A width of 100 in PDF coordinates.
         self::assertMatchesRegularExpression('@\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+100\s+100\s+re@', $bytes);
     }
 
@@ -144,7 +144,7 @@ SVG;
     {
         $svg = '<svg width="100"><rect this is not valid xml';
         $doc = new Document(new Section([new SvgElement($svg)]));
-        // Should not throw — invalid XML просто skipped.
+        // It should not throw — invalid XML is simply skipped.
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertNotEmpty($bytes);
     }
@@ -170,7 +170,7 @@ SVG;
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Red rect (1 0 0 rg) + Blue circle (0 0 1 rg) — оба rendered.
+        // A red rect (1 0 0 rg) and a blue circle (0 0 1 rg) — both are rendered.
         self::assertMatchesRegularExpression('@1\s+0\s+0\s+rg@', $bytes);
         self::assertMatchesRegularExpression('@0\s+0\s+1\s+rg@', $bytes);
     }

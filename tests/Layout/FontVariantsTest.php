@@ -44,8 +44,8 @@ final class FontVariantsTest extends TestCase
             boldFont: $bold,
         ));
 
-        // Должны быть зарегистрированы два разных font'а (через
-        // SubType /Type0 multi-CID).
+        // Two different fonts have to be registered (through SubType /Type0
+        // multi-CID).
         $subType0Count = substr_count($bytes, '/Subtype /Type0');
         self::assertGreaterThanOrEqual(2, $subType0Count,
             'Both regular и bold variant должны быть embedded как отдельные fonts');
@@ -96,7 +96,7 @@ final class FontVariantsTest extends TestCase
     public function bold_falls_back_to_default_when_no_bold_variant(): void
     {
         $regular = $this->loadFont('Regular');
-        // boldFont = null → bold runs render через regular.
+        // boldFont = null → the bold runs render through the regular one.
         $doc = new Document(new Section([
             new Paragraph([
                 new Run('plain '),
@@ -151,8 +151,9 @@ final class FontVariantsTest extends TestCase
             italicFont: $italic,
             // boldItalicFont not set
         ));
-        // 'reg' использует regular, 'bi' (bold+italic) falls back к bold (т.к.
-        // boldItalic не задан, chain: boldItalic ?? bold). Итого 2 шрифта.
+        // 'reg' uses the regular one, 'bi' (bold+italic) falls back to bold
+        // (boldItalic is not set, and the chain is boldItalic ?? bold). Two
+        // fonts in total.
         $subType0Count = substr_count($bytes, '/Subtype /Type0');
         self::assertSame(2, $subType0Count);
     }

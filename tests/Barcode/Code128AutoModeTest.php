@@ -26,7 +26,7 @@ final class Code128AutoModeTest extends TestCase
     #[Test]
     public function pure_digit_long_run_uses_set_c(): void
     {
-        // Pure digit long string — same в обоих modes (Set C optimal).
+        // A long pure-digit string is the same in both modes (Set C is optimal).
         $enc = new Code128Encoder('123456789012');
         // 12 digits = 6 C pairs + start + chk + stop = 9 CW × 11 + 2 = 101.
         self::assertSame(101, $enc->moduleCount());
@@ -77,7 +77,7 @@ final class Code128AutoModeTest extends TestCase
     #[Test]
     public function digit_run_at_start_uses_set_c_start(): void
     {
-        // Starts с long digit run → START_C directly.
+        // It starts with a long digit run → START_C directly.
         $enc = new Code128Encoder('1234ABC');
         // Start C + 1234(2 pairs) + CODE_B + ABC(3) + chk + stop = 9 CW × 11 + 2 = 101.
         self::assertSame(101, $enc->moduleCount());
@@ -86,10 +86,10 @@ final class Code128AutoModeTest extends TestCase
     #[Test]
     public function legacy_mode_preserves_old_behavior(): void
     {
-        // Legacy mode не делает auto-switch — falls back на single-set logic.
+        // The legacy mode does no auto-switching — it falls back to single-set logic.
         $auto = new Code128Encoder('AB1234');
         $legacy = new Code128Encoder('AB1234', autoMode: false);
-        // Auto compresses через Set C — короче.
+        // Auto compresses through Set C — shorter.
         self::assertLessThan($legacy->moduleCount(), $auto->moduleCount());
     }
 

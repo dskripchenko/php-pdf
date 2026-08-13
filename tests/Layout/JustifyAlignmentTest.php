@@ -29,7 +29,7 @@ final class JustifyAlignmentTest extends TestCase
     }
 
     /**
-     * Long enough text для multiline overflow на A4.
+     * Text long enough to overflow into several lines on A4.
      */
     private function longParagraph(Alignment $align): Paragraph
     {
@@ -71,7 +71,7 @@ final class JustifyAlignmentTest extends TestCase
     #[Test]
     public function justify_adds_extra_horizontal_space_between_words(): void
     {
-        // Compare Tj count + Td positions для start vs justify.
+        // Compare the Tj count and the Td positions of start against justify.
         $startDoc = new Document(new Section([$this->longParagraph(Alignment::Start)]));
         $bothDoc = new Document(new Section([$this->longParagraph(Alignment::Both)]));
 
@@ -84,16 +84,16 @@ final class JustifyAlignmentTest extends TestCase
             defaultFont: $this->font(),
         ));
 
-        // Justified output должен быть длиннее в bytes (больше Tj-positions
-        // для wider space gaps).
-        // Same number of глифов; разные Td X-coords. Different bytes.
+        // The justified output has to be longer in bytes (more Tj positions for
+        // the wider space gaps). The same number of glyphs, different Td X
+        // coordinates, different bytes.
         self::assertNotSame($startBytes, $bothBytes);
     }
 
     #[Test]
     public function last_line_of_justified_paragraph_not_stretched(): void
     {
-        // Создаём параграф где last line очень короткая (одно слово).
+        // Build a paragraph whose last line is very short (a single word).
         $text = str_repeat('Lorem ipsum dolor sit amet ', 4).'short.';
         $doc = new Document(new Section([
             new Paragraph(
@@ -137,7 +137,7 @@ final class JustifyAlignmentTest extends TestCase
     #[Test]
     public function short_line_not_stretched_under_60_percent_fill_threshold(): void
     {
-        // Очень мало текста — fill ratio < 60% → не justify-stretch.
+        // Very little text — a fill ratio below 60% means no justify stretch.
         $doc = new Document(new Section([
             new Paragraph(
                 children: [new Run('Tiny')],

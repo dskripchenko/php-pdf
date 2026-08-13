@@ -16,16 +16,16 @@ final class SvgTransformsTest extends TestCase
     #[Test]
     public function translate_shifts_rect_position(): void
     {
-        // Без transform — rect at (0, 0).
+        // Without a transform the rect is at (0, 0).
         $svg1 = '<svg width="100" height="100"><rect x="0" y="0" width="20" height="20" fill="#000"/></svg>';
-        // С translate(50, 50) — rect at (50, 50).
+        // With translate(50, 50) the rect is at (50, 50).
         $svg2 = '<svg width="100" height="100"><rect x="0" y="0" width="20" height="20" fill="#000" transform="translate(50,50)"/></svg>';
 
         $b1 = (new Document(new Section([new SvgElement($svg1, widthPt: 100, heightPt: 100)])))->toBytes(new Engine(compressStreams: false));
         $b2 = (new Document(new Section([new SvgElement($svg2, widthPt: 100, heightPt: 100)])))->toBytes(new Engine(compressStreams: false));
 
         // Both render rect (fillPolygon — h + f from transformed path).
-        // Output content streams должны отличаться.
+        // The output content streams have to differ.
         self::assertNotEquals(
             substr($b1, strpos($b1, 'stream'), 200),
             substr($b2, strpos($b2, 'stream'), 200),
@@ -77,7 +77,7 @@ final class SvgTransformsTest extends TestCase
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Matrix = translate(30, 30); rect rendered как polygon (transformed).
+        // Matrix = translate(30, 30); the rect is rendered as a polygon (transformed).
         self::assertMatchesRegularExpression('@\nh\nf\n@', $bytes);
     }
 
@@ -99,7 +99,7 @@ final class SvgTransformsTest extends TestCase
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Circle становится polygon (36 segments).
+        // The circle becomes a polygon (36 segments).
         self::assertMatchesRegularExpression('@\nh\nf\n@', $bytes);
     }
 

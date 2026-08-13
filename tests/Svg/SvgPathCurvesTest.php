@@ -31,7 +31,7 @@ final class SvgPathCurvesTest extends TestCase
         $doc = new Document(new Section([new SvgElement($svg, widthPt: 200, heightPt: 100)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // S converts к cubic — 2 c operators expected (one для каждого segment).
+        // S converts to a cubic — 2 c operators are expected (one per segment).
         $count = preg_match_all('@\sc\n@', $bytes);
         self::assertGreaterThanOrEqual(2, $count);
     }
@@ -66,7 +66,7 @@ final class SvgPathCurvesTest extends TestCase
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // H converts к L — m + l + S.
+        // H converts to L — m + l + S.
         self::assertMatchesRegularExpression('@\sm\n@', $bytes);
         self::assertMatchesRegularExpression('@\sl\n@', $bytes);
     }
@@ -89,7 +89,7 @@ final class SvgPathCurvesTest extends TestCase
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // m + l + c операторы.
+        // The m + l + c operators.
         self::assertMatchesRegularExpression('@\sm\n@', $bytes);
         self::assertMatchesRegularExpression('@\sl\n@', $bytes);
         self::assertMatchesRegularExpression('@\sc\n@', $bytes);
@@ -98,7 +98,7 @@ final class SvgPathCurvesTest extends TestCase
     #[Test]
     public function closed_filled_path_with_curves(): void
     {
-        // Heart-like shape: closed path с cubic curves + Z.
+        // A heart-like shape: a closed path with cubic curves plus Z.
         $svg = '<svg width="100" height="100"><path d="M50 30 C 50 10 30 10 30 30 C 30 50 50 70 50 70 C 50 70 70 50 70 30 C 70 10 50 10 50 30 Z" fill="#ff0000"/></svg>';
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
@@ -123,12 +123,12 @@ final class SvgPathCurvesTest extends TestCase
     #[Test]
     public function multiple_subpaths(): void
     {
-        // Two disjoint subpaths in одной path.
+        // Two disjoint subpaths within one path.
         $svg = '<svg width="100" height="100"><path d="M10 10 L 30 10 L 30 30 Z M 60 60 L 80 60 L 80 80 Z" fill="#0000ff"/></svg>';
         $doc = new Document(new Section([new SvgElement($svg)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // 2 m operators (start of каждой subpath) + multiple l + 2 h (close).
+        // 2 m operators (the start of each subpath) + several l + 2 h (close).
         $mCount = preg_match_all('@\sm\n@', $bytes);
         $hCount = preg_match_all('@\sh\n@', $bytes);
         self::assertSame(2, $mCount);

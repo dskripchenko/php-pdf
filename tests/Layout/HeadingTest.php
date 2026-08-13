@@ -71,13 +71,13 @@ final class HeadingTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // Heading wrapped в /H1 BDC.
+        // The heading is wrapped in an /H1 BDC.
         self::assertStringContainsString('/H1 << /MCID 0 >> BDC', $bytes);
-        // Paragraph wrapped в /P BDC.
+        // The paragraph is wrapped in a /P BDC.
         self::assertStringContainsString('/P << /MCID 1 >> BDC', $bytes);
-        // StructElem с /S /H1.
+        // A StructElem with /S /H1.
         self::assertStringContainsString('/S /H1', $bytes);
-        // StructElem с /S /P (для paragraph).
+        // A StructElem with /S /P (for the paragraph).
         self::assertStringContainsString('/S /P', $bytes);
     }
 

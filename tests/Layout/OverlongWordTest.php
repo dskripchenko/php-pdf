@@ -17,11 +17,11 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Слово, которое не помещается на строке целиком, делится по символам.
+ * A word that does not fit on a line in one piece is broken by characters.
  *
- * Иначе оно печатается как есть и вылезает за колонку: длинный URL в узкой
- * ячейке заезжал на соседнюю. Так поступает и Word, и браузер — разорвать
- * длинную строку лучше, чем потерять границу колонки.
+ * Otherwise it prints as is and runs past the column: a long URL in a narrow
+ * cell crawled onto the neighbouring one. Word and the browser both do this —
+ * breaking a long string is better than losing the column boundary.
  */
 final class OverlongWordTest extends TestCase
 {
@@ -60,7 +60,7 @@ final class OverlongWordTest extends TestCase
         );
 
         $words = $this->words(new Document(new Section([$table])));
-        // Граница колонки: левое поле страницы плюс её ширина.
+        // The column boundary: the left page margin plus its width.
         $columnEdge = 56.7 + 252.0;
 
         $pieces = array_values(array_filter(
@@ -77,7 +77,7 @@ final class OverlongWordTest extends TestCase
     #[Test]
     public function the_url_survives_the_break(): void
     {
-        // Делим, но не теряем: собранный обратно текст равен исходному.
+        // Split but do not lose: the text assembled back equals the original.
         $table = new Table(
             [new Row([new Cell([new Paragraph([new Run(self::URL)])])])],
             columnWidthsPt: [160.0],

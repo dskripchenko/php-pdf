@@ -31,10 +31,10 @@ final class PdfFontTest extends TestCase
         $font = new PdfFont($ttf);
 
         $hex = $font->encodeText('Hi');
-        // H → glyph 43 (0x002B), i → glyph 76 (0x004C) или похожий.
-        // Ожидаем `<NNNNMMMM>` — 4-hex per glyph.
+        // H → glyph 43 (0x002B), i → glyph 76 (0x004C) or thereabouts.
+        // `<NNNNMMMM>` is expected — 4 hex digits per glyph.
         self::assertMatchesRegularExpression('/^<[0-9A-F]{8}>$/', $hex);
-        // Начинается с glyph ID для H.
+        // It starts with the glyph ID of H.
         self::assertStringStartsWith('<002B', $hex);
     }
 
@@ -74,7 +74,7 @@ final class PdfFontTest extends TestCase
         $writer->setRoot($catalogId);
         $pdf = $writer->toBytes();
 
-        // Должны быть созданы 5 объектов:
+        // Five objects have to be created:
         //  1. FontFile2 stream (TTF binary)
         //  2. FontDescriptor
         //  3. CIDFontType2
@@ -87,7 +87,7 @@ final class PdfFontTest extends TestCase
         self::assertStringContainsString('/Encoding /Identity-H', $pdf);
         self::assertStringContainsString('/ToUnicode', $pdf);
         self::assertStringContainsString('/BaseFont /LiberationSans', $pdf);
-        // ToUnicode CMap должен содержать bfchar entries для использованных glyph'ов
+        // The ToUnicode CMap has to hold bfchar entries for the glyphs used
         self::assertStringContainsString('beginbfchar', $pdf);
     }
 
@@ -125,7 +125,7 @@ final class PdfFontTest extends TestCase
     {
         $ttf = TtfFile::fromFile($this->liberationSansPath);
         $font = new PdfFont($ttf);
-        // 😀 (U+1F600) — не покрывается Liberation; glyph ID = 0 (.notdef).
+        // 😀 (U+1F600) is not covered by Liberation; the glyph ID is 0 (.notdef).
         $hex = $font->encodeText('😀');
         self::assertSame('<0000>', $hex);
     }

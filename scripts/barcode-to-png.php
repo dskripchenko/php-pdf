@@ -3,16 +3,17 @@
 declare(strict_types=1);
 
 /**
- * Helper: рендерит PDF417 или Aztec barcode как PNG для decoder verification.
+ * A helper that renders a PDF417 or Aztec barcode as a PNG for decoder
+ * verification.
  *
  * Usage:
  *   php scripts/barcode-to-png.php pdf417 "Hello PDF417 World" /tmp/pdf417.png
  *   php scripts/barcode-to-png.php aztec "HELLO AZTEC" /tmp/aztec.png
  *
  * Options:
- *   3-й arg: output PNG path (required)
- *   4-й arg: module size в pixels (default 6)
- *   5-й arg: quiet zone в modules (default 4)
+ *   3rd arg: the output PNG path (required)
+ *   4th arg: the module size in pixels (default 6)
+ *   5th arg: the quiet zone in modules (default 4)
  */
 require __DIR__.'/../vendor/autoload.php';
 

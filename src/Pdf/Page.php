@@ -430,15 +430,16 @@ final class Page
         if (count($tjOps) === 1) {
             $this->stream->textHexString($resourceName, $sizePt, $x, $y, $tjOps[0], $r, $g, $b, $letterSpacingPt);
         } else {
-            // Кернинг из TJ и разрядка через Tc не совмещаются: TJ уже двигает
-            // глифы сам. Поэтому при заданной разрядке идём простым путём —
-            // одна hex-строка с Tc.
+            // Kerning through TJ and spacing through Tc do not combine: TJ moves
+            // the glyphs itself already. So when spacing is set we take the
+            // simple path — a single hex string with Tc.
             if ($letterSpacingPt !== 0.0) {
                 $hex = $font->encodeText($text);
                 $this->stream->textHexString($resourceName, $sizePt, $x, $y, $hex, $r, $g, $b, $letterSpacingPt);
             } else {
-                // Ноль передаётся явно: `Tc` живёт до следующего `Tc`, и без
-                // сброса разрядка предыдущего фрагмента досталась бы этому.
+                // Zero is passed explicitly: `Tc` lives until the next `Tc`, and
+                // without a reset this fragment would inherit the spacing of the
+                // previous one.
                 $this->stream->textTjArray($resourceName, $sizePt, $x, $y, $tjOps, $r, $g, $b, $letterSpacingPt);
             }
         }

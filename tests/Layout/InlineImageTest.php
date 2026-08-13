@@ -31,7 +31,7 @@ final class InlineImageTest extends TestCase
 
     private function tinyJpeg(): PdfImage
     {
-        // Reuse existing fixture (создан в Phase 4 tests).
+        // Reuse the existing fixture (created in the Phase 4 tests).
         $path = __DIR__.'/../fixtures/sample.jpg';
         if (! is_readable($path)) {
             self::markTestSkipped('Sample JPEG fixture missing.');
@@ -73,7 +73,7 @@ final class InlineImageTest extends TestCase
         file_put_contents($tmp, $bytes);
         try {
             $text = (string) shell_exec('pdftotext '.escapeshellarg($tmp).' - 2>&1');
-            // Text перед и после картинки still in PDF.
+            // The text before and after the picture is still in the PDF.
             self::assertStringContainsString('Before', $text);
             self::assertStringContainsString('after.', $text);
         } finally {
@@ -108,8 +108,9 @@ final class InlineImageTest extends TestCase
             defaultFont: $this->font(),
         ));
 
-        // 'Following paragraph' Y-coord должен быть lower (меньше Y)
-        // в docWith из-за taller line. Просто проверим разные outputs.
+        // The Y coordinate of 'Following paragraph' has to be lower (a smaller
+        // Y) in docWith because of the taller line. Just check that the outputs
+        // differ.
         self::assertNotSame($bytesWith, $bytesWithout);
     }
 
@@ -126,7 +127,7 @@ final class InlineImageTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
 
-        // /Subtype /Link annotation вокруг image.
+        // A /Subtype /Link annotation around the image.
         self::assertStringContainsString('/Subtype /Link', $bytes);
         self::assertStringContainsString('/URI (https://example.com)', $bytes);
     }
@@ -146,14 +147,14 @@ final class InlineImageTest extends TestCase
         $bytes = $doc->toBytes(new Engine(defaultFont: $this->font()));
 
         self::assertStringStartsWith('%PDF', $bytes);
-        // Image должен appear только один раз в этом параграфе.
+        // The image has to appear only once in this paragraph.
         self::assertSame(1, substr_count($bytes, '/Subtype /Image'));
     }
 
     #[Test]
     public function block_image_at_top_level_still_works(): void
     {
-        // Phase 4 behavior should remain — Image как top-level block.
+        // The Phase 4 behaviour should remain — an image as a top-level block.
         $img = Image::fromPath(__DIR__.'/../fixtures/sample.jpg', widthPt: 200);
         $doc = new Document(new Section([
             new Paragraph([new Run('Above image.')]),

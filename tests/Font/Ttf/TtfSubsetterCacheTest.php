@@ -94,7 +94,7 @@ final class TtfSubsetterCacheTest extends TestCase
         // Prime cache.
         $original = $subsetter->subset($ttf, [65, 66, 67]);
 
-        // Multiple cache hits — все return same bytes.
+        // Several cache hits — they all return the same bytes.
         for ($i = 0; $i < 5; $i++) {
             self::assertSame($original, $subsetter->subset($ttf, [65, 66, 67]));
         }
@@ -123,7 +123,7 @@ final class TtfSubsetterCacheTest extends TestCase
         $ttf = TtfFile::fromFile($this->fontPath());
         $subsetter = new TtfSubsetter;
 
-        // Fill cache к 32+ entries; should cap at 32.
+        // Fill the cache to 32+ entries; it should cap at 32.
         for ($i = 0; $i < 35; $i++) {
             $subsetter->subset($ttf, [65 + $i, 66 + $i]);
         }
@@ -144,18 +144,19 @@ final class TtfSubsetterCacheTest extends TestCase
         $subsetter->subset($ttf, [69, 70]); // entry 3
         self::assertSame(3, TtfSubsetter::cacheSize());
 
-        // Touch entry 1 — should now быть most recent.
+        // Touch entry 1 — it should now be the most recent.
         $subsetter->subset($ttf, [65, 66]);
         // Size unchanged (cache hit).
         self::assertSame(3, TtfSubsetter::cacheSize());
 
-        // Fill к limit and beyond.
+        // Fill to the limit and beyond.
         for ($i = 0; $i < 30; $i++) {
             $subsetter->subset($ttf, [100 + $i * 2, 101 + $i * 2]);
         }
 
-        // Entry 1 was touched recently → should survive eviction.
-        // Verify by re-querying it — если в cache, size остаётся та же.
+        // Entry 1 was touched recently → it should survive the eviction.
+        // Verify by querying it again — if it is in the cache, the size stays
+        // the same.
         $sizeBefore = TtfSubsetter::cacheSize();
         $subsetter->subset($ttf, [65, 66]);
         self::assertSame($sizeBefore, TtfSubsetter::cacheSize());

@@ -36,7 +36,7 @@ final class WatermarkTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Tm operator должен присутствовать (rotated text).
+        // The Tm operator has to be present (rotated text).
         self::assertStringContainsString(' Tm', $bytes);
         // Light-gray non-stroke color.
         self::assertStringContainsString('0.88 0.88 0.88 rg', $bytes);
@@ -54,7 +54,7 @@ final class WatermarkTest extends TestCase
 
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount);
-        // Watermark Tm matrix должен появиться ≥ pageCount раз (один на page).
+        // The watermark Tm matrix has to appear ≥ pageCount times (one per page).
         self::assertGreaterThanOrEqual($pageCount, substr_count($bytes, ' Tm'));
     }
 
@@ -97,9 +97,9 @@ final class WatermarkTest extends TestCase
         file_put_contents($tmp, $bytes);
         try {
             $text = (string) shell_exec('pdftotext '.escapeshellarg($tmp).' - 2>&1');
-            // pdftotext НЕ reassembles rotated glyphs, символы появляются
-            // на отдельных линиях — проверяем что каждый символ присутствует
-            // (rotation matrix работает + glyph emitted).
+            // pdftotext does NOT reassemble rotated glyphs — the characters come
+            // out on separate lines, so what is checked is that each of them is
+            // present (the rotation matrix works and the glyph is emitted).
             foreach (str_split('DRAFT') as $ch) {
                 self::assertStringContainsString($ch, $text);
             }

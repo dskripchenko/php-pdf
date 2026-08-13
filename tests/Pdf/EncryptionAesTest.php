@@ -37,7 +37,7 @@ final class EncryptionAesTest extends TestCase
         $pdf->encrypt('pw', algorithm: EncryptionAlgorithm::Aes_128);
         $bytes = $pdf->toBytes();
 
-        // Default = 1.7; AES требует ≥1.6. Просто validate version header корректный.
+        // The default is 1.7; AES needs ≥1.6. Just validate that the version header is right.
         self::assertMatchesRegularExpression('@^%PDF-1\.[67]@', $bytes);
     }
 
@@ -57,7 +57,7 @@ final class EncryptionAesTest extends TestCase
     #[Test]
     public function aes_per_object_includes_random_iv(): void
     {
-        // Encrypt same data dvazhdy — IV должен быть разный, ciphertext тоже.
+        // Encrypt the same data twice — the IV has to differ, and so does the ciphertext.
         $enc1 = new Encryption('pw', algorithm: EncryptionAlgorithm::Aes_128);
         $enc2 = new Encryption('pw', algorithm: EncryptionAlgorithm::Aes_128);
 
@@ -65,7 +65,7 @@ final class EncryptionAesTest extends TestCase
         $c1 = $enc1->encryptObject($data, 5);
         $c2 = $enc2->encryptObject($data, 5);
 
-        // Different fileIds → разные keys → разные ciphertexts.
+        // Different fileIds → different keys → different ciphertexts.
         self::assertNotSame($c1, $c2);
         // Length = 16 byte IV + ciphertext (padded to 16-byte multiple).
         self::assertSame(0, strlen($c1) % 16);
@@ -75,7 +75,7 @@ final class EncryptionAesTest extends TestCase
     public function aes_output_length_includes_iv_plus_pkcs7_padding(): void
     {
         $enc = new Encryption('pw', algorithm: EncryptionAlgorithm::Aes_128);
-        // 10 bytes plaintext → IV (16) + ciphertext aligned к 16 = 32 total.
+        // 10 bytes of plaintext → IV (16) + ciphertext aligned to 16 = 32 in total.
         $cipher = $enc->encryptObject(str_repeat('x', 10), 1);
         self::assertSame(32, strlen($cipher));
         // 16 bytes plaintext → IV + 32 (one full block + pad block) = 48.

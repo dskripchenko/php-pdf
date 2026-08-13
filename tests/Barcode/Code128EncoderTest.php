@@ -19,7 +19,7 @@ final class Code128EncoderTest extends TestCase
         // Start B (104) + 3 chars + checksum + Stop = 6 codes × 11 = 66
         // modules, plus stop tail (2 extra modules) = 68 total.
         self::assertCount(68, $modules);
-        // Должно начинаться с черного бара (PDF код 128 spec).
+        // It has to start with a black bar (the Code 128 spec).
         self::assertTrue($modules[0]);
     }
 
@@ -72,8 +72,8 @@ final class Code128EncoderTest extends TestCase
     #[Test]
     public function encoded_modules_start_and_end_with_black_bar(): void
     {
-        // Per spec: каждый pattern stripe starts with black. Stop pattern
-        // тоже ends with black bar.
+        // Per spec: every pattern stripe starts with black. The stop pattern
+        // ends with a black bar too.
         $enc = new Code128Encoder('Hello');
         $modules = $enc->modules();
 
@@ -93,13 +93,13 @@ final class Code128EncoderTest extends TestCase
     #[Test]
     public function checksum_changes_with_input(): void
     {
-        // Indirect: equal-length inputs должны иметь одинаковую module count.
-        // (Только checksum может отличаться, но он тоже 11 modules.)
+        // Indirectly: inputs of equal length have to have the same module
+        // count. (Only the checksum can differ, and it is 11 modules too.)
         $a = new Code128Encoder('AAAA');
         $b = new Code128Encoder('BBBB');
 
         self::assertSame($a->moduleCount(), $b->moduleCount());
-        // Но encoding отличается на data + checksum.
+        // But the encoding differs in the data and the checksum.
         self::assertNotEquals($a->modules(), $b->modules());
     }
 }

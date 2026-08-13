@@ -335,19 +335,19 @@ final class TableRenderTest extends TestCase
     #[Test]
     public function keep_with_next_moves_a_heading_to_its_content(): void
     {
-        // Заголовок раздела не должен оставаться последней строкой страницы:
-        // Word уносит его на следующую вместе с содержимым. В должностной
-        // инструкции без этого расхождение начиналось уже с первой страницы.
+        // A section heading must not be left as the last line of a page: Word
+        // carries it over to the next one together with the content. Without
+        // this the job description started diverging on the very first page.
         $withoutKeep = $this->headingBeforeTable(keepWithNext: false);
         $withKeep = $this->headingBeforeTable(keepWithNext: true);
 
-        // Без флага заголовок дожимается к низу страницы...
+        // Without the flag the heading is squeezed to the bottom of the page...
         self::assertLessThan(200.0, $withoutKeep);
-        // ...а с флагом уезжает наверх следующей, к своей таблице.
+        // ...and with it the heading moves to the top of the next one, to its table.
         self::assertGreaterThan(700.0, $withKeep);
     }
 
-    /** Вертикальная позиция заголовка, стоящего вплотную к нижнему краю. */
+    /** The vertical position of a heading sitting right at the bottom edge. */
     private function headingBeforeTable(bool $keepWithNext): float
     {
         $blocks = [];

@@ -44,12 +44,12 @@ final class TabStopsAndHangingPunctuationTest extends TestCase
     #[Test]
     public function tab_advances_x_to_next_stop(): void
     {
-        // С 36pt tab stops: short text + \t → Col2 starts at x = startX + 36.
+        // With 36pt tab stops: short text + \t → Col2 starts at x = startX + 36.
         $doc = new Document(new Section([
             new Paragraph([new Run("A\tB")]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, tabStopPt: 36.0));
-        // Extract Tm/Td positions для validation (rough check).
+        // Extract the Tm/Td positions for validation (a rough check).
         self::assertStringContainsString('(A)', $bytes);
         self::assertStringContainsString('(B)', $bytes);
     }
@@ -82,7 +82,7 @@ final class TabStopsAndHangingPunctuationTest extends TestCase
     #[Test]
     public function paragraph_without_tabs_unchanged(): void
     {
-        // Backward compat: текст без \t работает как раньше.
+        // Backwards compatibility: text without \t works as before.
         $doc = new Document(new Section([
             new Paragraph([new Run('Plain text without tabs')]),
         ]));
@@ -93,8 +93,9 @@ final class TabStopsAndHangingPunctuationTest extends TestCase
     #[Test]
     public function hanging_punctuation_renders_paragraph(): void
     {
-        // Hanging punct flag enabled — text с trailing punct renders without
-        // error (visual effect требует font-cached test для byte-position check).
+        // With the hanging-punctuation flag on, text with trailing punctuation
+        // renders without an error (the visual effect needs a font-cached test
+        // for a byte-position check).
         $doc = new Document(new Section([
             new Paragraph([new Run('Hello, world. Test.')]),
         ]));

@@ -41,7 +41,7 @@ final class LineBreakerTest extends TestCase
         $text = 'The quick brown fox jumps over the lazy dog and runs into the forest.';
         $lines = $b->wrap($text);
         self::assertGreaterThan(2, count($lines));
-        // Каждая line должна fit'ить в 100 pt.
+        // Every line has to fit into 100 pt.
         foreach ($lines as $line) {
             self::assertLessThanOrEqual(100, $m->widthPt($line));
         }
@@ -61,7 +61,7 @@ final class LineBreakerTest extends TestCase
         $lines10 = $b10->wrap($text);
         $lines20 = $b20->wrap($text);
 
-        // 20pt текст должен использовать больше строк.
+        // Text at 20pt has to use more lines.
         self::assertGreaterThan(count($lines10), count($lines20));
     }
 
@@ -84,10 +84,10 @@ final class LineBreakerTest extends TestCase
         $m = new TextMeasurer($this->font, 12);
         $b = new LineBreaker($m, 50);
 
-        // 30-char "word" длиннее, чем 50pt при 12pt size.
+        // A 30-character "word" is longer than 50pt at a 12pt size.
         $lines = $b->wrap('abcdefghijklmnopqrstuvwxyz123456');
         self::assertGreaterThan(1, count($lines));
-        // Re-joined should give back the original (без spaces).
+        // Re-joined it should give back the original (without the spaces).
         self::assertSame('abcdefghijklmnopqrstuvwxyz123456', implode('', $lines));
     }
 
@@ -110,7 +110,7 @@ final class LineBreakerTest extends TestCase
         foreach ($lines as $line) {
             self::assertLessThanOrEqual(100, $m->widthPt($line));
         }
-        // Текст должен полностью присутствовать.
+        // The text has to be there in full.
         self::assertSame($text, implode(' ', $lines));
     }
 

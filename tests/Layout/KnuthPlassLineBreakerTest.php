@@ -61,19 +61,19 @@ final class KnuthPlassLineBreakerTest extends TestCase
         $lines = $kp->wrap($text);
 
         self::assertGreaterThan(1, count($lines));
-        // Joining lines с spaces should recover the original text.
+        // Joining the lines with spaces should recover the original text.
         self::assertSame($text, implode(' ', $lines));
     }
 
     #[Test]
     public function very_long_word_falls_back_to_greedy(): void
     {
-        // Слово широше 50pt не помещается — fallback to greedy char-break.
+        // A word wider than 50pt does not fit — fall back to a greedy char break.
         $kp = new KnuthPlassLineBreaker($this->measurer(), maxWidthPt: 50);
         $longWord = str_repeat('A', 30);
         $lines = $kp->wrap($longWord);
 
-        // Returns non-empty result через fallback (greedy char-break).
+        // It returns a non-empty result through the fallback (a greedy char break).
         self::assertNotEmpty($lines);
     }
 
@@ -123,8 +123,9 @@ final class KnuthPlassLineBreakerTest extends TestCase
 
         foreach ($lines as $line) {
             $w = $measurer->widthPt($line);
-            // K-P может shrink line до ~1/3 узший; or stretch up к 10× per glue.
-            // Реальная line должна быть somewhere в [shrunk, stretched] range.
+            // K-P can shrink a line to about 1/3 narrower, or stretch it up to
+            // 10× per glue. A real line has to land somewhere in the
+            // [shrunk, stretched] range.
             // Just verify line is not absurdly wider than maxWidth.
             self::assertLessThanOrEqual($maxWidth * 2.0, $w, "Line '$line' width=$w exceeds 2× maxWidth=$maxWidth");
         }
@@ -133,7 +134,7 @@ final class KnuthPlassLineBreakerTest extends TestCase
     #[Test]
     public function compares_better_than_or_equal_to_greedy_on_balance(): void
     {
-        // For text designed к force imbalance, K-P should produce more
+        // For text designed to force imbalance, K-P should produce more
         // uniform line widths than greedy. We measure variance.
         $measurer = $this->measurer();
         $kp = new KnuthPlassLineBreaker($measurer, maxWidthPt: 120);

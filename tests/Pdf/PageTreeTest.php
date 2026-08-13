@@ -30,7 +30,7 @@ final class PageTreeTest extends TestCase
     {
         // 5 pages < threshold 32 → flat tree.
         $bytes = $this->buildPdf(5);
-        // Only one /Pages object (root, без intermediates).
+        // Only one /Pages object (the root, with no intermediates).
         $count = preg_match_all('@/Type /Pages\b@', $bytes);
         self::assertSame(1, $count);
     }
@@ -85,11 +85,11 @@ final class PageTreeTest extends TestCase
     public function pages_reference_intermediate_parent(): void
     {
         $bytes = $this->buildPdf(50);
-        // Each Page /Parent points к some /Pages object. Find all Page parents.
+        // Every page /Parent points at some /Pages object. Find all the page parents.
         preg_match_all('@/Type /Page /Parent (\d+) 0 R@', $bytes, $matches);
         self::assertNotEmpty($matches[1]);
 
-        // С balanced tree, не все pages share same parent (multiple intermediates).
+        // With a balanced tree not all the pages share a parent (several intermediates).
         $uniqueParents = array_unique($matches[1]);
         self::assertGreaterThan(1, count($uniqueParents),
             'Balanced tree pages должны иметь различные parent IDs (intermediates)');
@@ -107,12 +107,12 @@ final class PageTreeTest extends TestCase
         preg_match_all('@(\d+) 0 R@', $m[1], $kidMatches);
         $rootKidIds = $kidMatches[1];
 
-        // Number of root kids должен быть ≤ FANOUT (16).
+        // The number of root kids has to be ≤ FANOUT (16).
         self::assertLessThanOrEqual(16, count($rootKidIds));
 
-        // Каждый root kid должен быть /Type /Pages (intermediate), not /Page.
+        // Every root kid has to be /Type /Pages (an intermediate), not /Page.
         foreach ($rootKidIds as $kidId) {
-            // Find object с этим ID.
+            // Find the object with this ID.
             preg_match('@\n'.preg_quote((string) $kidId).' 0 obj\n(.*?)\nendobj@s', $bytes, $objMatch);
             self::assertNotEmpty($objMatch, "Object $kidId not found");
             self::assertStringContainsString('/Type /Pages', $objMatch[1],

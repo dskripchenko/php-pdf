@@ -33,7 +33,7 @@ final class AppearanceStreamTest extends TestCase
 
         // Annotation references /AP /N <id> 0 R.
         self::assertMatchesRegularExpression('@/FT /Tx[^>]+/AP << /N \d+ 0 R >>@', $bytes);
-        // Form XObject body contains text-show operator с value.
+        // The Form XObject body contains a text-show operator with the value.
         self::assertStringContainsString('/Subtype /Form', $bytes);
         self::assertStringContainsString('(Alice) Tj', $bytes);
         // BBox covers field rect.
@@ -55,7 +55,7 @@ final class AppearanceStreamTest extends TestCase
     {
         $bytes = $this->emit(fn ($p) => $p->addFormField('text-multiline', 'Bio', 100, 700, 200, 80, defaultValue: 'Long\nbio'));
 
-        // Multiline emits both /MaxLen-free /Tx flag bit и AP.
+        // Multiline emits both the /MaxLen-free /Tx flag bit and the AP.
         self::assertStringContainsString('/Ff 4096', $bytes);
         self::assertMatchesRegularExpression('@/AP << /N \d+ 0 R >>@', $bytes);
     }
@@ -158,8 +158,8 @@ final class AppearanceStreamTest extends TestCase
     #[Test]
     public function need_appearances_flag_kept_as_fallback(): void
     {
-        // /NeedAppearances true оставлено как safety net для readers
-        // которые регенерируют AP from /DA when set.
+        // /NeedAppearances true is left as a safety net for the readers that
+        // regenerate the AP from /DA when it is set.
         $bytes = $this->emit(fn ($p) => $p->addFormField('text', 'N', 0, 0, 100, 20));
         self::assertStringContainsString('/NeedAppearances true', $bytes);
     }

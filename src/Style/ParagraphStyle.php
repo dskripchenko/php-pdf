@@ -26,13 +26,13 @@ final readonly class ParagraphStyle
         public ?float $lineHeightPt = null,
         public bool $pageBreakBefore = false,
         /**
-         * «Не отрывать от следующего» (`w:keepNext`).
+         * "Keep with next" (`w:keepNext`).
          *
-         * Заголовок не должен оставаться последней строкой страницы: если
-         * следом за ним ничего не помещается, на новую страницу переезжают
-         * оба. Без этого должностная инструкция расходилась с оригиналом уже
-         * на первой странице — Word уносил заголовок раздела вместе с
-         * таблицей, а мы оставляли его внизу.
+         * A heading must not be left as the last line of a page: when nothing
+         * fits after it, both move to a new page. Without this the job
+         * description diverged from the original on the very first page — Word
+         * carried the section heading over together with the table while we
+         * left it at the bottom.
          */
         public bool $keepWithNext = false,
         public ?BorderSet $borders = null,

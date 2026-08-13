@@ -24,12 +24,12 @@ final class GsubReaderTest extends TestCase
     #[Test]
     public function liberation_has_no_liga_feature(): void
     {
-        // Liberation fonts metric-compatible с MS Arial и не имеют 'liga'
-        // (MS Arial тоже без него). Это design decision Liberation team.
-        // GsubReader должен вернуть null/empty.
+        // The Liberation fonts are metric-compatible with MS Arial and have no
+        // 'liga' (MS Arial has none either). That is a design decision of the
+        // Liberation team. GsubReader has to return null or empty.
         $ligs = $this->sansTtf->ligatures();
-        // Может быть null (если GSUB отсутствует) ИЛИ empty (если есть
-        // GSUB но нет 'liga' feature).
+        // It can be null (when GSUB is absent) OR empty (when GSUB is there but
+        // the 'liga' feature is not).
         $isEmpty = $ligs === null || $ligs->isEmpty();
         self::assertTrue($isEmpty, 'Liberation должна не иметь \'liga\' feature substitutions');
     }

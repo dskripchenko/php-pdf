@@ -71,7 +71,7 @@ final class EngineTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
-        // H1 = 24pt — должно быть "24 Tf" в content stream.
+        // H1 is 24pt — "24 Tf" has to be in the content stream.
         // Body = 11pt default.
         self::assertStringContainsString(' 24 Tf', $bytes);
         self::assertStringContainsString(' 11 Tf', $bytes);
@@ -112,7 +112,7 @@ final class EngineTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
-        // Многие "Tj" operators (по одному на line).
+        // Many "Tj" operators (one per line).
         $tjCount = substr_count($bytes, ' Tj');
         $tjArrayCount = substr_count($bytes, ' TJ');
         self::assertGreaterThan(3, $tjCount + $tjArrayCount,
@@ -122,7 +122,7 @@ final class EngineTest extends TestCase
     #[Test]
     public function content_overflow_triggers_auto_page_break(): void
     {
-        // 100 параграфов — заполнят несколько страниц.
+        // 100 paragraphs will fill several pages.
         $paragraphs = [];
         for ($i = 0; $i < 100; $i++) {
             $paragraphs[] = new Paragraph([new Run("Paragraph $i with some text")]);
@@ -130,7 +130,7 @@ final class EngineTest extends TestCase
         $doc = new Document(new Section($paragraphs));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font));
 
-        // Должно быть несколько page'ей.
+        // There has to be more than one page.
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount, 'Auto page break should happen on overflow');
     }
@@ -171,7 +171,7 @@ final class EngineTest extends TestCase
     #[Test]
     public function default_font_fallback_to_standard(): void
     {
-        // Без defaultFont — engine использует StandardFont::Helvetica fallback.
+        // Without a defaultFont the engine falls back to StandardFont::Helvetica.
         $doc = new Document(new Section([
             new Paragraph([new Run('Latin only with base-14')]),
         ]));
@@ -225,7 +225,7 @@ final class EngineTest extends TestCase
     #[Test]
     public function paragraph_spacing_before_and_after(): void
     {
-        // Sanity: spacing не должен ломать render.
+        // Sanity: spacing must not break the render.
         $doc = new Document(new Section([
             new Paragraph(
                 children: [new Run('Paragraph 1')],

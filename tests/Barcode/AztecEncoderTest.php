@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase;
  *
  * Verifies bullseye finder, matrix sizes, RS encoding, character mode
  * tables. Real-world decode requires external scanner verification
- * (см. AztecEncoder PHPDoc — experimental status).
+ * (see the AztecEncoder PHPDoc — experimental status).
  */
 final class AztecEncoderTest extends TestCase
 {
@@ -101,8 +101,8 @@ final class AztecEncoderTest extends TestCase
     #[Test]
     public function bit_stuffing_no_all_zero_codeword(): void
     {
-        // Construct a bit string with 6 consecutive zeros — должно быть
-        // bit-stuffed для GF(64).
+        // Construct a bit string with 6 consecutive zeros — it has to be
+        // bit-stuffed for GF(64).
         $stuffed = AztecEncoder::stuffBits('000000111111', 6);
         // First codeword (6 bits) cannot be all-zero after stuffing.
         $cw0 = substr($stuffed, 0, 6);
@@ -114,7 +114,7 @@ final class AztecEncoderTest extends TestCase
     #[Test]
     public function bit_stuffing_preserves_safe_codewords(): void
     {
-        // Bits forming codeword "010101" должны pass через unchanged.
+        // The bits forming the codeword "010101" have to pass through unchanged.
         $stuffed = AztecEncoder::stuffBits('010101', 6);
         self::assertSame('010101', $stuffed);
     }

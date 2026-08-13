@@ -32,7 +32,7 @@ final class PageSetupAdvancedTest extends TestCase
         [$l2, $r2] = $m->effectiveLeftRightFor(2);
         self::assertSame(70.0, $l1);
         self::assertSame(50.0, $r1);
-        // Не mirrored — gutter всегда слева.
+        // Not mirrored — the gutter is always on the left.
         self::assertSame(70.0, $l2);
         self::assertSame(50.0, $r2);
     }
@@ -44,11 +44,12 @@ final class PageSetupAdvancedTest extends TestCase
         [$l1, $r1] = $m->effectiveLeftRightFor(1);  // odd
         [$l2, $r2] = $m->effectiveLeftRightFor(2);  // even
 
-        // Odd: binding слева, gutter добавляется к leftPt.
+        // Odd: the binding is on the left, and the gutter is added to leftPt.
         self::assertSame(45.0, $l1);
         self::assertSame(50.0, $r1);
-        // Even: gutter переходит на rightPt = 30+15; outer = leftPt = 50?
-        // По логике effectiveLeftRightFor: even mirrored returns [rightPt, leftPt+gutter].
+        // Even: the gutter moves to rightPt = 30+15; outer = leftPt = 50?
+        // By the logic of effectiveLeftRightFor, even mirrored returns
+        // [rightPt, leftPt+gutter].
         self::assertSame(50.0, $l2);
         self::assertSame(45.0, $r2);
     }

@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  * Phase 237: DataMatrix 144×144 — largest standard ECC 200 symbol size.
  *
  * Unique aspect: 1558 data codewords across 10 RS blocks (8×156 + 2×155
- * distribution через round-robin interleaving). 36 regions of 22×22 modules.
+ * distribution through round-robin interleaving). 36 regions of 22×22 modules.
  *
  * Source: ISO/IEC 16022:2006 Table O.1 + ZXing SymbolInfo.PROD_SYMBOLS.
  */
@@ -21,7 +21,7 @@ final class DataMatrix144Test extends TestCase
     #[Test]
     public function symbol_size_144_for_large_input(): void
     {
-        // 1500 bytes input fits в 144×144 (just under 1558 data capacity).
+        // A 1500-byte input fits into 144×144 (just under the 1558 data capacity).
         $data = str_repeat('A', 1500);
         $enc = new DataMatrixEncoder($data);
         self::assertSame(144, $enc->size());
@@ -39,12 +39,12 @@ final class DataMatrix144Test extends TestCase
     #[Test]
     public function data_capacity_1558(): void
     {
-        // Test boundary: 1558-byte data should fit; 1559-byte должно throw.
+        // The boundary: 1558 bytes of data should fit, 1559 has to throw.
         $enc1558 = new DataMatrixEncoder(str_repeat('A', 1500));
         self::assertSame(1500, strlen($enc1558->data));
 
-        // Exceeding capacity — но since we don't have larger symbol,
-        // anything > 1558 should throw.
+        // Over capacity — and since there is no larger symbol, anything above
+        // 1558 should throw.
         $this->expectException(\InvalidArgumentException::class);
         new DataMatrixEncoder(str_repeat('A', 2000));
     }
@@ -81,7 +81,7 @@ final class DataMatrix144Test extends TestCase
         // At minimum: left column row 0 = solid (L-finder left edge).
         $enc = new DataMatrixEncoder(str_repeat('A', 1500));
         $modules = $enc->modules();
-        // Region L-finder: bottom-left corner pixel должен быть set.
+        // The region L-finder: the bottom-left corner pixel has to be set.
         // For 36 regions, each 22×22, finders at region boundaries.
         // Just verify symbol is non-empty.
         $blackCount = 0;
@@ -99,7 +99,7 @@ final class DataMatrix144Test extends TestCase
     #[Test]
     public function smaller_data_uses_smaller_symbol(): void
     {
-        // Verify that we don't accidentally route к 144×144 для small data.
+        // Verify that small data is not accidentally routed to 144×144.
         $enc = new DataMatrixEncoder('Hello');
         self::assertLessThan(20, $enc->size());
     }
@@ -107,7 +107,7 @@ final class DataMatrix144Test extends TestCase
     #[Test]
     public function medium_data_uses_appropriate_symbol(): void
     {
-        // ~1000 bytes — should fit в 132×132 (1304 data) NOT 144×144.
+        // ~1000 bytes should fit into 132×132 (1304 of data), NOT 144×144.
         $enc = new DataMatrixEncoder(str_repeat('A', 1000));
         self::assertLessThanOrEqual(132, $enc->size());
     }

@@ -35,7 +35,7 @@ final class TextColorTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        // Phase 160: rg emitted без q/Q wrap (persisting gstate). 0xcc/255 ≈ 0.8.
+        // Phase 160: rg is emitted without a q/Q wrap (a persisting gstate). 0xcc/255 ≈ 0.8.
         self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+rg@', $bytes);
     }
 
@@ -46,7 +46,7 @@ final class TextColorTest extends TestCase
             new Paragraph([new Run('blue text', (new RunStyle)->withColor('0000ff'))]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
-        // Phase 160: rg precedes BT для text emission, no q/Q wrap.
+        // Phase 160: rg precedes BT for the text emission, with no q/Q wrap.
         self::assertMatchesRegularExpression('@0\s+0\s+1\s+rg\nBT@', $bytes);
     }
 
@@ -62,7 +62,7 @@ final class TextColorTest extends TestCase
         $bytesPlain = $docPlain->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
         $bytesColored = $docColored->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        // Phase 160: colored variant имеет 1 rg op (red), plain — 0.
+        // Phase 160: the coloured variant has 1 rg op (red), the plain one 0.
         $rgCountPlain = substr_count($bytesPlain, ' rg');
         $rgCountColored = substr_count($bytesColored, ' rg');
         self::assertGreaterThan($rgCountPlain, $rgCountColored,
@@ -143,10 +143,10 @@ final class TextColorTest extends TestCase
     #[Test]
     public function color_does_not_leak_into_following_text(): void
     {
-        // Цвет заливки — состояние графики, он держится до следующего `rg`.
-        // Пока «цвет не задан» означало «ничего не писать», весь текст после
-        // цветного заголовка печатался тем же цветом: заявление страхователя
-        // выходило синим целиком, вместе с таблицами.
+        // The fill colour is graphics state: it holds until the next `rg`. While
+        // "no colour given" meant "write nothing", all the text after a coloured
+        // heading printed in that same colour: the policyholder's application
+        // came out blue in its entirety, tables included.
         $doc = new Document(new Section([
             new Paragraph([new Run('синий заголовок', (new RunStyle)->withColor('0066cc'))]),
             new Paragraph([new Run('обычный текст без цвета')]),

@@ -46,7 +46,7 @@ final class Pdf417CompactionModesTest extends TestCase
     #[Test]
     public function text_mode_digit_with_mixed_latch(): void
     {
-        // "1A2B" — switches между mixed и alpha sub-modes.
+        // "1A2B" switches between the mixed and alpha sub-modes.
         $cw = Pdf417Encoder::textCompaction('A1B2');
         self::assertSame(900, $cw[0]);
         self::assertGreaterThan(2, count($cw));
@@ -56,7 +56,7 @@ final class Pdf417CompactionModesTest extends TestCase
     public function text_mode_space_universal(): void
     {
         $cw = Pdf417Encoder::textCompaction('A B');
-        // SP value = 26 в любой sub-mode.
+        // The SP value is 26 in any sub-mode.
         self::assertSame(900, $cw[0]);
     }
 
@@ -106,8 +106,8 @@ final class Pdf417CompactionModesTest extends TestCase
     {
         $auto = new Pdf417Encoder('1234567890123456', mode: Pdf417Encoder::MODE_AUTO);
         $byte = new Pdf417Encoder('1234567890123456', mode: Pdf417Encoder::MODE_BYTE);
-        // Numeric более compact (~ less codewords) — но minimum symbol size
-        // зависит от ECC level. Assert at least no failure.
+        // Numeric is more compact (fewer codewords), but the minimum symbol size
+        // depends on the ECC level. Assert at least that nothing fails.
         self::assertGreaterThan(0, $auto->rows);
     }
 
@@ -166,10 +166,10 @@ final class Pdf417CompactionModesTest extends TestCase
     #[Test]
     public function macro_non_last_segment_no_terminator(): void
     {
-        // Mid segment NO terminator at end (только last segment has it).
+        // A mid segment has NO terminator at the end (only the last one does).
         $midSeg = Pdf417Encoder::macroSegment('middle', 1, 3, 100);
-        // Codewords могут содержать 922 inside data, но check macro semantic
-        // is via macroSegment param.
+        // The codewords may contain 922 inside the data, but the macro semantics
+        // are checked through the macroSegment parameter.
         $hasMacroIndicator = in_array(928, $midSeg->codewords, true);
         self::assertTrue($hasMacroIndicator);
     }

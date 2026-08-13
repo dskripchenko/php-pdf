@@ -31,7 +31,7 @@ final class TextMeasurerTest extends TestCase
 
         $w10 = $m10->widthOfCodepointPt(0x48); // H
         $w20 = $m20->widthOfCodepointPt(0x48);
-        // 20pt текст ровно в 2 раза шире 10pt.
+        // Text at 20pt is exactly twice as wide as at 10pt.
         self::assertEqualsWithDelta(2 * $w10, $w20, 0.01);
     }
 
@@ -49,7 +49,7 @@ final class TextMeasurerTest extends TestCase
     {
         $m = new TextMeasurer($this->sansFont, 12);
         $w = $m->widthPt('Привет');
-        // Должен быть > 0 (Liberation Sans покрывает Cyrillic).
+        // It has to be > 0 (Liberation Sans covers Cyrillic).
         self::assertGreaterThan(20, $w);
     }
 
@@ -71,10 +71,10 @@ final class TextMeasurerTest extends TestCase
     public function emoji_falls_through_to_zero_width(): void
     {
         $m = new TextMeasurer($this->sansFont, 12);
-        // Emoji не в Liberation → glyph ID 0 → ширина 0.
+        // The emoji is not in Liberation → glyph ID 0 → a width of 0.
         $w = $m->widthPt('😀');
-        // .notdef glyph может иметь default width, но всё равно низкую.
-        // Просто проверим что не падает.
+        // The .notdef glyph may have a default width, but a low one anyway.
+        // Just check that nothing falls over.
         self::assertGreaterThanOrEqual(0, $w);
     }
 }

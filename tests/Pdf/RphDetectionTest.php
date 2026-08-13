@@ -11,7 +11,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Phase 144: detect reph positions after Indic shaping.
  *
- * Reph detection rule: RA + virama где previous cp is NOT virama.
+ * Reph detection rule: RA + virama where the previous cp is NOT virama.
  * Excludes subscript-RA case (H + R) where R follows virama.
  */
 final class RphDetectionTest extends TestCase
@@ -19,7 +19,7 @@ final class RphDetectionTest extends TestCase
     #[Test]
     public function detects_reph_in_post_reorder_cluster(): void
     {
-        // After reph reorder: "र्क" = к + р + ् → [0x0915, 0x0930, 0x094D]
+        // After reph reorder: "र्क" = K + R + ् → [0x0915, 0x0930, 0x094D]
         $positions = PdfFont::detectRphPositionsForTest([0x0915, 0x0930, 0x094D]);
         // Position 1 (RA) is followed by virama, preceded by K (non-virama) → reph.
         self::assertArrayHasKey(1, $positions);
@@ -38,7 +38,7 @@ final class RphDetectionTest extends TestCase
     #[Test]
     public function ignores_ra_at_start(): void
     {
-        // RA + virama at start (i=0): не is reph (no preceding consonant).
+        // RA + virama at the start (i=0) is not a reph (no preceding consonant).
         $positions = PdfFont::detectRphPositionsForTest([0x0930, 0x094D, 0x0915]);
         self::assertArrayNotHasKey(0, $positions);
     }
@@ -54,11 +54,11 @@ final class RphDetectionTest extends TestCase
     #[Test]
     public function multiple_reph_clusters(): void
     {
-        // "र्कर्त" reordered + space: [к, р, ्, space, т, р, ्]
+        // "र्कर्त" reordered + space: [K, R, ्, space, T, R, ्]
         $positions = PdfFont::detectRphPositionsForTest([
             0x0915, 0x0930, 0x094D, 0x20, 0x0924, 0x0930, 0x094D,
         ]);
-        // Positions 1 и 5 are reph candidates.
+        // Positions 1 and 5 are reph candidates.
         self::assertArrayHasKey(1, $positions);
         self::assertArrayHasKey(5, $positions);
         self::assertCount(2, $positions);
@@ -67,7 +67,7 @@ final class RphDetectionTest extends TestCase
     #[Test]
     public function bengali_reph(): void
     {
-        // Bengali "র্ক" reordered → [к, р, ্] = [0x0995, 0x09B0, 0x09CD]
+        // Bengali "র্ক" reordered → [K, R, ্] = [0x0995, 0x09B0, 0x09CD]
         $positions = PdfFont::detectRphPositionsForTest([0x0995, 0x09B0, 0x09CD]);
         self::assertArrayHasKey(1, $positions);
     }

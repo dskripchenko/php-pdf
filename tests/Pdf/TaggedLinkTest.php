@@ -28,7 +28,7 @@ final class TaggedLinkTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // /Link struct element с /OBJR reference.
+        // A /Link struct element with an /OBJR reference.
         self::assertStringContainsString('/S /Link', $bytes);
         self::assertMatchesRegularExpression('@/K << /Type /OBJR /Obj \d+\s+0\s+R >>@', $bytes);
     }
@@ -44,7 +44,7 @@ final class TaggedLinkTest extends TestCase
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
         self::assertStringNotContainsString('/S /Link', $bytes);
-        // Link annotation сохраняется и без tagging.
+        // The link annotation survives without tagging too.
         self::assertStringContainsString('/Subtype /Link', $bytes);
     }
 
@@ -66,7 +66,7 @@ final class TaggedLinkTest extends TestCase
         self::assertSame(2, substr_count($bytes, '/S /Link'));
     }
 
-    // -------- Phase 151: /StructParent на Link annotations --------
+    // -------- Phase 151: /StructParent on link annotations --------
 
     #[Test]
     public function tagged_link_emits_structparent(): void
@@ -81,7 +81,7 @@ final class TaggedLinkTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // /Link annot includes /StructParent N (где N ≥ pages count = 1).
+        // The /Link annot includes /StructParent N (where N ≥ the page count = 1).
         self::assertStringContainsString('/Subtype /Link', $bytes);
         self::assertMatchesRegularExpression('@/StructParent \d+@', $bytes);
     }
@@ -96,7 +96,7 @@ final class TaggedLinkTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Без tagging, /StructParent не emit'ится на links.
+        // Without tagging no /StructParent is emitted on the links.
         self::assertStringNotContainsString('/StructParent', $bytes);
     }
 
@@ -113,8 +113,9 @@ final class TaggedLinkTest extends TestCase
         );
         $bytes = $ast->toBytes(new Engine(compressStreams: false));
 
-        // ParentTree's /Nums array should map struct-parent-key (≥1) к struct elem ref.
-        // С 1 page + 1 link: keys 0 (page array form) и 1 (link single ref).
+        // The /Nums array of the ParentTree should map a struct-parent key (≥1)
+        // to a struct element reference. With 1 page and 1 link: key 0 (the page
+        // array form) and key 1 (the link single ref).
         self::assertStringContainsString('/Nums', $bytes);
         // Check ParentTreeNextKey reflects link count (2 = pages + 1 link).
         self::assertMatchesRegularExpression('@/ParentTreeNextKey 2\b@', $bytes);

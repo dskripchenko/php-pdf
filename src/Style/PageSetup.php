@@ -27,15 +27,15 @@ final readonly class PageSetup
         public ?array $customDimensionsPt = null,
         public int $firstPageNumber = 1,
         /**
-         * Расстояние от верхнего края листа до колонтитула.
+         * The distance from the top edge of the sheet to the header.
          *
-         * Word задаёт его отдельно от поля страницы (`w:header`), и от него
-         * зависит, где начинается шапка: прижатая к самому краю она сдвигает
-         * весь документ вверх относительно оригинала. По умолчанию 4pt —
-         * прежнее поведение движка.
+         * Word sets it separately from the page margin (`w:header`), and where
+         * the header starts depends on it: pressed against the very edge it
+         * shifts the whole document up relative to the original. The default of
+         * 4pt is the engine's previous behaviour.
          */
         public float $headerDistancePt = 4.0,
-        /** То же для нижнего колонтитула (`w:footer`). */
+        /** The same for the footer (`w:footer`). */
         public float $footerDistancePt = 4.0,
     ) {}
 

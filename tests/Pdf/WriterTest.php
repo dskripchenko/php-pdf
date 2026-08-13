@@ -43,13 +43,13 @@ final class WriterTest extends TestCase
     #[Test]
     public function reserve_then_set_allows_forward_references(): void
     {
-        // Catalog (ID 1) ссылается на Pages (ID 2) ДО того, как Pages
-        // имеет body. Это типичная PDF-конструкция.
+        // The catalog (ID 1) references Pages (ID 2) BEFORE Pages has a body.
+        // That is a typical PDF construction.
         $w = new Writer;
         $catalogId = $w->reserveObject();
         $pagesId = $w->reserveObject();
 
-        // Set in reverse order — это OK.
+        // Set in reverse order — that is fine.
         $w->setObject($catalogId, sprintf('<< /Type /Catalog /Pages %d 0 R >>', $pagesId));
         $w->setObject($pagesId, '<< /Type /Pages /Kids [] /Count 0 >>');
         $w->setRoot($catalogId);
@@ -90,7 +90,7 @@ final class WriterTest extends TestCase
 
         $pdf = $w->toBytes();
 
-        // Parse xref table — линии вида "0000000018 00000 n ".
+        // Parse the xref table — lines of the form "0000000018 00000 n ".
         preg_match('/xref\n0 (\d+)\n(.*?)trailer/s', $pdf, $m);
         self::assertNotEmpty($m, 'xref must be present');
 
@@ -98,7 +98,7 @@ final class WriterTest extends TestCase
         // entries[0] — head (0 65535 f). entries[1..] — object offsets.
         self::assertCount(3, $entries); // 0-head + 2 objects
 
-        // Проверяем offset object 1: должен указывать на "1 0 obj".
+        // Check the offset of object 1: it has to point at "1 0 obj".
         preg_match('/^(\d{10}) 00000 n/', $entries[1], $m1);
         $offset1 = (int) $m1[1];
         self::assertSame('1 0 obj', substr($pdf, $offset1, 7));
@@ -113,8 +113,9 @@ final class WriterTest extends TestCase
         $w->setRoot($catalogId);
 
         $pdf = $w->toBytes();
-        // Trailer Size = N+1 (одну строку под 0-head + N объектов).
-        // Phase 212: /ID always emitted, so accept трейлер с /ID после /Root.
+        // The trailer Size is N+1 (one line for the 0 head plus N objects).
+        // Phase 212: /ID is always emitted, so accept a trailer with /ID after
+        // /Root.
         self::assertMatchesRegularExpression('@trailer\n<< /Size 3 /Root 1 0 R /ID \[<[0-9a-f]{32}> <[0-9a-f]{32}>\] >>@', $pdf);
     }
 }

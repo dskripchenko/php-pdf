@@ -26,7 +26,7 @@ final class QrEncoderTest extends TestCase
     #[Test]
     public function version_2_for_18_byte_input(): void
     {
-        // Lowercase forces byte mode (alphanumeric не допускает lowercase).
+        // Lowercase forces byte mode (alphanumeric does not allow lowercase).
         // V1 byte mode ECC L max = 17 bytes, V2 = 32 bytes.
         $enc = new QrEncoder(str_repeat('a', 18));
         self::assertSame(2, $enc->version);
@@ -63,7 +63,7 @@ final class QrEncoderTest extends TestCase
     public function finder_patterns_at_three_corners(): void
     {
         $enc = new QrEncoder('hello');
-        // Finder = 7×7. Top-left corner и inner 3×3 — black.
+        // The finder is 7×7. The top-left corner and the inner 3×3 are black.
         // Sample (0,0), (6,6), (0,6), (6,0) — black (outer ring).
         self::assertTrue($enc->module(0, 0));
         self::assertTrue($enc->module(6, 6));
@@ -72,10 +72,10 @@ final class QrEncoderTest extends TestCase
         // Inner 3×3 dark square (2..4, 2..4).
         self::assertTrue($enc->module(2, 2));
         self::assertTrue($enc->module(4, 4));
-        // Module (1, 1) — white (часть white ring).
+        // Module (1, 1) is white (part of the white ring).
         self::assertFalse($enc->module(1, 1));
 
-        // Top-right finder anchored at x=14 для V1.
+        // The top-right finder is anchored at x=14 for V1.
         self::assertTrue($enc->module(14, 0));
         self::assertTrue($enc->module(20, 6));
         // Bottom-left finder anchored at y=14.
@@ -96,7 +96,7 @@ final class QrEncoderTest extends TestCase
     public function timing_pattern_alternates(): void
     {
         $enc = new QrEncoder('test');
-        // Row 6 timing pattern должен alternating black/white (col 8..size-9).
+        // The row 6 timing pattern has to alternate black and white (cols 8..size-9).
         $size = $enc->size();
         for ($i = 8; $i < $size - 8; $i++) {
             $expected = $i % 2 === 0;
@@ -120,7 +120,7 @@ final class QrEncoderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Multiple fillRect operators expected для всех black squares.
+        // Several fillRect operators are expected, one per black square.
         $count = preg_match_all('@^f$@m', $bytes);
         self::assertGreaterThan(50, $count, 'QR must emit many filled rects');
     }

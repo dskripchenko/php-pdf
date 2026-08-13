@@ -67,7 +67,7 @@ final class LazyFontSubsetTest extends TestCase
     #[Test]
     public function reset_clears_used_glyphs_for_fresh_subset(): void
     {
-        // Use font в doc1.
+        // Use the font in doc1.
         $doc1 = PdfDocument::new(compressStreams: false);
         $doc1->addPage()->showEmbeddedText('hello', 100, 700, $this->font, 12);
         $doc1->toBytes();
@@ -80,8 +80,8 @@ final class LazyFontSubsetTest extends TestCase
         $doc2->addPage()->showEmbeddedText('world', 100, 700, $this->font, 12);
         $bytes2 = $doc2->toBytes();
 
-        // Hard to assert exact glyph count without parsing subset, но
-        // structural validity is sufficient.
+        // Asserting the exact glyph count without parsing the subset is hard,
+        // but structural validity is enough.
         self::assertStringContainsString('/Subtype /Type0', $bytes2);
     }
 
@@ -94,7 +94,7 @@ final class LazyFontSubsetTest extends TestCase
 
         $this->font->reset();
 
-        // After reset, registering with new writer должно work (fresh registration).
+        // After the reset, registering with a new writer has to work (a fresh registration).
         $doc2 = PdfDocument::new(compressStreams: false);
         $doc2->addPage()->showEmbeddedText('B', 100, 700, $this->font, 12);
         $bytes = $doc2->toBytes();
@@ -111,12 +111,12 @@ final class LazyFontSubsetTest extends TestCase
         $bytes2 = $doc->toBytes();
 
         // Note: timestamps may differ; check basic structure.
-        // Document::toBytes() creates fresh Writer каждый раз — second call
-        // gets distinct Writer instance. Font's writerRegistrations stores
-        // first writer (garbage-collected после toBytes returns).
+        // Document::toBytes() creates a fresh Writer every time — the second
+        // call gets a distinct Writer instance. The font's writerRegistrations
+        // holds the first writer (garbage-collected once toBytes returns).
         self::assertStringContainsString('%PDF-', $bytes1);
         self::assertStringContainsString('%PDF-', $bytes2);
-        // Length should be similar (might differ from timestamp в /Info).
+        // The length should be similar (it may differ because of the timestamp in /Info).
         self::assertLessThan(200, abs(strlen($bytes1) - strlen($bytes2)));
     }
 }

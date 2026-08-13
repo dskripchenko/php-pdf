@@ -130,10 +130,10 @@ final class HeaderFooterTest extends TestCase
     }
 
     /**
-     * Phase 155: regression — Table в header не должен вызывать infinite
-     * forcePageBreak recursion. Bug raised на template 13 у printable где
-     * 3-cell branding table в header висла навсегда (forcePageBreak →
-     * renderHeaderFooter → renderTable → row не fits в header zone →
+     * Phase 155: a regression — a table in a header must not cause infinite
+     * forcePageBreak recursion. The bug was raised on template 13 in printable,
+     * where a 3-cell branding table in the header hung forever (forcePageBreak →
+     * renderHeaderFooter → renderTable → the row does not fit the header zone →
      * forcePageBreak → ...).
      */
     #[Test]
@@ -163,8 +163,9 @@ final class HeaderFooterTest extends TestCase
     }
 
     /**
-     * Phase 156: header overflow должен push body topY вниз (mpdf-style
-     * adaptive top margin). Иначе header renders OVER body content.
+     * Phase 156: a header overflow has to push the body topY down (an
+     * mpdf-style adaptive top margin). Otherwise the header renders OVER the
+     * body content.
      */
     #[Test]
     public function tall_header_pushes_body_below(): void
@@ -191,7 +192,7 @@ final class HeaderFooterTest extends TestCase
         if (! preg_match('/(\d+(?:\.\d+)?) Td.*?\(Line 1: company info\) Tj/s', $bytes, $matchHeader)
             || ! preg_match('/(\d+(?:\.\d+)?) Td.*?\(BODY_MARKER_TEXT\) Tj/s', $bytes, $matchBody)
         ) {
-            // Streams may be compressed/reordered; falls back на pdftotext.
+            // Streams may be compressed or reordered; fall back to pdftotext.
             self::markTestIncomplete('Cannot extract Y positions via regex; needs pdftotext for layout verification');
         }
         $headerY = (float) $matchHeader[1];

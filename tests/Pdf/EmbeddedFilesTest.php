@@ -22,7 +22,7 @@ final class EmbeddedFilesTest extends TestCase
 
         // EmbeddedFile stream emitted.
         self::assertStringContainsString('/Type /EmbeddedFile', $bytes);
-        // CSV bytes присутствуют в stream.
+        // The CSV bytes are in the stream.
         self::assertStringContainsString("id,name\n1,Alice", $bytes);
         // Filespec dict.
         self::assertStringContainsString('/Type /Filespec', $bytes);
@@ -68,7 +68,7 @@ final class EmbeddedFilesTest extends TestCase
         $pdf->attachFile('img.png', 'fake-png-bytes', mimeType: 'image/png');
         $bytes = $pdf->toBytes();
 
-        // 'image/png' → image#2Fpng в PDF name object.
+        // 'image/png' → image#2Fpng in the PDF name object.
         self::assertStringContainsString('/Subtype /image#2Fpng', $bytes);
     }
 
@@ -77,7 +77,7 @@ final class EmbeddedFilesTest extends TestCase
     {
         $pdf = PdfDocument::new(compressStreams: false);
         $pdf->addPage();
-        // Add в reverse order.
+        // Add in reverse order.
         $pdf->attachFile('zebra.txt', 'z');
         $pdf->attachFile('alpha.txt', 'a');
         $pdf->attachFile('mango.txt', 'm');
@@ -88,9 +88,9 @@ final class EmbeddedFilesTest extends TestCase
         preg_match('@/EmbeddedFiles\s+(\d+)\s+0\s+R@', $bytes, $m);
         self::assertNotEmpty($m);
 
-        // Verify alpha precedes mango precedes zebra в Names array.
+        // Verify alpha precedes mango precedes zebra in the Names array.
         preg_match('@/Names \[([^\]]+)\]@s', $bytes, $namesMatch);
-        // Could match multiple — find the one с alpha/mango/zebra.
+        // It could match several — find the one with alpha/mango/zebra.
         preg_match_all('@/Names \[([^\]]+)\]@s', $bytes, $allMatches);
         $found = false;
         foreach ($allMatches[1] as $arrayContent) {
@@ -137,7 +137,7 @@ final class EmbeddedFilesTest extends TestCase
     #[Test]
     public function attachment_with_named_destinations_coexist(): void
     {
-        // Names tree должен содержать оба /Dests и /EmbeddedFiles.
+        // The names tree has to hold both /Dests and /EmbeddedFiles.
         $pdf = PdfDocument::new(compressStreams: false);
         $page = $pdf->addPage();
         $pdf->registerDestination('chapter1', $page, 0, 700);

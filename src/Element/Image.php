@@ -33,12 +33,13 @@ final readonly class Image implements BlockElement, InlineElement
         public float $spaceAfterPt = 0,
         public ?string $altText = null,
         /**
-         * Плавающий объект: рисуется, но места в потоке не занимает.
+         * A floating object: it is drawn, but takes no room in the flow.
          *
-         * Word так ставит печати и подписи — привязывает к абзацу и смещает
-         * относительно точки привязки, поверх готового текста. Пока такой
-         * объект вставал в поток отдельной строкой, документ раздвигало на
-         * его высоту: у страхового полиса это стоило лишней страницы.
+         * This is how Word places stamps and signatures — anchored to a
+         * paragraph and offset from the anchor point, over the finished text.
+         * While such an object went into the flow as a line of its own, the
+         * document was pushed apart by its height: that cost the insurance
+         * policy an extra page.
          */
         public bool $outOfFlow = false,
     ) {}

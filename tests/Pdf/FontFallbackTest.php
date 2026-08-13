@@ -93,10 +93,11 @@ final class FontFallbackTest extends TestCase
         $missing = (new Document(new Section([new Paragraph([new Run('[☐✔]')])])))
             ->toBytes(new Engine(compressStreams: false, defaultFont: $font));
 
-        // В карте извлечения не должно быть записи для глифа 0 — иначе один
-        // пропавший знак прочитается как другой. Проверяем именно таблицу
-        // соответствий: `<0000> <FFFF>` встречается ещё и в объявлении
-        // диапазона кодов, и сравнение по всему файлу ловило бы его.
+        // The extraction map must hold no entry for glyph 0 — otherwise one
+        // missing character reads as another. What is checked is the mapping
+        // table itself: `<0000> <FFFF>` also occurs in the code-range
+        // declaration, and comparing across the whole file would catch that
+        // instead.
         preg_match_all('/beginbfchar(.*?)endbfchar/s', $missing, $tables);
         foreach ($tables[1] as $table) {
             self::assertStringNotContainsString('<0000>', $table, 'глиф .notdef попал в карту извлечения');

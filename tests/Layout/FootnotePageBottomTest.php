@@ -32,7 +32,7 @@ final class FootnotePageBottomTest extends TestCase
 
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertStringContainsString('A footnote', $bytes);
-        // Marker emitted в text flow (superscript).
+        // The marker is emitted into the text flow (as a superscript).
         self::assertStringContainsString('Body text', $bytes);
     }
 
@@ -82,7 +82,7 @@ final class FootnotePageBottomTest extends TestCase
     #[Test]
     public function content_area_reduced_by_reservation(): void
     {
-        // Bodies large enough к hit bottom — verify content area was reduced.
+        // The bodies are large enough to hit the bottom — verify the content area shrank.
         // Without reservation: more content fits per page.
         // With 100pt reservation: less fits per page → more pages.
         $bodyBlocks = [];
@@ -102,7 +102,7 @@ final class FootnotePageBottomTest extends TestCase
         $pagesDefault = preg_match_all('@/Type /Page\b@', $bytesDefault);
         $pagesReserved = preg_match_all('@/Type /Page\b@', $bytesReserved);
 
-        // Reserved version uses ≥ pages (потому что content area smaller).
+        // The reserved version uses at least as many pages (the content area is smaller).
         self::assertGreaterThanOrEqual($pagesDefault, $pagesReserved);
     }
 
@@ -115,7 +115,7 @@ final class FootnotePageBottomTest extends TestCase
         ]));
         $bytes1 = $doc1->toBytes(new Engine(compressStreams: false));
 
-        // Same input но explicit null.
+        // The same input, but with an explicit null.
         $doc2 = new Document(new Section(
             body: [new Paragraph([new Run('a'), new Footnote('foo')])],
             footnoteBottomReservedPt: null,

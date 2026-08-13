@@ -142,7 +142,7 @@ final class Ean8EncoderTest extends TestCase
         // First left digit '9' → L-code '0001011'.
         $enc = new Ean8Encoder('9638507');
         $modules = $enc->modules();
-        // Position 3..9 = первая left digit '9'.
+        // Position 3..9 is the first left digit, '9'.
         $bits = '';
         for ($i = 3; $i < 10; $i++) {
             $bits .= $modules[$i] ? '1' : '0';
@@ -153,11 +153,11 @@ final class Ean8EncoderTest extends TestCase
     #[Test]
     public function right_digits_use_r_code(): void
     {
-        // First right digit (position 5 в 8-digit canonical '96385074') = '5'.
-        // R-code для 5 = '1001110'.
+        // The first right digit (position 5 of the canonical 8-digit '96385074')
+        // is '5'. The R-code for 5 is '1001110'.
         $enc = new Ean8Encoder('9638507');
         $modules = $enc->modules();
-        // Position 36..42 = первая right digit.
+        // Position 36..42 is the first right digit.
         $bits = '';
         for ($i = 36; $i < 43; $i++) {
             $bits .= $modules[$i] ? '1' : '0';

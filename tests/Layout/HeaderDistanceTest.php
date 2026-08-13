@@ -14,11 +14,12 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Расстояние до колонтитула.
+ * The distance to the header.
  *
- * Word задаёт его отдельно от поля страницы (`w:header`), и раньше движок
- * прижимал шапку к самому краю листа: документ ехал вверх относительно
- * оригинала. Найдено сравнением с эталоном в printable.
+ * Word sets it separately from the page margin (`w:header`), and the engine
+ * used to press the header against the very edge of the sheet: the document
+ * drifted upwards relative to the original. Found by comparing against the
+ * reference in printable.
  */
 final class HeaderDistanceTest extends TestCase
 {
@@ -50,7 +51,7 @@ final class HeaderDistanceTest extends TestCase
         $near = $this->headerTopY(4.0);
         $far = $this->headerTopY(40.0);
 
-        // Шапка обязана опуститься ровно на разницу расстояний.
+        // The header has to move down by exactly the difference of the distances.
         self::assertEqualsWithDelta(36.0, $far - $near, 1.0);
     }
 }
