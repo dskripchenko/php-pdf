@@ -78,36 +78,36 @@ final class TtfFile
     }
 
     /**
-     * Разобранные файлы шрифтов, по пути.
+     * The parsed font files, keyed by path.
      *
      * @var array<string, self>
      */
     private static array $cache = [];
 
     /**
-     * Сколько шрифтов держать разобранными.
+     * How many fonts to keep parsed.
      *
-     * Ограничение нужно долгоживущим процессам: воркер, обслуживающий много
-     * клиентов со своими наборами шрифтов, иначе накапливал бы их все. Порог
-     * с запасом к обычной вёрстке — засечка/без засечек/моно в четырёх
-     * начертаниях каждый.
+     * The limit is there for long-lived processes: a worker serving many
+     * clients with font sets of their own would otherwise accumulate them all.
+     * The threshold has room to spare over ordinary typesetting — serif, sans
+     * and mono in four faces each.
      */
     public static int $cacheLimit = 24;
 
     /**
-     * Разбор файла шрифта с запоминанием результата.
+     * Parses a font file, remembering the result.
      *
-     * Разбор — это чтение файла целиком плюс таблицы `cmap`, `hmtx`, `name`,
-     * `post`, а по требованию ещё `GPOS`. Для одного и того же файла результат
-     * всегда один, а объект неизменяем: наружу он отдаёт только чтение.
+     * Parsing means reading the whole file plus the `cmap`, `hmtx`, `name` and
+     * `post` tables, and `GPOS` on demand. For one and the same file the result
+     * is always the same, and the object is immutable: it exposes reads only.
      *
-     * В долгоживущем процессе (воркер очереди, Octane) это снимает разбор с
-     * каждого документа; в короткоживущем — с повторных обращений внутри
-     * одного запроса. Профилирование приложения-потребителя показало около
-     * 10% времени запроса на работу со шрифтами.
+     * In a long-lived process (a queue worker, Octane) this takes the parsing
+     * off every document; in a short-lived one, off the repeated lookups within
+     * a single request. Profiling the consuming application showed about 10% of
+     * the request time going into font work.
      *
-     * Ключ включает время изменения и размер: подменённый файл разберётся
-     * заново, а не отдастся из памяти.
+     * The key includes the modification time and the size: a replaced file is
+     * parsed anew rather than served from memory.
      */
     public static function fromFile(string $path): self
     {
@@ -121,8 +121,8 @@ final class TtfFile
             return self::$cache[$key];
         }
 
-        // Вытесняем самый давний: порядок вставки в PHP-массиве и есть порядок
-        // обращения, потому что при попадании запись не переставляется.
+        // Evict the oldest: the insertion order of a PHP array IS the access
+        // order, because a hit does not move the entry.
         if (count(self::$cache) >= self::$cacheLimit) {
             array_shift(self::$cache);
         }
@@ -131,10 +131,10 @@ final class TtfFile
     }
 
     /**
-     * Забыть разобранные шрифты.
+     * Forgets the parsed fonts.
      *
-     * Нужно там, где память дороже разбора, и в тестах, которым важно начать
-     * с чистого листа.
+     * Needed where memory costs more than parsing, and in tests that have to
+     * start from a clean slate.
      */
     public static function forgetCache(): void
     {

@@ -129,31 +129,31 @@ final class PdfFont
      * Resources /Font dict.
      */
     /**
-     * Сжатые тела шрифтов, по хэшу содержимого.
+     * The compressed font bodies, keyed by the hash of their content.
      *
      * @var array<string, string>
      */
     private static array $compressedCache = [];
 
     /**
-     * Сколько сжатых шрифтов держать в памяти.
+     * How many compressed fonts to keep in memory.
      *
-     * Ограничение нужно долгоживущим процессам: воркер, обслуживающий много
-     * документов с разными наборами шрифтов, иначе накапливал бы их все.
+     * The limit is there for long-lived processes: a worker serving many
+     * documents with different font sets would otherwise accumulate them all.
      */
     public static int $compressedCacheLimit = 24;
 
     /**
-     * Сжатие тела шрифта с запоминанием результата.
+     * Compresses a font body, remembering the result.
      *
-     * Тело шрифта одинаково от документа к документу, а `gzcompress` уровня 6
-     * на нём — самая дорогая часть встраивания: замер в приложении-потребителе
-     * показал 2.2 мс на документ, около 18% всего рендера, при двух шрифтах и
-     * 62 КБ на каждый.
+     * The body of a font is the same from document to document, and running
+     * `gzcompress` at level 6 over it is the most expensive part of embedding:
+     * a measurement in the consuming application showed 2.2 ms per document,
+     * about 18% of the whole render, with two fonts of 62 KB each.
      *
-     * Ключ — хэш содержимого, а не имя файла: он остаётся верным и для
-     * сабсета, который у каждого документа свой. Хэширование 62 КБ стоит
-     * микросекунды против миллисекунды сжатия.
+     * The key is the hash of the content rather than the file name: it stays
+     * correct for a subset too, and every document has its own. Hashing 62 KB
+     * costs microseconds against a millisecond of compression.
      */
     private static function compress(string $fontBytes): string
     {
@@ -163,8 +163,8 @@ final class PdfFont
             return self::$compressedCache[$key];
         }
 
-        // Вытесняем самый давний: порядок вставки и есть порядок обращения —
-        // при попадании запись не переставляется.
+        // Evict the oldest: the insertion order IS the access order, since a hit
+        // does not move the entry.
         if (count(self::$compressedCache) >= self::$compressedCacheLimit) {
             array_shift(self::$compressedCache);
         }
@@ -172,7 +172,7 @@ final class PdfFont
         return self::$compressedCache[$key] = (string) gzcompress($fontBytes, 6);
     }
 
-    /** Забыть сжатые тела шрифтов. */
+    /** Forgets the compressed font bodies. */
     public static function forgetCompressedCache(): void
     {
         self::$compressedCache = [];
@@ -531,12 +531,12 @@ final class PdfFont
             // No GSUB liga - straight mapping.
             $out = [];
             foreach ($decoded as $entry) {
-        // Глиф 0 (`.notdef`) — «символа в шрифте нет». Он один на все
-        // отсутствующие знаки, поэтому запись о нём в `ToUnicode` означала бы:
-        // «этот глиф читается как последний из пропавших». Форма с пустым
-        // квадратом ☐ и галочкой ✔ так извлекалась как две галочки — а
-        // незаполненный чекбокс, прочитанный как отмеченный, меняет смысл
-        // документа. Пропущенный знак остаётся пропущенным.
+        // Glyph 0 (`.notdef`) means "the font has no such character". It is one
+        // and the same for every missing character, so an entry for it in
+        // `ToUnicode` would say: "this glyph reads as the last of the missing
+        // ones". A form with an empty box ☐ and a tick ✔ was extracted as two
+        // ticks that way — and an unchecked checkbox read as checked changes
+        // what the document says. A missing character stays missing.
                 if ($entry['gid'] !== 0) {
                     $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
                 }
@@ -587,7 +587,7 @@ final class PdfFont
     public function utf8ToGlyphs(string $utf8): iterable
     {
         foreach ($this->decodeUtf8($utf8) as $entry) {
-            // Глиф 0 в `ToUnicode` не попадает — см. shapedGlyphs().
+            // Glyph 0 does not go into `ToUnicode` — see shapedGlyphs().
             if ($entry['gid'] !== 0) {
                 $this->usedGlyphs[$entry['gid']] = [$entry['cp']];
             }

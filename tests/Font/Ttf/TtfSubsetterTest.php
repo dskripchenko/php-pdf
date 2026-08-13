@@ -26,10 +26,10 @@ final class TtfSubsetterTest extends TestCase
     public function subset_is_smaller_than_original(): void
     {
         $subset = (new TtfSubsetter)->subset($this->ttf, [43, 72, 79, 82]);
-        // Original Liberation Sans Regular ~400 KB. Subset с GPOS/GSUB/cmap
-        // stripped + только 4 used glyphs ≈ 20-30 KB.
+        // The original Liberation Sans Regular is ~400 KB. A subset with
+        // GPOS/GSUB/cmap stripped and only 4 used glyphs is ≈ 20-30 KB.
         self::assertLessThan(strlen($this->ttf->rawBytes()), strlen($subset));
-        // Reduction should быть substantial — minimum 50%.
+        // The reduction should be substantial — 50% at the very least.
         $reduction = 1 - strlen($subset) / strlen($this->ttf->rawBytes());
         self::assertGreaterThan(0.5, $reduction);
     }
@@ -59,7 +59,7 @@ final class TtfSubsetterTest extends TestCase
     #[Test]
     public function empty_used_glyphs_keeps_at_least_notdef(): void
     {
-        // .notdef (glyph 0) — обязательный glyph, всегда должен быть в subset'е.
+        // .notdef (glyph 0) is mandatory and has to be in the subset always.
         $subset = (new TtfSubsetter)->subset($this->ttf, []);
         self::assertGreaterThan(1000, strlen($subset)); // header + tables + minimal glyf
         $reparsed = new TtfFile($subset);
@@ -78,15 +78,15 @@ final class TtfSubsetterTest extends TestCase
     #[Test]
     public function gpos_and_gsub_tables_stripped(): void
     {
-        // Original Liberation Sans имеет GPOS+GSUB tables. После subset
-        // они должны исчезнуть (мы их выпиливаем для PDF embedding).
+        // The original Liberation Sans has GPOS and GSUB tables. After
+        // subsetting they have to be gone (we strip them for PDF embedding).
         $original = $this->ttf->rawBytes();
         $subset = (new TtfSubsetter)->subset($this->ttf, [43]);
 
-        // GPOS/GSUB strings в original (в table directory).
+        // The GPOS/GSUB strings in the original (in the table directory).
         self::assertStringContainsString('GPOS', $original);
         self::assertStringContainsString('GSUB', $original);
-        // В subset они отсутствуют.
+        // They are absent from the subset.
         self::assertStringNotContainsString('GPOS', $subset);
         self::assertStringNotContainsString('GSUB', $subset);
     }
@@ -94,8 +94,8 @@ final class TtfSubsetterTest extends TestCase
     #[Test]
     public function cmap_and_name_kept_for_ttf_validity(): void
     {
-        // cmap и name остаются (нужны для TTF parser-validity; PDF reader
-        // их игнорирует, но другие tools могут требовать).
+        // cmap and name stay (they are needed for TTF parser validity; a PDF
+        // reader ignores them, but other tools may require them).
         $subset = (new TtfSubsetter)->subset($this->ttf, [43]);
         $header = substr($subset, 0, 300);
         self::assertStringContainsString('cmap', $header);
@@ -108,7 +108,7 @@ final class TtfSubsetterTest extends TestCase
         if (! $this->commandExists('pdftotext')) {
             self::markTestSkipped('pdftotext not installed.');
         }
-        // End-to-end через PdfFont (default subset=true).
+        // End to end through PdfFont (subset=true by default).
         $font = new \Dskripchenko\PhpPdf\Pdf\PdfFont($this->ttf);
         $doc = \Dskripchenko\PhpPdf\Pdf\Document::new();
         $doc->addPage()->showEmbeddedText('Привет, мир!', 72, 720, $font, 14);
@@ -118,7 +118,8 @@ final class TtfSubsetterTest extends TestCase
         try {
             $text = (string) shell_exec('pdftotext '.escapeshellarg($tmp).' - 2>&1');
             self::assertStringContainsString('Привет, мир!', $text);
-            // Subset size sanity — для Cyrillic-only-no-Latin ожидаем < 100KB.
+            // A sanity check on the subset size — Cyrillic-only-no-Latin is
+            // expected to be < 100KB.
             $pdfSize = filesize($tmp);
             self::assertLessThan(100_000, $pdfSize);
         } finally {
@@ -129,8 +130,8 @@ final class TtfSubsetterTest extends TestCase
     #[Test]
     public function full_embed_mode_keeps_original_size(): void
     {
-        // subset=false должен пропустить subsetter и embed весь TTF.
-        // Phase 14: используем compressStreams=false чтобы measure raw size.
+        // subset=false has to skip the subsetter and embed the whole TTF.
+        // Phase 14: compressStreams=false so that the raw size can be measured.
         $font = new \Dskripchenko\PhpPdf\Pdf\PdfFont($this->ttf, subset: false);
         $doc = \Dskripchenko\PhpPdf\Pdf\Document::new(compressStreams: false);
         $doc->addPage()->showEmbeddedText('Hi', 72, 720, $font, 14);
@@ -150,10 +151,11 @@ final class TtfSubsetterTest extends TestCase
     #[Test]
     public function post_table_carries_no_glyph_names(): void
     {
-        // `post` формата 2.0 несёт имена ВСЕХ глифов исходного шрифта, и в
-        // сабсете это была самая большая таблица: 26 КБ из 61 КБ на Liberation
-        // Sans, при том что контуры занимали 6 КБ. В PDF имена не нужны —
-        // отображение идёт по идентификаторам, извлечение текста по ToUnicode.
+        // A `post` table of format 2.0 carries the names of ALL the glyphs of
+        // the source font, and in a subset it was the largest table: 26 KB out
+        // of 61 KB for Liberation Sans, while the outlines took 6 KB. PDF has no
+        // use for the names — rendering goes by identifier and text extraction
+        // by ToUnicode.
         $subset = (new TtfSubsetter)->subset($this->ttf, [43, 72, 79, 82]);
         $post = $this->table($subset, 'post');
 
@@ -165,15 +167,15 @@ final class TtfSubsetterTest extends TestCase
     #[Test]
     public function post_header_fields_survive(): void
     {
-        // Заголовок у всех версий одинаков, и наш собственный парсер читает
-        // оттуда наклон и моноширинность — они обязаны сохраниться.
+        // The header is the same across the versions, and our own parser reads
+        // the slant and the monospacing from it — those have to survive.
         $original = $this->table($this->ttf->rawBytes(), 'post');
         $subset = $this->table((new TtfSubsetter)->subset($this->ttf, [43, 72]), 'post');
 
         self::assertSame(substr($original, 4, 28), substr($subset, 4, 28));
     }
 
-    /** Тело таблицы по тегу из бинарника шрифта. */
+    /** The body of a table, by tag, out of the font binary. */
     private function table(string $font, string $tag): ?string
     {
         $count = unpack('n', substr($font, 4, 2))[1];

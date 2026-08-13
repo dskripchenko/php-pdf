@@ -27,23 +27,24 @@ final class ContentStream
 
     // Cache last emitted graphics state. Drop redundant q/rg/Q
     // wraps when consecutive operations use the same fill color.
-    // Начальное состояние — чёрный: таким цвет заливки объявлен в
-    // спецификации на старте потока, поэтому обычному тексту `rg` не нужен.
+    // The initial state is black: that is the fill colour the specification
+    // declares at the start of a stream, so ordinary text needs no `rg`.
     private float $lastFillR = 0.0;
     private float $lastFillG = 0.0;
     private float $lastFillB = 0.0;
 
     /**
-     * Последняя записанная разрядка (`Tc`).
+     * The last character spacing written (`Tc`).
      *
-     * `Tc` — параметр состояния текста: он живёт до следующего `Tc`, а не до
-     * ближайшего `ET`. Пока его писали только при ненулевом значении, разрядка
-     * одного заголовка расползалась на весь дальнейший документ: строки
-     * становились шире доступной ширины, налезали друг на друга и уходили за
-     * край страницы. Поэтому значение отслеживается и сбрасывается явно.
+     * `Tc` is a text-state parameter: it lives until the next `Tc`, not until
+     * the nearest `ET`. While it was written only for a non-zero value, the
+     * spacing of a single heading spread over the whole rest of the document:
+     * the lines grew wider than the width available, ran into each other and
+     * went off the edge of the page. Hence the value is tracked and reset
+     * explicitly.
      *
-     * Начальное значение — ноль: таким `Tc` объявлен в спецификации на старте
-     * потока, и писать его отдельно не нужно.
+     * The initial value is zero: that is the `Tc` the specification declares at
+     * the start of a stream, and it need not be written out.
      */
     private float $lastCharSpacing = 0.0;
 
@@ -131,7 +132,7 @@ final class ContentStream
     }
 
     /**
-     * Пишет `Tc` только когда разрядка изменилась — включая возврат к нулю.
+     * Writes `Tc` only when the spacing changed — including a return to zero.
      */
     private function applyCharSpacing(float $letterSpacingPt): void
     {
@@ -155,14 +156,14 @@ final class ContentStream
      */
     private function openTextColor(?float $r, ?float $g, ?float $b): void
     {
-        // Цвет заливки — состояние графики: он держится до следующего `rg`.
-        // «Цвет не задан» означает чёрный, а не «оставить как было»: пока
-        // отсутствие цвета трактовалось как «ничего не писать», весь текст
-        // после цветного заголовка печатался тем же цветом. В заявлении
-        // страхователя так посинел весь документ, включая таблицы.
-        // Приведение к float обязательно: сравнение строгое, а `0 === 0.0`
-        // в PHP ложно — без него «чёрный» никогда не совпадал с состоянием и
-        // `rg` писался на каждой строке.
+        // The fill colour is graphics state: it holds until the next `rg`.
+        // "No colour given" means black, not "leave as it was": while a missing
+        // colour was read as "write nothing", all the text after a coloured
+        // heading printed in that same colour. In the policyholder's application
+        // the whole document turned blue that way, tables included.
+        // The cast to float is mandatory: the comparison is strict and
+        // `0 === 0.0` is false in PHP — without it "black" never matched the
+        // state and `rg` was written on every line.
         $r = (float) ($r ?? 0);
         $g = (float) ($g ?? 0);
         $b = (float) ($b ?? 0);

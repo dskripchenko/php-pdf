@@ -379,8 +379,8 @@ final class Engine
             // Render header/footer on the section's new first page.
             $this->renderHeaderFooter($context);
 
-            // Имя переменной цикла намеренно своё: снаружи идёт обход
-            // секций по $idx, и общее имя затёрло бы его.
+            // The loop variable deliberately has its own name: the outer loop
+            // walks the sections by $idx, and a shared name would clobber it.
             $bodyBlocks = array_values($section->body);
             foreach ($bodyBlocks as $blockIdx => $block) {
                 $this->keepWithNextBreak($block, $bodyBlocks[$blockIdx + 1] ?? null, $context);
@@ -1959,12 +1959,13 @@ final class Engine
     }
 
     /**
-     * Переносит абзац «не отрывать от следующего» на новую страницу, если
-     * вместе со следующим блоком он туда уже не помещается.
+     * Moves a "keep with next" paragraph to a new page when it no longer fits
+     * there together with the following block.
      *
-     * Смотрим не на весь следующий блок, а на его первую строку: требование
-     * Word — чтобы за заголовком осталось хоть что-то. Требовать целиком
-     * значило бы выбрасывать полстраницы ради длинной таблицы.
+     * What is measured is not the whole following block but its first line:
+     * Word's requirement is that something is left after the heading. Demanding
+     * the whole block would mean throwing away half a page for the sake of a
+     * long table.
      */
     private function keepWithNextBreak(BlockElement $block, ?BlockElement $next, LayoutContext $ctx): void
     {
@@ -1975,7 +1976,8 @@ final class Engine
         if ($trailing === null || ! $trailing->style->keepWithNext) {
             return;
         }
-        // Абзац в начале страницы переносить некуда — он и так первый.
+        // A paragraph at the top of a page has nowhere to move — it is first
+        // already.
         if ($ctx->cursorY >= $ctx->topY) {
             return;
         }
@@ -1989,11 +1991,11 @@ final class Engine
     }
 
     /**
-     * Последний абзац блока — тот, к которому относится «не отрывать».
+     * The last paragraph of a block is the one "keep with next" applies to.
      *
-     * Заголовок раздела нередко оформлен пунктом нумерованного списка: тогда
-     * требование несёт список, а держать вместе со следующим блоком нужно его
-     * целиком.
+     * A section heading is often formatted as an item of a numbered list: the
+     * requirement is then carried by the list, and it is the list as a whole
+     * that has to be kept with the following block.
      */
     private function trailingParagraph(BlockElement $block): ?Paragraph
     {
@@ -2019,8 +2021,8 @@ final class Engine
     }
 
     /**
-     * Высота первой строки блока — сколько места нужно, чтобы за заголовком
-     * осталось хоть что-то.
+     * The height of the block's first line — how much room is needed for
+     * something to be left after the heading.
      */
     private function firstLineHeight(BlockElement $block, float $contentWidth): float
     {
@@ -2037,7 +2039,7 @@ final class Engine
             return min($full, $this->measureRowHeight($block, $rows[0], $colWidths));
         }
 
-        // Для прочих блоков хватает одной строки текста обычного кегля.
+        // For the other blocks one line of text at the normal size is enough.
         return min($full, $this->defaultFontSizePt * 1.5);
     }
 
@@ -2908,10 +2910,10 @@ final class Engine
         }
         sort($numbers);
 
-        // Страница помечается выведенной ДО отрисовки: сама зона сносок
-        // рисуется обычными абзацами, а те умеют переносить страницу — и
-        // повторный вход сюда с тем же списком уходил в бесконечную
-        // рекурсию, съедая память.
+        // The page is marked as emitted BEFORE it is drawn: the footnote area
+        // itself is drawn as ordinary paragraphs, and those can break the page —
+        // so re-entering here with the same list went into infinite recursion
+        // and ate the memory.
         unset($this->pageFootnotes[$pageId]);
 
         $savedCursorY = $ctx->cursorY;
@@ -3003,8 +3005,8 @@ final class Engine
             $heightPt *= $ratio;
         }
 
-        // Плавающему объекту страница не переносится: он не занимает места,
-        // а значит и «не помещается» ему нечем.
+        // A floating object never forces a page break: it takes up no room, so
+        // there is nothing for it to "not fit" into.
         if (! $img->outOfFlow) {
             $this->ensureRoomFor($ctx, $heightPt);
         }
@@ -3025,8 +3027,8 @@ final class Engine
             $ctx->cursorY -= $heightPt;
             $ctx->cursorY -= $img->spaceAfterPt;
         } else {
-            // Отступ до объекта был смещением привязки — возвращаем курсор
-            // туда, где он стоял: поток объекта не заметил.
+            // The offset before the object was the anchor displacement — put the
+            // cursor back where it stood: the flow never noticed the object.
             $ctx->cursorY += $img->spaceBeforePt;
         }
 
@@ -3186,11 +3188,11 @@ final class Engine
                 }
             }
 
-            // Слово, которое не помещается даже на пустой строке, рвём по
-            // символам. Иначе оно печатается как есть и вылезает за колонку:
-            // длинный URL в узкой ячейке заезжал на соседнюю. Так поступает и
-            // Word, и браузер — разорвать длинную строку лучше, чем потерять
-            // границу колонки.
+            // A word that does not fit even on an empty line is broken by
+            // characters. Otherwise it prints as is and runs past the column: a
+            // long URL in a narrow cell crawled onto the neighbouring one. Word
+            // and the browser both do this — breaking a long string is better
+            // than losing the column boundary.
             if ($wordWidth > $availableWidth && $availableWidth > 0) {
                 if ($currentLine !== []) {
                     $this->emitLine($currentLine, $p, $ctx, $effectiveDefault, $isFirstLine, $firstLineExtraIndent, isLastLine: false);
@@ -3199,8 +3201,8 @@ final class Engine
                     $isFirstLine = false;
                     $effectiveAvail = $availableWidth;
                 }
-                // Мягкий перенос — настоящая точка деления, она сильнее
-                // слепого разреза по символам.
+                // A soft hyphen is a real division point, and it beats a blind
+                // cut between characters.
                 $shy = $this->trySplitOnSoftHyphen($word, $style, $effectiveAvail);
                 [$head, $tail] = $shy ?? $this->splitOverlongWord($word, $style, $effectiveAvail);
                 if ($tail !== '') {
@@ -3215,7 +3217,7 @@ final class Engine
 
                     $tailItem = $item;
                     $tailItem['text'] = $tail;
-                    // Хвост — уже «приклеенный»: пробела перед ним нет.
+                    // The tail is already glued on: there is no space before it.
                     $tailItem['glue'] = true;
                     array_splice($items, $i + 1, 0, [$tailItem]);
 
@@ -3294,10 +3296,11 @@ final class Engine
      * @param  list<array<string, mixed>>  $items
      */
     /**
-     * Кончился ли предыдущий токен содержимым (а не пробелом).
+     * Whether the previous token ended with content rather than whitespace.
      *
-     * Нужно на стыке рунов: Word режет строку по смене начертания, и «(» с
-     * «залогодатель» приезжают отдельными рунами без пробела между ними.
+     * This matters at a run boundary: Word cuts a line where the typeface
+     * changes, so «(» and «залогодатель» arrive as separate runs with no space
+     * between them.
      */
     private bool $lastTokenEndedInside = false;
 
@@ -3318,11 +3321,12 @@ final class Engine
                 $childStyle = $child->style->inheritFrom($effectiveDefault);
                 // \t (tab) — emit 'tab' marker between segments.
                 $segments = explode("\t", $child->text);
-                // Первое слово руна приклеено к предыдущему, если ни там, ни
-                // тут не было пробела. Иначе стык двух рунов превращается в
-                // пробел, которого в тексте нет: «(» и «залогодатель» —
-                // отдельные руны (Word режет строку по смене начертания), и
-                // документ печатался как «( залогодатель )».
+                // The first word of a run is glued to the previous one when
+                // neither side had whitespace. Otherwise the seam between two
+                // runs turns into a space that is not in the text: «(» and
+                // «залогодатель» are separate runs (Word cuts a line where the
+                // typeface changes), and the document printed as
+                // «( залогодатель )».
                 $gluedToPrevious = $items !== []
                     && $this->lastTokenEndedInside
                     && $child->text !== ''
@@ -3343,8 +3347,8 @@ final class Engine
                         $items[] = ['type' => 'tab', 'style' => $childStyle, 'link' => $currentLink];
                     }
                 }
-                // Рун, кончившийся пробелом, разделителем уже обеспечен —
-                // следующий приклеивать нельзя.
+                // A run that ended in whitespace already has its separator — the
+                // next one must not be glued to it.
                 $this->lastTokenEndedInside = $child->text !== ''
                     && preg_match('/\s$/u', $child->text) !== 1;
             } elseif ($child instanceof LineBreak) {
@@ -3785,8 +3789,8 @@ final class Engine
                 if (($nextItem['type'] ?? null) === 'tab') {
                     continue;
                 }
-                // Слипшийся стык рунов: пробела в тексте не было, рисовать
-                // его нельзя (см. tokenizeChildren).
+                // A glued run seam: there was no space in the text, so none may
+                // be drawn (see tokenizeChildren).
                 if ($nextItem['glue'] ?? false) {
                     continue;
                 }
@@ -3970,11 +3974,11 @@ final class Engine
     }
 
     /**
-     * Делит слово, которое не помещается на строке целиком.
+     * Splits a word that does not fit on a line in one piece.
      *
-     * Возвращает [начало, остаток]; в начале всегда хотя бы один символ —
-     * иначе разбиение зациклится. Пустой остаток означает, что делить не
-     * потребовалось.
+     * Returns [head, tail]; the head always holds at least one character,
+     * otherwise the splitting would loop forever. An empty tail means no split
+     * was needed.
      *
      * @return array{0: string, 1: string}
      */
@@ -4117,10 +4121,10 @@ final class Engine
             $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
             $isLastRow = $rowIdx === $totalRows - 1;
 
-            // Шапка таблицы не остаётся последней строкой страницы: она
-            // объясняет колонки, которых на этой странице уже не будет, а
-            // на следующей повторится заново. Уходим на новую страницу
-            // вместе с первой строкой данных.
+            // A table header is never left as the last line of a page: it
+            // explains columns that this page will no longer carry, and it
+            // repeats on the next one anyway. Move to a new page together with
+            // the first row of data.
             $next = $t->rows[$rowIdx + 1] ?? null;
             if ($row->isHeader && $next !== null && ! $next->isHeader) {
                 $together = $rowHeight + $this->measureRowHeight($t, $next, $colWidths);
@@ -4131,16 +4135,16 @@ final class Engine
             }
 
             if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
-                // Строка не помещается. Прежде чем уносить её целиком —
-                // пробуем разделить: строка выше страницы иначе оставляет за
-                // собой полупустой лист, а строка, которая ВООБЩЕ не влезает
-                // в страницу, уходила бы в бесконечный перенос.
+                // The row does not fit. Before carrying it over whole, try to
+                // split it: a row taller than the page otherwise leaves a
+                // half-empty sheet behind, and a row that does not fit a page AT
+                // ALL would go into an endless carry-over.
                 //
-                // Проверено и отвергнуто: «строку, помещающуюся на чистой
-                // странице, переносить целиком» (так поступает Word в
-                // разобранном случае) — на корпусе это дало минус три
-                // страницы сходства и разъехало ещё два документа. Правило
-                // Word здесь сложнее одного условия.
+                // Tried and rejected: "carry over whole any row that fits on a
+                // clean page" (which is what Word did in the case we took
+                // apart) — on the corpus that cost three pages of similarity and
+                // pulled two more documents out of shape. Word's rule here is
+                // more than a single condition.
                 $available = $ctx->cursorY - $ctx->bottomY;
                 $split = $this->splitRowForPage($t, $row, $colWidths, $available);
 
@@ -4157,8 +4161,8 @@ final class Engine
                         $ctx->cursorY -= $hh;
                     }
 
-                    // Хвост может не поместиться снова — обрабатываем его тем
-                    // же кодом, поэтому возвращаемся к началу итерации.
+                    // The tail may not fit again — it is handled by the same code,
+                    // hence going back to the start of the iteration.
                     $row = $tail;
                     $rowHeight = $this->measureRowHeight($t, $row, $colWidths);
                     if ($ctx->cursorY - $rowHeight < $ctx->bottomY) {
@@ -4304,25 +4308,27 @@ final class Engine
      *   keyed by column position (accounting for column spans).
      */
     /**
-     * Разделить строку по нижнему краю страницы.
+     * Splits a row along the bottom edge of the page.
      *
-     * Строка таблицы — горизонтальная полоса, и разрыв означает: часть
-     * содержимого каждой ячейки остаётся выше границы, остальное продолжается
-     * на следующей странице. Word так делает по умолчанию («Allow row to break
-     * across pages»), и без этого одна высокая строка оставляла за собой
-     * полупустой лист: в разобранном страховом полисе четвёртая страница несла
-     * 40 слов вместо семисот.
+     * A table row is a horizontal band, and breaking it means part of every
+     * cell's content stays above the boundary while the rest continues on the
+     * next page. Word does this by default ("Allow row to break across pages"),
+     * and without it a single tall row left a half-empty sheet behind: in the
+     * insurance policy we took apart, page four carried 40 words instead of
+     * seven hundred.
      *
-     * Делим по блокам: ячейка — это список абзацев, и граница проходит между
-     * ними. Внутрь абзаца не лезем — строку текста рвать нечем, а
-     * практическая польза уже достигается: в реальных документах высокую
-     * строку делает не один гигантский абзац, а их набор.
+     * The split goes by blocks: a cell is a list of paragraphs, and the
+     * boundary runs between them. Inside a paragraph we do not go — there is
+     * nothing to break a line of text with, and the practical benefit is
+     * already there: in real documents a tall row is made by a set of
+     * paragraphs, not by one gigantic one.
      *
-     * Возвращает `null`, когда делить нечего или незачем:
-     *   - строка-шапка (её повторяют целиком на каждой странице);
-     *   - объединение по вертикали (rowSpan) — разрыв разъехался бы с соседями;
-     *   - в отведённое место не помещается ни один блок ни одной ячейки —
-     *     иначе получился бы бесконечный перенос пустой части.
+     * Returns `null` when there is nothing to split, or no point in splitting:
+     *   - a header row (it is repeated whole on every page);
+     *   - a vertical merge (rowSpan) — the break would drift apart from the
+     *     neighbours;
+     *   - not a single block of a single cell fits the space available —
+     *     otherwise the empty part would be carried over forever.
      *
      * @param  list<float>  $colWidths
      * @return array{0: Row, 1: Row}|null
@@ -4385,13 +4391,13 @@ final class Engine
             $tailCells[] = new Cell($tail, $cell->style, $cell->columnSpan, $cell->rowSpan);
         }
 
-        // Разделять имеет смысл, только если хоть одна ячейка ПРОДОЛЖАЕТСЯ на
-        // следующей странице. Если же каждая целиком легла на одну из сторон,
-        // это не перенос, а разрыв связи: читатель видит строку с пустой
-        // ячейкой, а её содержимое — отдельной строкой на следующей странице.
-        // Так рвалась строка «директива слева, её результат справа»: текст
-        // помещался, картинка нет, и они расходились по разным страницам.
-        // Целую строку перенести в этом случае строго лучше.
+        // Splitting makes sense only when at least one cell CONTINUES onto the
+        // next page. If each of them landed whole on one side or the other, this
+        // is not a carry-over but a severed link: the reader sees a row with an
+        // empty cell, and its content as a separate row on the next page. That
+        // is how the "directive on the left, its result on the right" row broke:
+        // the text fitted, the picture did not, and they ended up on different
+        // pages. Carrying the whole row over is strictly better in that case.
         if (! $anythingFits || ! $anythingLeft || ! $continued) {
             return null;
         }
@@ -4597,14 +4603,16 @@ final class Engine
             $this->renderBlock($block, $sub);
         }
 
-        // Сноска, встреченная в ячейке, до низа полосы пока не доезжает:
-        // у ячейки свой контекст, и собранное в нём уходит вместе с ним.
+        // A footnote met inside a cell does not reach the foot of the page yet:
+        // a cell has a context of its own, and whatever is collected in it goes
+        // away with it.
         //
-        // Проверено и отвергнуто: переносить их в родительский контекст.
-        // Ячейка рендерится не один раз (измерение, разбиение строки между
-        // страницами), и список сносок при каждом проходе рос — на анкете в
-        // семь страниц это съедало полгигабайта и валило рендер. Прежде чем
-        // возвращаться, нужно понять, сколько раз и когда рендерится ячейка.
+        // Tried and rejected: carrying them over into the parent context. A cell
+        // is rendered more than once (measuring, splitting a row between pages),
+        // and the footnote list grew on every pass — on a seven-page
+        // questionnaire that ate half a gigabyte and brought the render down.
+        // Before coming back to this, one has to understand how many times and
+        // when a cell is rendered.
     }
 
     private function effectiveCellStyle(Table $t, Cell $cell): CellStyle
@@ -4784,8 +4792,8 @@ final class Engine
             $block instanceof HorizontalRule => 12.0, // 6 + 0 + 6
             $block instanceof Table => $this->measureTableHeight($block, $contentWidth),
             $block instanceof ListNode => $this->measureListNodeHeight($block, $contentWidth, 0),
-            // Векторный блок места не занимал: строка таблицы с одним знаком
-            // мерилась нулевой высотой, и рисунок вылезал за её пределы.
+            // A vector block used to take no room: a table row holding a single
+            // mark measured as zero height, and the drawing spilled out of it.
             $block instanceof SvgElement => $block->spaceBeforePt + $block->heightPt + $block->spaceAfterPt,
             default => 0,
         };
@@ -4863,8 +4871,9 @@ final class Engine
 
     private function measureImageHeight(Image $img, float $contentWidth): float
     {
-        // Плавающий объект места в потоке не занимает — и в измерении тоже,
-        // иначе ячейка или страница резервировали бы под него высоту.
+        // A floating object takes no room in the flow — and none in the
+        // measurement either, otherwise a cell or a page would reserve height
+        // for it.
         if ($img->outOfFlow) {
             return 0.0;
         }

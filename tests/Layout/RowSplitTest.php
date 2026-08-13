@@ -18,17 +18,17 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Высокая строка таблицы делится между страницами.
+ * A tall table row is split between pages.
  *
- * Без этого одна строка выше оставшегося места уносилась на следующую
- * страницу целиком — и оставляла за собой полупустой лист. В разобранном
- * страховом полисе так получалась страница с 40 словами вместо семисот:
- * длинный блок условий лежал внутри таблицы. Word делит такие строки по
- * умолчанию.
+ * Without that, a row taller than the space left was carried over to the next
+ * page whole — leaving a half-empty sheet behind. That is how the insurance
+ * policy we took apart ended up with a page of 40 words instead of seven
+ * hundred: a long block of terms sat inside a table. Word splits such rows by
+ * default.
  */
 final class RowSplitTest extends TestCase
 {
-    /** Абзацы, которые заведомо не поместятся на одну страницу. */
+    /** Paragraphs that are certain not to fit on a single page. */
     private function tallCell(int $paragraphs): Cell
     {
         $blocks = [];
@@ -74,7 +74,7 @@ final class RowSplitTest extends TestCase
         }
     }
 
-    /** Сырой текст постранично — когда важно, что и где напечаталось.
+    /** The raw text page by page — for when what printed where matters.
      *
      * @return list<string>
      */
@@ -105,32 +105,32 @@ final class RowSplitTest extends TestCase
     {
         $table = new Table([new Row([$this->tallCell(80)])]);
 
-        // Одна строка на 80 абзацев — это заведомо больше страницы.
+        // One row of 80 paragraphs is certain to be more than a page.
         self::assertGreaterThan(1, $this->pagesOf($table));
     }
 
     #[Test]
     public function the_first_page_is_filled_before_the_break(): void
     {
-        // Строка предваряется абзацем: без деления она ушла бы на вторую
-        // страницу целиком, оставив первую почти пустой.
+        // The row is preceded by a paragraph: without splitting it would go to
+        // the second page whole, leaving the first one almost empty.
         $table = new Table([new Row([$this->tallCell(60)])]);
         $counts = $this->textPerPage($table);
 
         self::assertGreaterThan(1, count($counts));
-        // Первая страница должна нести соизмеримое со второй количество слов,
-        // а не десяток: именно это отличает деление от переноса целиком.
+        // The first page has to carry a word count comparable to the second,
+        // not a dozen: that is what tells a split from a whole carry-over.
         self::assertGreaterThan($counts[1] / 2, $counts[0]);
     }
 
     #[Test]
     public function a_row_nobody_continues_moves_whole(): void
     {
-        // Строка «слева директива, справа её результат»: текст в остаток
-        // страницы помещается, картинка — нет. Разделить такую строку значит
-        // развести по разным страницам то, что читается только вместе:
-        // страница закончится строкой с пустой правой ячейкой, а следующая
-        // начнётся строкой с пустой левой. Переносим целиком.
+        // A "directive on the left, its result on the right" row: the text fits
+        // into what is left of the page, the picture does not. Splitting such a
+        // row means putting on different pages what only reads together: the
+        // page would end with a row whose right cell is empty, and the next one
+        // would start with a row whose left cell is. Carry it over whole.
         $filler = [];
         for ($i = 0; $i < 44; $i++) {
             $filler[] = new Paragraph([new Run('Заполнение страницы, абзац номер '.$i.'.')]);
@@ -149,7 +149,7 @@ final class RowSplitTest extends TestCase
 
         $pages = $this->pageTexts(new Section([...$filler, $table]));
 
-        // Директива не должна остаться на странице, где нет её результата.
+        // The directive must not stay on a page that does not hold its result.
         self::assertCount(2, $pages, 'ожидались ровно две страницы');
         self::assertStringNotContainsString('@qr', $pages[0], 'строку разорвало: текст остался без картинки');
         self::assertStringContainsString('@qr', $pages[1]);
@@ -158,12 +158,13 @@ final class RowSplitTest extends TestCase
     #[Test]
     public function a_header_row_does_not_end_a_page_alone(): void
     {
-        // Шапка объясняет колонки: оставшись последней строкой страницы, она
-        // объясняет то, чего на этой странице уже нет, — а на следующей
-        // повторяется заново. Уходит вместе с первой строкой данных.
+        // A header explains the columns: left as the last line of a page it
+        // explains what that page no longer holds — and it repeats on the next
+        // one anyway. It moves together with the first row of data.
         //
-        // Маркеры латиницей: сверяемся с выводом pdftotext, и кириллица здесь
-        // только добавила бы кодировочного шума к проверке раскладки.
+        // The markers are Latin: the check goes against the output of
+        // pdftotext, and Cyrillic here would only add encoding noise to a test
+        // about layout.
         $filler = [];
         for ($i = 0; $i < 47; $i++) {
             $filler[] = new Paragraph([new Run('Filler paragraph number '.$i.'.')]);

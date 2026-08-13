@@ -70,17 +70,17 @@ final class ImageRenderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Можно проверить точное число — but PDF stream coordinates float-
-        // formatted, поэтому ищем substring.
+        // The exact number could be checked, but PDF stream coordinates are
+        // float-formatted, hence the substring search.
         self::assertStringContainsString('200 0 0', $bytes);
     }
 
     #[Test]
     public function image_overflow_triggers_page_break(): void
     {
-        // A4 высота 842pt; margins 56.7 × 2 → contentHeight ≈ 728pt.
-        // Высота image = 700pt; перед ним параграф ~200pt — должен
-        // переместить image на новую страницу.
+        // A4 is 842pt tall; margins 56.7 × 2 → contentHeight ≈ 728pt.
+        // The image is 700pt tall, and the paragraph before it ~200pt — which
+        // has to move the image onto a new page.
         $blocks = [];
         for ($i = 0; $i < 20; $i++) {
             $blocks[] = new Paragraph([new Run("Line $i filler text.")]);
@@ -97,35 +97,35 @@ final class ImageRenderTest extends TestCase
     #[Test]
     public function image_too_wide_scales_down(): void
     {
-        // 1000pt wide на A4 (contentWidth ≈ 481pt) должен scale до contentWidth.
+        // 1000pt wide on A4 (contentWidth ≈ 481pt) has to scale down to contentWidth.
         $doc = new Document(new Section([
             Image::fromPath($this->jpegPath, widthPt: 1000, heightPt: 750),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // 1000 не должно появиться как width в cm (after scaling).
+        // 1000 must not show up as the width in cm (after scaling).
         self::assertStringNotContainsString('1000 0 0 750', $bytes);
-        // Но image XObject зарегистрирован.
+        // But the image XObject is registered.
         self::assertStringContainsString('/Subtype /Image', $bytes);
     }
 
     #[Test]
     public function multiple_images_dedupe_via_pdf_image_resource(): void
     {
-        // Тот же PdfImage instance — один XObject в PDF.
+        // The same PdfImage instance means a single XObject in the PDF.
         $img = \Dskripchenko\PhpPdf\Image\PdfImage::fromPath($this->jpegPath);
         $doc = new Document(new Section([
             new Image($img, widthPt: 50),
             new Image($img, widthPt: 100, alignment: Alignment::End),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // /Subtype /Image должен появиться ровно один раз.
+        // /Subtype /Image has to appear exactly once.
         self::assertSame(1, substr_count($bytes, '/Subtype /Image'));
     }
 
     #[Test]
     public function image_with_spacing_advances_cursor(): void
     {
-        // Smoke: spacing не ломает render.
+        // Smoke: spacing does not break the render.
         $doc = new Document(new Section([
             new Paragraph([new Run('Before')]),
             Image::fromPath($this->jpegPath, widthPt: 100, spaceBeforePt: 20, spaceAfterPt: 20),
@@ -138,10 +138,11 @@ final class ImageRenderTest extends TestCase
     #[Test]
     public function out_of_flow_image_does_not_move_the_text(): void
     {
-        // Word так ставит печати и подписи: объект привязан к абзацу, смещён
-        // относительно точки привязки и лежит поверх текста. Пока он вставал
-        // в поток отдельной строкой, документ раздвигало на его высоту — у
-        // страхового полиса это стоило лишней страницы.
+        // This is how Word places stamps and signatures: the object is anchored
+        // to a paragraph, offset from the anchor point and lying over the text.
+        // While it went into the flow as a line of its own, the document was
+        // pushed apart by its height — which cost the insurance policy an extra
+        // page.
         $withImage = new Document(new Section([
             new Paragraph([new Run('над печатью')]),
             Image::fromPath($this->pngPath, widthPt: 120, heightPt: 90, outOfFlow: true),
@@ -155,9 +156,9 @@ final class ImageRenderTest extends TestCase
         $a = $withImage->toBytes(new Engine(compressStreams: false));
         $b = $withoutImage->toBytes(new Engine(compressStreams: false));
 
-        // Картинка нарисована...
+        // The picture is drawn...
         self::assertStringContainsString('/Subtype /Image', $a);
-        // ...а текст стоит там же, где стоял бы без неё.
+        // ...and the text stands where it would stand without it.
         self::assertSame($this->textPositions($b), $this->textPositions($a));
     }
 
@@ -181,7 +182,7 @@ final class ImageRenderTest extends TestCase
     }
 
     /**
-     * Позиции текстовых операторов — по ним видно, сдвинулся ли текст.
+     * The positions of the text operators — they show whether the text moved.
      *
      * @return list<string>
      */

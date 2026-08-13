@@ -13,23 +13,24 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Соседние руны без пробела не разъезжаются.
+ * Adjacent runs with no space between them do not drift apart.
  *
- * Слова внутри руна режутся на токены, а строка собирается обратно через
- * пробел — на стыке двух рунов это давало пробел, которого в тексте нет.
- * Word режет строку по любой смене начертания, поэтому «(» и «залогодатель»
- * приезжают отдельными рунами, и импортированный документ печатался как
- * «СТРАХОВАТЕЛЬ ( залогодатель )». Найдено сравнением с эталоном в printable.
+ * The words inside a run are cut into tokens, and the line is assembled back
+ * through a space — at the seam of two runs that produced a space which is not
+ * in the text. Word cuts a line at any change of typeface, so «(» and
+ * «залогодатель» arrive as separate runs, and the imported document printed as
+ * «СТРАХОВАТЕЛЬ ( залогодатель )». Found by comparing against the reference in
+ * printable.
  */
 final class AdjacentRunGlueTest extends TestCase
 {
     /**
-     * Правый край последнего слова абзаца.
+     * The right edge of the paragraph's last word.
      *
-     * Сравниваем геометрию, а не извлечённый текст: `pdftotext` сам решает,
-     * ставить ли пробел между глифами по величине зазора, и на встроенном
-     * шрифте эта эвристика срабатывает там, где пробела нет. Ширина строки
-     * такой свободы не имеет.
+     * The comparison is of geometry rather than extracted text: `pdftotext`
+     * decides on its own whether to put a space between glyphs by the size of
+     * the gap, and with an embedded font that heuristic fires where there is no
+     * space. The width of a line has no such freedom.
      */
     private function rightEdgeOf(Paragraph $paragraph): float
     {
@@ -54,8 +55,8 @@ final class AdjacentRunGlueTest extends TestCase
         file_put_contents($path, $pdf);
 
         try {
-            // Позиционирование слов pdftotext раскладывает по строкам как ему
-            // удобно — сравниваем поток без переносов.
+            // pdftotext lays the positioned words out into lines as it sees fit —
+            // compare the stream without the breaks.
             $text = (string) shell_exec('pdftotext '.escapeshellarg($path).' - 2>/dev/null');
 
             return trim((string) preg_replace('/\n+/', ' ', $text));
@@ -67,20 +68,20 @@ final class AdjacentRunGlueTest extends TestCase
     #[Test]
     public function adjacent_runs_without_whitespace_are_not_separated(): void
     {
-        // Латиница нарочно: встроенный шрифт документа без провайдера —
-        // WinAnsi, и кириллица в извлечении превращается в мусор. Логика
-        // склейки от языка не зависит.
+        // Latin on purpose: the font embedded in a document without a provider
+        // is WinAnsi, and Cyrillic turns into junk on extraction. The gluing
+        // logic does not depend on the language.
         $paragraph = new Paragraph([
-            // Начертание у всех рунов одно: сравниваем влияние ИМЕННО
-            // разбиения на руны, а не разницу шрифтов.
+            // Every run has the same typeface: what is compared is the effect of
+            // the SPLIT INTO RUNS, not a difference between fonts.
             new Run('POLICYHOLDER '),
             new Run('('),
             new Run('pledgor'),
             new Run(')'),
         ]);
 
-        // Строка из четырёх рунов обязана занять ровно столько же, сколько тот
-        // же текст одним руном: лишний пробел на стыке сразу удлиняет её.
+        // A line of four runs has to occupy exactly as much as the same text in
+        // a single run: an extra space at a seam lengthens it immediately.
         $split = $this->rightEdgeOf($paragraph);
         $whole = $this->rightEdgeOf(new Paragraph([new Run('POLICYHOLDER (pledgor)')]));
 
@@ -90,8 +91,8 @@ final class AdjacentRunGlueTest extends TestCase
     #[Test]
     public function whitespace_at_a_run_boundary_still_separates(): void
     {
-        // Пробел в конце руна — единственный разделитель, который есть в
-        // тексте: склеивать через него нельзя, иначе слова слипнутся.
+        // A space at the end of a run is the only separator the text actually
+        // has: gluing across it is not allowed, or the words run together.
         $paragraph = new Paragraph([
             new Run('first '),
             new Run('second'),

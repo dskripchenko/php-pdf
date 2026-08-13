@@ -24,7 +24,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function devanagari_long_i_not_pre_base(): void
     {
-        // ी (U+0940) — post-base, не reordered.
+        // ी (U+0940) — post-base, not reordered.
         $out = IndicShaper::shape([0x0915, 0x0940]);
         self::assertSame([0x0915, 0x0940], $out);
     }
@@ -48,8 +48,8 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function conjunct_with_pre_base_matra(): void
     {
-        // क्ति = क + ् + त + ि → ि + क + ् + т
-        // Matra moves к start of conjunct cluster (across halant+consonant).
+        // क्ति = क + ् + त + ि → ि + क + ् + T
+        // Matra moves to the start of the conjunct cluster (across halant+consonant).
         $out = IndicShaper::shape([0x0915, 0x094D, 0x0924, 0x093F]);
         self::assertSame([0x093F, 0x0915, 0x094D, 0x0924], $out);
     }
@@ -59,7 +59,7 @@ final class IndicShaperTest extends TestCase
     {
         // "कि ति" = (क + ि) + space + (त + ि)
         $out = IndicShaper::shape([0x0915, 0x093F, 0x20, 0x0924, 0x093F]);
-        // → (ि + к) + space + (ि + т)
+        // → (ि + K) + space + (ि + T)
         self::assertSame([0x093F, 0x0915, 0x20, 0x093F, 0x0924], $out);
     }
 
@@ -73,7 +73,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function utf8_helper_works(): void
     {
-        // "कि" в UTF-8: 0xE0 0xA4 0x95 0xE0 0xA4 0xBF
+        // "कि" in UTF-8: 0xE0 0xA4 0x95 0xE0 0xA4 0xBF
         $out = IndicShaper::shapeUtf8("\xE0\xA4\x95\xE0\xA4\xBF");
         self::assertSame([0x093F, 0x0915], $out);
     }
@@ -99,7 +99,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function double_conjunct_with_matra(): void
     {
-        // क + ् + त + ् + र + ि → ि + к + ् + т + ् + р
+        // क + ् + त + ् + र + ि → ि + K + ् + T + ् + R
         // Multi-step halant-consonant traversal.
         $out = IndicShaper::shape([0x0915, 0x094D, 0x0924, 0x094D, 0x0930, 0x093F]);
         self::assertSame([0x093F, 0x0915, 0x094D, 0x0924, 0x094D, 0x0930], $out);
@@ -110,7 +110,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function devanagari_reph_simple(): void
     {
-        // र + ् + क → к + र + ्   (reph candidate moved к end of syllable)
+        // र + ् + क → K + र + ्   (reph candidate moved to the end of the syllable)
         $out = IndicShaper::shape([0x0930, 0x094D, 0x0915]);
         self::assertSame([0x0915, 0x0930, 0x094D], $out);
     }
@@ -118,9 +118,9 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function devanagari_reph_with_pre_base_matra(): void
     {
-        // "र्कि" = р + ् + к + ि
-        // Reph reorder: [к, ि, р, ्]
-        // Pre-base matra reorder: [ि, к, р, ्]
+        // "र्कि" = R + ् + K + ि
+        // Reph reorder: [K, ि, R, ्]
+        // Pre-base matra reorder: [ि, K, R, ्]
         $out = IndicShaper::shape([0x0930, 0x094D, 0x0915, 0x093F]);
         self::assertSame([0x093F, 0x0915, 0x0930, 0x094D], $out);
     }
@@ -128,8 +128,8 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function devanagari_reph_with_post_base_matra(): void
     {
-        // "र्का" = р + ् + к + ा (post-base matra 0x093E)
-        // Reph reorder: [к, ा, р, ्]
+        // "र्का" = R + ् + K + ा (post-base matra 0x093E)
+        // Reph reorder: [K, ा, R, ्]
         $out = IndicShaper::shape([0x0930, 0x094D, 0x0915, 0x093E]);
         self::assertSame([0x0915, 0x093E, 0x0930, 0x094D], $out);
     }
@@ -137,9 +137,9 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function devanagari_reph_with_conjunct(): void
     {
-        // "र्क्ति" = р + ् + к + ् + т + ि
-        // Reph reorder: [к, ्, т, ि, р, ्]
-        // Pre-base matra reorder: [ि, к, ्, т, р, ्]
+        // "र्क्ति" = R + ् + K + ् + T + ि
+        // Reph reorder: [K, ्, T, ि, R, ्]
+        // Pre-base matra reorder: [ि, K, ्, T, R, ्]
         $out = IndicShaper::shape([0x0930, 0x094D, 0x0915, 0x094D, 0x0924, 0x093F]);
         self::assertSame([0x093F, 0x0915, 0x094D, 0x0924, 0x0930, 0x094D], $out);
     }
@@ -147,8 +147,8 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function devanagari_reph_with_anusvara(): void
     {
-        // "र्कं" = р + ् + к + anusvara (U+0902)
-        // Reph reorder: [к, anusvara, р, ्]
+        // "र्कं" = R + ् + K + anusvara (U+0902)
+        // Reph reorder: [K, anusvara, R, ्]
         $out = IndicShaper::shape([0x0930, 0x094D, 0x0915, 0x0902]);
         self::assertSame([0x0915, 0x0902, 0x0930, 0x094D], $out);
     }
@@ -156,7 +156,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function ra_without_halant_not_reph(): void
     {
-        // р + к — no halant between, not reph candidate.
+        // R + K — no halant between, not reph candidate.
         $out = IndicShaper::shape([0x0930, 0x0915]);
         self::assertSame([0x0930, 0x0915], $out);
     }
@@ -164,7 +164,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function ra_halant_at_end_not_reph(): void
     {
-        // р + ् without following consonant — incomplete, not reph.
+        // R + ् without following consonant — incomplete, not reph.
         $out = IndicShaper::shape([0x0930, 0x094D]);
         self::assertSame([0x0930, 0x094D], $out);
     }
@@ -172,7 +172,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function ra_halant_followed_by_non_consonant_not_reph(): void
     {
-        // р + ् + ा (matra, not consonant) — not RA+H+C pattern.
+        // R + ् + ा (matra, not consonant) — not RA+H+C pattern.
         $out = IndicShaper::shape([0x0930, 0x094D, 0x093E]);
         self::assertSame([0x0930, 0x094D, 0x093E], $out);
     }
@@ -180,7 +180,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function bengali_reph(): void
     {
-        // Bengali "র্ক" = р(0x09B0) + ্(0x09CD) + к(0x0995)
+        // Bengali "র্ক" = R(0x09B0) + ্(0x09CD) + K(0x0995)
         $out = IndicShaper::shape([0x09B0, 0x09CD, 0x0995]);
         self::assertSame([0x0995, 0x09B0, 0x09CD], $out);
     }
@@ -188,7 +188,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function gujarati_reph(): void
     {
-        // Gujarati ર (0x0AB0) + ્ (0x0ACD) + к (0x0A95)
+        // Gujarati ર (0x0AB0) + ્ (0x0ACD) + K (0x0A95)
         $out = IndicShaper::shape([0x0AB0, 0x0ACD, 0x0A95]);
         self::assertSame([0x0A95, 0x0AB0, 0x0ACD], $out);
     }
@@ -196,8 +196,8 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function reph_in_middle_of_word(): void
     {
-        // "к + р + ् + т" — К consonant starts syllable 1; R+H+T at i=1
-        // forms reph syllable. Output: [к, т, р, ्]
+        // "K + R + ् + T" — K consonant starts syllable 1; R+H+T at i=1
+        // forms reph syllable. Output: [K, T, R, ्]
         $out = IndicShaper::shape([0x0915, 0x0930, 0x094D, 0x0924]);
         self::assertSame([0x0915, 0x0924, 0x0930, 0x094D], $out);
     }
@@ -205,7 +205,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function two_reph_syllables_in_sentence(): void
     {
-        // "र्क р्т" = (р+्+к) space (р+्+т)
+        // "र्क R्T" = (R+्+K) space (R+्+T)
         $out = IndicShaper::shape([0x0930, 0x094D, 0x0915, 0x20, 0x0930, 0x094D, 0x0924]);
         self::assertSame([0x0915, 0x0930, 0x094D, 0x20, 0x0924, 0x0930, 0x094D], $out);
     }
@@ -317,7 +317,7 @@ final class IndicShaperTest extends TestCase
         // Decompose: [0x09B0, 0x09CD, 0x0995, 0x09C7, 0x09BE]
         // Reph reorder (RA+halant+K + matras → K matras RA halant):
         //   [0x0995, 0x09C7, 0x09BE, 0x09B0, 0x09CD]
-        // Pre-base matra reorder (0x09C7 moves before к):
+        // Pre-base matra reorder (0x09C7 moves before K):
         //   [0x09C7, 0x0995, 0x09BE, 0x09B0, 0x09CD]
         $out = IndicShaper::shape([0x09B0, 0x09CD, 0x0995, 0x09CB]);
         self::assertSame([0x09C7, 0x0995, 0x09BE, 0x09B0, 0x09CD], $out);
@@ -344,7 +344,7 @@ final class IndicShaperTest extends TestCase
     #[Test]
     public function decompose_idempotent_when_no_two_part_matras(): void
     {
-        // All-Devanagari sequence без two-part matras — unchanged by decomp step.
+        // All-Devanagari sequence without two-part matras — unchanged by decomp step.
         $cps = [0x0915, 0x094D, 0x0924, 0x093F];
         $out = IndicShaper::shape($cps);
         // Devanagari has no two-part matras; only pre-base matra reorder applies.
