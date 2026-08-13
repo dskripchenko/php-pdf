@@ -26,9 +26,9 @@ final class FootnoteTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Phase 158: endnote text batched в один Tj (consecutive same-style runs).
-        // Может появиться как "(1. First footnote text) Tj" целиком или с
-        // частичными группировками — проверяем наличие ключевых слов.
+        // Phase 158: the endnote text is batched into a single Tj (consecutive
+        // same-style runs). It may appear as "(1. First footnote text) Tj" whole
+        // or in partial groupings — hence the check for the key words.
         self::assertStringContainsString('1.', $bytes);
         self::assertStringContainsString('First', $bytes);
         self::assertStringContainsString('footnote', $bytes);
@@ -48,11 +48,11 @@ final class FootnoteTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Phase 158: endnotes batched — '1.' и '2.' встречаются (могут быть
-        // частью большего Tj-string). Marker '1' / '2' появляются в body.
+        // Phase 158: the endnotes are batched — '1.' and '2.' occur (possibly as
+        // part of a larger Tj string). The markers '1' / '2' appear in the body.
         self::assertStringContainsString('1.', $bytes);
         self::assertStringContainsString('2.', $bytes);
-        // Numbering positions: 2× '(1' (marker + endnote start) и 2× '(2'.
+        // Numbering positions: 2× '(1' (marker + endnote start) and 2× '(2'.
         self::assertGreaterThanOrEqual(2, substr_count($bytes, '(1'));
         self::assertGreaterThanOrEqual(2, substr_count($bytes, '(2'));
     }
@@ -60,14 +60,14 @@ final class FootnoteTest extends TestCase
     #[Test]
     public function no_footnote_no_separator(): void
     {
-        // Без footnote не должно быть endnote block + separator rect.
+        // Without a footnote there must be no endnote block and no separator rect.
         $doc = new Document(new Section([
             new Paragraph([new Run('Plain text')]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Plain rectangles count — без footnote ноль (или мало, если другие
-        // features использовали fillRect). Должен быть < 2.
+        // The count of plain rectangles — zero without a footnote (or few, if
+        // other features used fillRect). It has to be < 2.
         $rects = preg_match_all('@\bf\b@m', $bytes);
         self::assertLessThanOrEqual(1, $rects);
     }
@@ -75,7 +75,7 @@ final class FootnoteTest extends TestCase
     #[Test]
     public function footnote_inline_marker_in_text_flow(): void
     {
-        // Marker = "1" — superscript ASCII number, появляется в body Tj.
+        // The marker is "1" — a superscript ASCII number appearing in the body Tj.
         $doc = new Document(new Section([
             new Paragraph([
                 new Run('Preceding'),
@@ -87,15 +87,15 @@ final class FootnoteTest extends TestCase
 
         self::assertStringContainsString('(Preceding) Tj', $bytes);
         self::assertStringContainsString('(Following) Tj', $bytes);
-        // Marker присутствует.
+        // The marker is there.
         self::assertStringContainsString('(1) Tj', $bytes);
     }
 
     #[Test]
     public function footnotes_isolated_per_section(): void
     {
-        // Multi-section: каждая section получает свои own endnotes,
-        // numbering re-starts с 1.
+        // Multi-section: every section gets endnotes of its own, and the
+        // numbering restarts from 1.
         $sec1 = new Section([
             new Paragraph([new Run('S1'), new Footnote('NoteS1')]),
         ]);
@@ -105,8 +105,9 @@ final class FootnoteTest extends TestCase
         $doc = new Document($sec1, additionalSections: [$sec2]);
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Phase 158: оба footnotes show "1." (numbered fresh per section).
-        // С batching '1.' может быть частью большего Tj — count '1.' occurrences.
+        // Phase 158: both footnotes show "1." (numbered afresh per section).
+        // With batching '1.' can be part of a larger Tj — count the occurrences
+        // of '1.'.
         $count = substr_count($bytes, '1.');
         self::assertGreaterThanOrEqual(2, $count, 'оба section должны иметь endnote "1."');
     }
@@ -119,7 +120,7 @@ final class FootnoteTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Endnote separator: тонкий rect 0.5pt height. Должен быть в bytes.
+        // The endnote separator: a thin rect 0.5pt high. It has to be in the bytes.
         self::assertMatchesRegularExpression('@\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+0\.5\s+re@', $bytes);
     }
 }

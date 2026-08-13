@@ -9,19 +9,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Запоминание разобранных шрифтов.
+ * Remembering the parsed fonts.
  *
- * Разбор шрифта — чтение файла целиком плюс таблицы cmap/hmtx/name/post, а по
- * требованию GPOS. В долгоживущем процессе (воркер очереди) он повторялся на
- * каждый документ: замер в приложении-потребителе показал 6.3 мс из 14.6 мс
- * на лёгком документе.
+ * Parsing a font means reading the whole file plus the cmap/hmtx/name/post
+ * tables, and GPOS on demand. In a long-lived process (a queue worker) it was
+ * repeated for every document: a measurement in the consuming application
+ * showed 6.3 ms out of 14.6 ms on a light document.
  */
 final class TtfFileCacheTest extends TestCase
 {
     private function fontPath(): string
     {
-        // Тот же источник, что и у остальных шрифтовых тестов: набор
-        // Liberation подтягивается в .cache перед прогоном.
+        // The same source as in the other font tests: the Liberation set is
+        // pulled into .cache before the run.
         $path = __DIR__.'/../../../.cache/fonts/liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf';
 
         if (! is_file($path)) {
@@ -63,8 +63,8 @@ final class TtfFileCacheTest extends TestCase
     #[Test]
     public function cache_does_not_grow_without_bound(): void
     {
-        // Долгоживущий процесс обслуживает много клиентов, у каждого свои
-        // наборы шрифтов — без предела кэш рос бы вместе с их числом.
+        // A long-lived process serves many clients, each with font sets of its
+        // own — without a limit the cache would grow along with their number.
         $original = $this->fontPath();
         $limit = TtfFile::$cacheLimit;
         $copies = [];
@@ -76,7 +76,7 @@ final class TtfFileCacheTest extends TestCase
             TtfFile::fromFile($copy);
         }
 
-        // Первый обязан вытесниться, последний — остаться.
+        // The first one has to be evicted, the last one to stay.
         $first = TtfFile::fromFile($copies[0]);
         self::assertSame($first, TtfFile::fromFile($copies[0]));
 
@@ -88,8 +88,9 @@ final class TtfFileCacheTest extends TestCase
     #[Test]
     public function replaced_file_is_parsed_again(): void
     {
-        // Ключ включает время изменения и размер: подменённый файл не должен
-        // отдаваться из памяти, иначе обновление шрифта не доедет до процесса.
+        // The key includes the modification time and the size: a replaced file
+        // must not be served from memory, or a font update would never reach the
+        // process.
         $original = $this->fontPath();
         $copy = sys_get_temp_dir().'/php-pdf-cache-'.getmypid().'.ttf';
         copy($original, $copy);

@@ -35,26 +35,26 @@ final class EncryptionTest extends TestCase
         $pdf->encrypt('test-password');
         $bytes = $pdf->toBytes();
 
-        // Trailer должен ссылаться на /Encrypt object.
+        // The trailer has to reference the /Encrypt object.
         self::assertMatchesRegularExpression('@/Encrypt\s+\d+\s+0\s+R@', $bytes);
-        // Encrypt dict содержит V=2 R=3 Length=128.
+        // The Encrypt dict holds V=2 R=3 Length=128.
         self::assertStringContainsString('/V 2', $bytes);
         self::assertStringContainsString('/R 3', $bytes);
         self::assertStringContainsString('/Length 128', $bytes);
-        // /ID array присутствует.
+        // The /ID array is present.
         self::assertMatchesRegularExpression('@/ID \[<[a-f0-9]{32}> <[a-f0-9]{32}>\]@', $bytes);
     }
 
     #[Test]
     public function encryption_changes_stream_content(): void
     {
-        // Сравним bytes encrypted vs non-encrypted.
+        // Compare the bytes of the encrypted and the plain versions.
         $ast = new AstDocument(new Section([
             new Paragraph([new Run('Hello secret world')]),
         ]));
         $plain = $ast->toBytes();
 
-        // Render again и encrypt.
+        // Render again and encrypt.
         $ast2 = new AstDocument(new Section([
             new Paragraph([new Run('Hello secret world')]),
         ]));
@@ -71,13 +71,13 @@ final class EncryptionTest extends TestCase
         $pdf2->encrypt('password');
         $encrypted = $pdf2->toBytes();
 
-        // Encrypted version должен содержать /Encrypt.
+        // The encrypted version has to contain /Encrypt.
         self::assertStringContainsString('/Encrypt', $encrypted);
-        // Plain text НЕ должен встречаться в encrypted в clear.
+        // The plain text must NOT occur in the encrypted one in the clear.
         self::assertStringContainsString('Hello secret world', $clear);
         self::assertStringNotContainsString('Hello secret world', $encrypted);
 
-        // Markers: clear не имеет /Encrypt.
+        // Markers: the clear one has no /Encrypt.
         self::assertStringNotContainsString('/Encrypt', $clear);
     }
 
@@ -107,7 +107,7 @@ final class EncryptionTest extends TestCase
     {
         $a = new Encryption('user-pw');
         $b = new Encryption('user-pw', ownerPassword: 'owner-pw');
-        // O-values отличаются — different owner derivation.
+        // The O values differ — a different owner derivation.
         self::assertNotSame($a->oValue, $b->oValue);
     }
 
@@ -116,7 +116,7 @@ final class EncryptionTest extends TestCase
     {
         $a = new Encryption('pw');
         $b = new Encryption('pw');
-        // Same password но different fileIds → different keys.
+        // The same password but different fileIds → different keys.
         self::assertNotSame($a->fileId, $b->fileId);
     }
 

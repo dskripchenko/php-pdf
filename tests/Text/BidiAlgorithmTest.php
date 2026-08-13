@@ -73,14 +73,14 @@ final class BidiAlgorithmTest extends TestCase
     public function digits_in_arabic_keep_order(): void
     {
         // "كتاب 123 صفحة" — book 123 pages
-        // Bidi: digits в RTL paragraph stay в logical order (don't reverse).
+        // Bidi: digits in an RTL paragraph stay in logical order (they do not reverse).
         $cps = array_merge(
             [0x0643, 0x062A, 0x0627, 0x0628, 0x20],   // كتاب + space
             [0x31, 0x32, 0x33, 0x20],                  // 123 + space
             [0x0635, 0x0641, 0x062D, 0x0629],          // صفحة
         );
         $out = BidiAlgorithm::reorderCodepoints($cps);
-        // Verify 123 appears в same order (digits don't reverse).
+        // Verify 123 appears in the same order (digits do not reverse).
         $positions = [];
         foreach ($out as $i => $cp) {
             if ($cp === 0x31) {
@@ -102,14 +102,14 @@ final class BidiAlgorithmTest extends TestCase
     public function rtl_paragraph_first_strong_arabic(): void
     {
         // "أهلا hello" — RTL paragraph (first strong is Arabic AL).
-        // Result visually: English appears на LEFT, Arabic на RIGHT.
-        // Output codepoints (left-to-right в PDF): "hello " + reverse("أهلا")
+        // Visually: the English appears on the LEFT, the Arabic on the RIGHT.
+        // Output codepoints (left to right in the PDF): "hello " + reverse("أهلا")
         $cps = array_merge(
             [0x0623, 0x0647, 0x0644, 0x0627],  // أهلا
             [0x20, 0x68, 0x65, 0x6C, 0x6C, 0x6F],  // " hello"
         );
         $out = BidiAlgorithm::reorderCodepoints($cps);
-        // First chars в output should be Latin (positioned LEFT visually).
+        // The first chars of the output should be Latin (positioned LEFT visually).
         self::assertSame(0x68, $out[0]); // 'h'
         self::assertSame(0x65, $out[1]); // 'e'
     }
@@ -146,8 +146,8 @@ final class BidiAlgorithmTest extends TestCase
     #[Test]
     public function neutrals_take_paragraph_direction_when_unmatched(): void
     {
-        // "Hello!" — final '!' is ON (neutral). Should resolve к paragraph
-        // direction (LTR). Output unchanged.
+        // "Hello!" — the final '!' is ON (neutral). It should resolve to the
+        // paragraph direction (LTR). The output is unchanged.
         $out = BidiAlgorithm::reorder('Hello!');
         self::assertSame('Hello!', $this->toUtf8($out));
     }
@@ -171,7 +171,7 @@ final class BidiAlgorithmTest extends TestCase
         // LRI/RLI/FSI/PDI preserved as ON-class chars per UAX 9.
         $cps = [0x41, 0x2066, 0x42, 0x2069, 0x43];
         $out = BidiAlgorithm::reorderCodepoints($cps);
-        // Isolates kept в output.
+        // The isolates are kept in the output.
         self::assertContains(0x41, $out);
         self::assertContains(0x42, $out);
         self::assertContains(0x43, $out);
@@ -182,7 +182,7 @@ final class BidiAlgorithmTest extends TestCase
     #[Test]
     public function l3_mirroring_parens_in_rtl(): void
     {
-        // Hebrew "א(ב)" — paren в RTL context should mirror.
+        // Hebrew "א(ב)" — the parens in an RTL context should mirror.
         // Logical: א + ( + ב + )
         // After L2 reverse: ) ב ( א
         // After L3 mirror: ( ב ) א
@@ -236,11 +236,12 @@ final class BidiAlgorithmTest extends TestCase
     public function lre_forces_ltr_embedding(): void
     {
         // LRE (0x202A) + Hebrew "א" + "ב" + PDF — forces LTR within RTL paragraph.
-        // С LTR paragraph default + LRE: keep order.
+        // With the LTR paragraph default plus LRE: the order is kept.
         $cps = [0x202A, 0x05D0, 0x05D1, 0x202C];
         $out = BidiAlgorithm::reorderCodepoints($cps, 0);
-        // Hebrew chars within LRE embedding still RTL within their level —
-        // но LRE adds 2 к base level, so they're at level 3 (odd, RTL).
+        // The Hebrew chars within the LRE embedding are still RTL within their
+        // level — but LRE adds 2 to the base level, so they are at level 3 (odd,
+        // RTL).
         // L2 reverses at highest level → [ב, א].
         self::assertSame([0x05D1, 0x05D0], $out);
     }
@@ -248,7 +249,7 @@ final class BidiAlgorithmTest extends TestCase
     #[Test]
     public function rlo_overrides_strong_types_к_rtl(): void
     {
-        // RLO (0x202E) + "ABC" + PDF — override forces ALL chars в RTL,
+        // RLO (0x202E) + "ABC" + PDF — the override forces ALL chars into RTL,
         // even Latin letters. L2 reverses → "CBA".
         $cps = [0x202E, 0x41, 0x42, 0x43, 0x202C];
         $out = BidiAlgorithm::reorderCodepoints($cps);
@@ -278,10 +279,10 @@ final class BidiAlgorithmTest extends TestCase
     public function nested_embeddings(): void
     {
         // RLE + "A" + RLE + "B" + PDF + "C" + PDF — nested embeddings.
-        // All в RTL embedding levels.
+        // All of them at RTL embedding levels.
         $cps = [0x202B, 0x41, 0x202B, 0x42, 0x202C, 0x43, 0x202C];
         $out = BidiAlgorithm::reorderCodepoints($cps);
-        // Each level reverses; deeply nested results в complex но deterministic order.
+        // Each level reverses; deep nesting results in a complex but deterministic order.
         self::assertContains(0x41, $out);
         self::assertContains(0x42, $out);
         self::assertContains(0x43, $out);
@@ -291,10 +292,10 @@ final class BidiAlgorithmTest extends TestCase
     #[Test]
     public function rli_pdi_isolate_pair(): void
     {
-        // RLI (0x2067) + "AB" + PDI (0x2069) — isolate в RTL direction.
+        // RLI (0x2067) + "AB" + PDI (0x2069) — an isolate in the RTL direction.
         $cps = [0x41, 0x2067, 0x42, 0x43, 0x2069, 0x44];
         $out = BidiAlgorithm::reorderCodepoints($cps);
-        // RLI/PDI preserved в output; "BC" within isolate reversed.
+        // RLI/PDI are preserved in the output; the "BC" within the isolate is reversed.
         self::assertCount(6, $out);
         self::assertContains(0x41, $out);
         self::assertContains(0x44, $out);

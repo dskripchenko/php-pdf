@@ -31,9 +31,9 @@ final class WatermarkImageTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Image XObject должен быть зарегистрирован.
+        // The image XObject has to be registered.
         self::assertStringContainsString('/Subtype /Image', $bytes);
-        // Do operator вызывается → image отрисован.
+        // The Do operator is invoked → the image is drawn.
         self::assertMatchesRegularExpression('@/Im\d+\s+Do@', $bytes);
     }
 
@@ -42,7 +42,7 @@ final class WatermarkImageTest extends TestCase
     {
         $img = PdfImage::fromPath($this->pngPath);
         $body = [];
-        // 3 page breaks → 4 страницы.
+        // 3 page breaks → 4 pages.
         for ($i = 0; $i < 4; $i++) {
             $body[] = new Paragraph([new Run("Page $i")]);
             if ($i < 3) {
@@ -55,9 +55,9 @@ final class WatermarkImageTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Один Image XObject (dedup); используется на каждой странице.
+        // A single image XObject (deduplicated), used on every page.
         self::assertSame(1, substr_count($bytes, '/Subtype /Image'));
-        // Do operators ≥ 4 (по одному на каждую page).
+        // Do operators ≥ 4 (one per page).
         $doCount = preg_match_all('@/Im\d+\s+Do@', $bytes);
         self::assertGreaterThanOrEqual(4, $doCount);
     }
@@ -84,8 +84,8 @@ final class WatermarkImageTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Image XObject + rotated text matrix (text watermark) — оба
-        // отрисованы на странице.
+        // An image XObject plus a rotated text matrix (the text watermark) —
+        // both are drawn on the page.
         self::assertStringContainsString('/Subtype /Image', $bytes);
         self::assertStringContainsString('(DRAFT)', $bytes);
     }
@@ -135,9 +135,9 @@ final class WatermarkImageTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // PDF image draw operator: `<w> 0 0 <h> <x> <y> cm`. ContentStream
-        // удаляет trailing .0 для integers → используем integer-aware regex.
-        // h=150 для 40x30 image при w=200.
+        // The PDF image draw operator: `<w> 0 0 <h> <x> <y> cm`. ContentStream
+        // drops the trailing .0 of integers, hence the integer-aware regex.
+        // h=150 for a 40x30 image at w=200.
         self::assertEqualsWithDelta(150.0, $h, 0.01);
         self::assertMatchesRegularExpression(
             '@\b200\s+0\s+0\s+150(?:\.|\s)@',

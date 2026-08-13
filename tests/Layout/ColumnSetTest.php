@@ -40,15 +40,14 @@ final class ColumnSetTest extends TestCase
         $doc = new Document(new Section([$cs]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Smoke: AAA рендерится.
+        // Smoke: AAA renders.
         self::assertStringContainsString('(AAA) Tj', $bytes);
     }
 
     #[Test]
     public function column_overflow_advances_to_next_column(): void
     {
-        // Заполняем column 0 множеством параграфов, чтобы потребовался
-        // column break.
+        // Fill column 0 with enough paragraphs to require a column break.
         $blocks = [];
         for ($i = 0; $i < 80; $i++) {
             $blocks[] = new Paragraph([new Run("Line$i")]);
@@ -57,11 +56,12 @@ final class ColumnSetTest extends TestCase
         $doc = new Document(new Section([$cs]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Должна остаться одна page (overflow → column 1, не page break).
-        // Если каждый Line = ~13pt, 80 lines = ~1040pt. A4 height ~842pt;
-        // 2 columns × ~700pt content = ~1400pt total. Должно влезть на 1 page.
+        // There has to be a single page left (the overflow goes to column 1, not
+        // to a page break). With each line at ~13pt, 80 lines are ~1040pt. A4 is
+        // ~842pt tall; 2 columns × ~700pt of content = ~1400pt in total. It has
+        // to fit on 1 page.
         self::assertSame(1, substr_count($bytes, '/Type /Page '));
-        // Все строки выведены.
+        // Every line was emitted.
         self::assertStringContainsString('(Line0) Tj', $bytes);
         self::assertStringContainsString('(Line79) Tj', $bytes);
     }
@@ -69,7 +69,7 @@ final class ColumnSetTest extends TestCase
     #[Test]
     public function column_overflow_then_page_break(): void
     {
-        // Заполняем достаточно чтобы исчерпать обе columns и нужен page break.
+        // Fill enough to exhaust both columns and require a page break.
         $blocks = [];
         for ($i = 0; $i < 200; $i++) {
             $blocks[] = new Paragraph([new Run("L$i")]);
@@ -78,8 +78,8 @@ final class ColumnSetTest extends TestCase
         $doc = new Document(new Section([$cs]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // 200 lines × 13pt = 2600pt total; 2 columns × ~700pt = 1400pt per page →
-        // нужно как минимум 2 pages.
+        // 200 lines × 13pt = 2600pt in total; 2 columns × ~700pt = 1400pt per
+        // page → at least 2 pages are needed.
         self::assertGreaterThanOrEqual(2, substr_count($bytes, '/Type /Page '));
         self::assertStringContainsString('(L0) Tj', $bytes);
         self::assertStringContainsString('(L199) Tj', $bytes);
@@ -96,7 +96,7 @@ final class ColumnSetTest extends TestCase
         $doc = new Document(new Section([$cs]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Smoke: 3 columns layout renders без exception.
+        // Smoke: a 3-column layout renders without an exception.
         self::assertStringContainsString('(X0) Tj', $bytes);
         self::assertStringContainsString('(X29) Tj', $bytes);
     }
@@ -104,8 +104,8 @@ final class ColumnSetTest extends TestCase
     #[Test]
     public function columns_followed_by_regular_paragraph(): void
     {
-        // После ColumnSet — обычный single-column параграф. Layout state
-        // должен restore'нуться.
+        // After the ColumnSet comes an ordinary single-column paragraph. The
+        // layout state has to be restored.
         $cs = new ColumnSet(
             body: [new Paragraph([new Run('ColText')])],
             columnCount: 2,

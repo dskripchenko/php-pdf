@@ -30,8 +30,8 @@ final class QrEccLevelTest extends TestCase
     #[Test]
     public function level_h_picks_higher_version_for_same_data(): void
     {
-        // Lowercase forces byte mode. V1 ECC L byte cap = 17,
-        // V1 ECC H = 7. 12-byte input → V1 для L, V2+ для H.
+        // Lowercase forces byte mode. The V1 ECC L byte cap is 17, V1 ECC H is
+        // 7. A 12-byte input gives V1 for L and V2+ for H.
         $payload = 'hello world!';
         $l = new QrEncoder($payload, QrEccLevel::L);
         $h = new QrEncoder($payload, QrEccLevel::H);
@@ -59,14 +59,14 @@ final class QrEccLevelTest extends TestCase
     #[Test]
     public function v5_plus_ecc_m_q_h_now_supported(): void
     {
-        // Phase 146: V5+ M/Q/H теперь работают (mixed-block support).
-        // Use lowercase (byte mode) к escape alphanumeric optimization.
+        // Phase 146: V5+ M/Q/H work now (mixed-block support). Lowercase (byte
+        // mode) is used to escape the alphanumeric optimization.
         $payload = str_repeat('a', 80); // 80 bytes — needs ≥V5 M.
         $enc = new QrEncoder($payload, QrEccLevel::M);
         self::assertSame(QrEccLevel::M, $enc->eccLevel);
         self::assertGreaterThanOrEqual(5, $enc->version);
 
-        // Verify Q и H also work на mixed-block versions.
+        // Verify that Q and H also work on the mixed-block versions.
         $payloadQ = str_repeat('a', 50);
         $encQ = new QrEncoder($payloadQ, QrEccLevel::Q);
         self::assertSame(QrEccLevel::Q, $encQ->eccLevel);
@@ -92,21 +92,21 @@ final class QrEccLevelTest extends TestCase
         $l = new QrEncoder($data, QrEccLevel::L);
         $m = new QrEncoder($data, QrEccLevel::M);
 
-        // Format info bits отличаются → разные матрицы (даже если version одинаков).
+        // The format info bits differ → different matrices (even at the same version).
         self::assertNotEquals($l->modules(), $m->modules());
     }
 
     #[Test]
     public function format_bits_encoded_in_matrix(): void
     {
-        // Format bits для L=01000, M=00000 (mask=000).
-        // Самые младшие 2 bits данных = ECC level.
-        // Position (0, 8) — bit 0 (low) format bit;
-        // Position (1, 8) — bit 1.
+        // The format bits are L=01000, M=00000 (mask=000).
+        // The lowest 2 data bits are the ECC level.
+        // Position (0, 8) is format bit 0 (the low one);
+        // position (1, 8) is bit 1.
         $l = new QrEncoder('x', QrEccLevel::L);
         $m = new QrEncoder('x', QrEccLevel::M);
 
-        // L != M в format positions около TL finder.
+        // L != M in the format positions near the TL finder.
         $different = false;
         for ($i = 0; $i < 9; $i++) {
             if ($l->module($i, 8) !== $m->module($i, 8)) {

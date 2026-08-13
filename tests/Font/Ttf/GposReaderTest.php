@@ -27,7 +27,7 @@ final class GposReaderTest extends TestCase
         $kt = $this->sansTtf->kerningTable();
         self::assertNotNull($kt);
         self::assertFalse($kt->isEmpty());
-        // Liberation Sans 2.1.5 имеет 2015 kerning pairs (через class-based GPOS).
+        // Liberation Sans 2.1.5 has 2015 kerning pairs (through class-based GPOS).
         self::assertGreaterThan(1500, $kt->pairCount());
     }
 
@@ -48,7 +48,7 @@ final class GposReaderTest extends TestCase
         self::assertLessThan(0, $to, 'To should be tighter');
         self::assertLessThan(0, $va, 'VA should be tighter');
 
-        // To kerning is famously tight в most fonts.
+        // To kerning is famously tight in most fonts.
         self::assertLessThan($av, $to, 'To should be tighter than AV');
     }
 
@@ -67,10 +67,10 @@ final class GposReaderTest extends TestCase
     #[Test]
     public function font_without_gpos_returns_null_kerning(): void
     {
-        // Test против synthetic font без GPOS — для этого нам нужен или
-        // mock или просто конкретный TTF без GPOS. mpdf-серии fonts'ы
-        // обычно имеют GPOS. Lib Liberation Mono — точно имеет.
-        // Просто проверим что кэширование работает идемпотентно.
+        // Testing against a synthetic font without GPOS would need either a mock
+        // or a particular TTF that has none. The mpdf-series fonts usually have
+        // GPOS, and Liberation Mono certainly does. So just check that the
+        // caching is idempotent.
         $kt1 = $this->sansTtf->kerningTable();
         $kt2 = $this->sansTtf->kerningTable();
         self::assertSame($kt1, $kt2, 'Kerning table caching должен возвращать ту же instance');
@@ -82,15 +82,15 @@ final class GposReaderTest extends TestCase
         $kt = $this->sansTtf->kerningTable();
         self::assertNotNull($kt);
 
-        // Cyrillic pairs through GPOS. Liberation Sans имеет kerning для
-        // некоторых cyr-pairs. Например, А (U+0410) с другими буквами.
+        // Cyrillic pairs through GPOS. Liberation Sans has kerning for some
+        // Cyrillic pairs — А (U+0410) with other letters, for instance.
         $aRus = $this->sansTtf->glyphIdForChar(0x0410); // А
         $vRus = $this->sansTtf->glyphIdForChar(0x0412); // В
 
-        // Сам факт что glyphs резолвятся (не 0) — sanity check.
+        // That the glyphs resolve at all (not to 0) is the sanity check.
         self::assertGreaterThan(0, $aRus);
         self::assertGreaterThan(0, $vRus);
-        // Pair-adjustment может быть 0 или non-zero — не делаем строгий
-        // assert (depends on font config).
+        // The pair adjustment can be zero or not — no strict assertion here (it
+        // depends on the font configuration).
     }
 }

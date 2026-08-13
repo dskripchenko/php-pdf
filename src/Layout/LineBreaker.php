@@ -63,15 +63,15 @@ final class LineBreaker
     /**
      * @return list<string>
      */
-    // Проверено и отвергнуто: исключить неразрывный пробел из разделителей
-    // слов (`/[^\S\x{00A0}]+/u`), чтобы на нём не переносили и он не
-    // схлопывался. Типографически это верно, но на корпусе сходства правка
-    // отняла постраничное совпадение сразу у двух документов (ипотечная
-    // выписка 7→8, шаблон 5→6) и просадила раскладку у трёх из пяти: в
-    // реальных файлах Word неразрывных пробелов десятки, и слипшиеся в
-    // неразрывные единицы слова ломают набор сильнее, чем помогает
-    // сохранённый отступ. Возвращаться сюда — только вместе с разбором,
-    // почему Word теми же местами набирает плотнее.
+    // Tried and rejected: excluding the non-breaking space from the word
+    // separators (`/[^\S\x{00A0}]+/u`), so that no line breaks there and it does
+    // not collapse. Typographically that is right, but on the similarity corpus
+    // the change cost two documents their page-by-page match at once (a mortgage
+    // statement 7→8, a template 5→6) and degraded the layout of three out of
+    // five: real Word files hold dozens of non-breaking spaces, and words fused
+    // into unbreakable units damage the setting more than the preserved gap
+    // helps. Coming back to this is worth it only together with working out why
+    // Word sets those same places tighter.
 
     private function wrapParagraph(string $paragraph): array
     {

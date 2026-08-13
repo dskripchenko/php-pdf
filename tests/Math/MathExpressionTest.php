@@ -69,9 +69,9 @@ final class MathExpressionTest extends TestCase
         $doc = new Document(new Section([new MathExpression('\\sqrt{x}')]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // √ symbol (Unicode U+221A); StandardFont renders как WinAnsi →
-        // показывает символ, но точная encoding зависит от шрифта.
-        // Just verify x rendered и overline drawn.
+        // The √ symbol (Unicode U+221A); a StandardFont renders it as WinAnsi →
+        // the character shows, but the exact encoding depends on the font.
+        // Just verify that x is rendered and the overline is drawn.
         self::assertStringContainsString('(x) Tj', $bytes);
     }
 
@@ -81,10 +81,10 @@ final class MathExpressionTest extends TestCase
         $doc = new Document(new Section([new MathExpression('\\alpha + \\beta')]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Greek α + space + β + ... — UTF-8 bytes должны быть в bytes.
-        // α = 0xCE 0xB1, β = 0xCE 0xB2. Cyrillic-supporting font нужен;
-        // с Helvetica (WinAnsi) substitution не сработает, но parsing OK.
-        // Verify не throws.
+        // Greek α + space + β + ... — the UTF-8 bytes have to be in the output.
+        // α = 0xCE 0xB1, β = 0xCE 0xB2. A font supporting Cyrillic is needed;
+        // with Helvetica (WinAnsi) the substitution does not fire, but the
+        // parsing is fine. Verify that it does not throw.
         self::assertNotEmpty($bytes);
     }
 
@@ -109,7 +109,7 @@ final class MathExpressionTest extends TestCase
     public function parse_handles_braced_groups(): void
     {
         $tokens = MathRenderer::parse('x^{2y+1}');
-        // First token = text 'x', second = sup (содержит multiple atoms).
+        // First token = the text 'x', second = a sup (holding multiple atoms).
         self::assertSame('text', $tokens[0]['type']);
         self::assertSame('x', $tokens[0]['value']);
         self::assertSame('sup', $tokens[1]['type']);
@@ -131,7 +131,7 @@ final class MathExpressionTest extends TestCase
         $doc = new Document(new Section([new MathExpression($tex)]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
         self::assertNotEmpty($bytes);
-        // 'x = ' rendered as text run; '2a' (denominator) rendered отдельно.
+        // 'x = ' is rendered as a text run; '2a' (the denominator) separately.
         self::assertStringContainsString('(x = ) Tj', $bytes);
         self::assertStringContainsString('(2a) Tj', $bytes);
     }

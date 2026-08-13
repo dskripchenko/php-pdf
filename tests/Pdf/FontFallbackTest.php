@@ -58,7 +58,7 @@ final class FontFallbackTest extends TestCase
         $engine = new Engine(fallbackFonts: []);
         self::assertSame([], $engine->fallbackFonts);
 
-        // С пустым chain works.
+        // It works with an empty chain.
         $doc = new Document(new Section([new Paragraph([new Run('Hello')])]));
         $bytes = $doc->toBytes($engine);
         self::assertNotEmpty($bytes);
@@ -75,18 +75,18 @@ final class FontFallbackTest extends TestCase
     #[Test]
     public function missing_characters_do_not_borrow_each_others_meaning(): void
     {
-        // Все отсутствующие знаки рисуются одним глифом `.notdef`, и запись о
-        // нём в `ToUnicode` означала бы «этот глиф читается как последний из
-        // пропавших». Форма с пустым квадратом ☐ и галочкой ✔ так извлекалась
-        // как две галочки: незаполненный чекбокс, прочитанный как отмеченный,
-        // меняет смысл документа.
+        // Every missing character is drawn with the same `.notdef` glyph, so an
+        // entry for it in `ToUnicode` would say "this glyph reads as the last of
+        // the missing ones". A form with an empty box ☐ and a tick ✔ was
+        // extracted as two ticks that way: an unchecked checkbox read as checked
+        // changes what the document says.
         $path = __DIR__.'/../../.cache/fonts/liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf';
         if (! is_readable($path)) {
             self::markTestSkipped('Liberation Sans not cached.');
         }
         $font = new PdfFont(TtfFile::fromFile($path));
 
-        // В Liberation Sans этих знаков нет — оба дают глиф 0.
+        // Liberation Sans has neither character — both give glyph 0.
         self::assertSame(0, $font->ttf()->glyphIdForChar(0x2610));
         self::assertSame(0, $font->ttf()->glyphIdForChar(0x2714));
 

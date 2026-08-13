@@ -104,11 +104,12 @@ final class LetterSpacingTest extends TestCase
     #[Test]
     public function letter_spacing_does_not_leak_into_following_text(): void
     {
-        // `Tc` — параметр состояния текста: он живёт до следующего `Tc`, а не
-        // до ближайшего `ET`. Пока значение писали только когда оно ненулевое,
-        // разрядка одного заголовка расползалась на весь документ: строки
-        // выходили шире колонки, налезали друг на друга и уходили за край
-        // страницы. Настоящий договор так печатался целиком нечитаемым.
+        // `Tc` is a text-state parameter: it lives until the next `Tc`, not
+        // until the nearest `ET`. While the value was written only when non-zero,
+        // the spacing of a single heading spread over the whole document: the
+        // lines came out wider than the column, ran into each other and went off
+        // the edge of the page. A real contract printed entirely unreadable that
+        // way.
         $doc = new Document(new Section([
             new Paragraph([
                 new Run('ЗАГОЛОВОК', (new RunStyle)->withLetterSpacingPt(3.1)),
@@ -123,7 +124,7 @@ final class LetterSpacingTest extends TestCase
             defaultFont: $this->font(),
         ));
 
-        // После разряженного фрагмента обязан идти явный возврат к нулю.
+        // An explicit return to zero has to follow a spaced-out fragment.
         self::assertStringContainsString('3.1 Tc', $bytes);
         self::assertStringContainsString('0 Tc', $bytes);
 
@@ -135,8 +136,9 @@ final class LetterSpacingTest extends TestCase
     #[Test]
     public function repeated_zero_spacing_is_written_once(): void
     {
-        // Сброс не должен превращаться в шум: `Tc` пишется только на смене
-        // значения, иначе поток пухнет на каждой строке документа.
+        // The reset must not turn into noise: `Tc` is written only when the
+        // value changes, otherwise the stream swells on every line of the
+        // document.
         $doc = new Document(new Section([
             new Paragraph([new Run('первая строка')]),
             new Paragraph([new Run('вторая строка')]),

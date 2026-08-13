@@ -57,7 +57,7 @@ final class ObjectStreamTest extends TestCase
         $doc = $this->buildDoc(useObjStm: true);
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // XRef stream должен быть active (Object Streams requires it).
+        // The XRef stream has to be active (object streams require it).
         self::assertStringContainsString('/Type /XRef', $bytes);
         // Classic xref ABSENT.
         self::assertStringNotContainsString("\nxref\n", $bytes);
@@ -87,14 +87,15 @@ final class ObjectStreamTest extends TestCase
         $plainBytes = $docPlain->toBytes(new Engine(compressStreams: false));
         $optBytes = $docOptimized->toBytes(new Engine(compressStreams: false));
 
-        // Object streams должен дать smaller output.
+        // Object streams have to give a smaller output.
         self::assertLessThan(strlen($plainBytes), strlen($optBytes));
     }
 
     #[Test]
     public function object_stream_with_compressed_content_streams(): void
     {
-        // Combine с FlateDecode на content streams — both optimizations active.
+        // Combined with FlateDecode on the content streams — both optimizations
+        // active.
         $doc = $this->buildDoc(useObjStm: true);
         $bytes = $doc->toBytes(new Engine(compressStreams: true));
 
@@ -106,16 +107,17 @@ final class ObjectStreamTest extends TestCase
     #[Test]
     public function object_stream_xref_has_type_2_entries(): void
     {
-        // Decode XRef stream и проверить что content contains type-2 entries
-        // (first byte = 0x02 для compressed objects).
+        // Decode the XRef stream and check that the content contains type-2
+        // entries (a first byte of 0x02 for compressed objects).
         $doc = $this->buildDoc(useObjStm: true);
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Extract all FlateDecode streams; the last one должен быть XRef stream.
+        // Extract all the FlateDecode streams; the last one has to be the XRef
+        // stream.
         preg_match_all('@stream\n(.*?)\nendstream@s', $bytes, $matches);
         self::assertNotEmpty($matches[1]);
 
-        // Find XRef stream — должен быть после /Type /XRef dict.
+        // Find the XRef stream — it has to come after the /Type /XRef dict.
         $xrefDictPos = strpos($bytes, '/Type /XRef');
         self::assertNotFalse($xrefDictPos);
         $afterDict = substr($bytes, $xrefDictPos);
@@ -125,7 +127,7 @@ final class ObjectStreamTest extends TestCase
         $decompressed = @gzuncompress($m[1]);
         self::assertIsString($decompressed);
 
-        // Entries are 7 bytes each (W=[1 4 2]). Check каждого entry type byte.
+        // Entries are 7 bytes each (W=[1 4 2]). Check the type byte of each one.
         $hasType2 = false;
         for ($i = 0; $i + 7 <= strlen($decompressed); $i += 7) {
             if (ord($decompressed[$i]) === 2) {
@@ -140,8 +142,9 @@ final class ObjectStreamTest extends TestCase
     public function object_stream_disabled_when_encryption(): void
     {
         // Encryption uses low-level API; need to manually exercise that path.
-        // Build doc → render → encrypt — Object Streams путь должен быть skipped.
-        // Just verify через direct flag combination not engaging ObjStm output.
+        // Build doc → render → encrypt: the object-stream path has to be
+        // skipped. Just verify through a direct flag combination that no ObjStm
+        // output is engaged.
         $engine = new Engine(compressStreams: false);
         $pdf = $engine->render($this->buildDoc(useObjStm: true));
         $pdf->encrypt('test-password');
@@ -159,7 +162,7 @@ final class ObjectStreamTest extends TestCase
 
         self::assertStringStartsWith('%PDF-', $bytes);
         self::assertStringContainsString("%%EOF\n", $bytes);
-        // startxref должен point внутри document.
+        // startxref has to point inside the document.
         preg_match('@startxref\n(\d+)\n@', $bytes, $m);
         $offset = (int) $m[1];
         self::assertLessThan(strlen($bytes), $offset);
@@ -188,7 +191,8 @@ final class ObjectStreamTest extends TestCase
     #[Test]
     public function object_stream_skipped_when_too_few_objects(): void
     {
-        // Writer с very few objects — packing not worth it, fall back to direct.
+        // A writer with very few objects — packing is not worth it, so fall back
+        // to direct.
         $writer = new Writer('1.5', useXrefStream: true, useObjectStreams: true);
         $catalogId = $writer->reserveObject();
         $pagesId = $writer->reserveObject();

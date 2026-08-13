@@ -366,24 +366,24 @@ final class TtfSubsetter
     }
 
     /**
-     * `post` без имён глифов — формат 3.0.
+     * A `post` table without glyph names — format 3.0.
      *
-     * Формат 2.0 несёт имена ВСЕХ глифов исходного шрифта, и в сабсете это
-     * оказывается самой большой таблицей: на Liberation Sans 26 КБ из 61 КБ,
-     * то есть 43% — при том что сами контуры занимают 6 КБ.
+     * Format 2.0 carries the names of ALL the glyphs of the source font, and in
+     * a subset that turns out to be the largest table: 26 KB out of 61 KB for
+     * Liberation Sans, or 43% — while the outlines themselves take 6 KB.
      *
-     * Имена глифов в PDF не нужны: отображение идёт по идентификаторам, а
-     * извлечение текста — по `ToUnicode` CMap, который эмиттер пишет отдельно.
-     * Формат 3.0 именно это и означает — «имён нет».
+     * PDF has no use for glyph names: rendering goes by identifier, and text
+     * extraction by the `ToUnicode` CMap, which the emitter writes separately.
+     * Format 3.0 means exactly that — "there are no names".
      *
-     * Заголовок у всех версий одинаков (32 байта: версия, наклон, подчёркивание,
-     * моноширинность, лимиты памяти), поэтому достаточно обрезать таблицу до
-     * него и сменить номер версии. Всё, что читает наш собственный парсер —
-     * `italicAngle` и `isFixedPitch`, — остаётся на месте.
+     * The header is the same across the versions (32 bytes: version, slant,
+     * underline, monospacing, memory limits), so it is enough to truncate the
+     * table to it and change the version number. Everything our own parser reads
+     * — `italicAngle` and `isFixedPitch` — stays in place.
      */
     private static function postWithoutGlyphNames(string $post): string
     {
-        // Короткая таблица уже не несёт имён — оставляем как есть.
+        // A short table carries no names already — leave it as it is.
         if (strlen($post) < 32) {
             return $post;
         }
@@ -393,7 +393,7 @@ final class TtfSubsetter
 
     /**
      * Emit final TTF with replaced glyf + loca tables. All other tables
-     * are copied bytes-as-is (кроме `post` — см. postWithoutGlyphNames).
+     * are copied bytes-as-is (except `post` — see postWithoutGlyphNames).
      *
      * Table directory: each entry is 16 bytes (tag + checksum + offset + length).
      * Tables are aligned on a 4-byte boundary in the file.

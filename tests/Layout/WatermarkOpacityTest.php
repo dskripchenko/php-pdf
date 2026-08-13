@@ -29,12 +29,12 @@ final class WatermarkOpacityTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // ExtGState object emitted с правильным /ca.
+        // The ExtGState object is emitted with the right /ca.
         self::assertStringContainsString('/Type /ExtGState', $bytes);
         self::assertStringContainsString('/ca 0.3', $bytes);
-        // Resources содержит /ExtGState reference.
+        // Resources holds the /ExtGState reference.
         self::assertMatchesRegularExpression('@/ExtGState\s*<<\s*/Gs1\s+\d+\s+0\s+R@', $bytes);
-        // Content stream применяет gs op перед image draw.
+        // The content stream applies the gs op before drawing the image.
         self::assertMatchesRegularExpression('@/Gs1\s+gs.*?/Im1\s+Do@s', $bytes);
     }
 
@@ -56,7 +56,7 @@ final class WatermarkOpacityTest extends TestCase
     #[Test]
     public function image_watermark_opacity_full_skips_extgstate(): void
     {
-        // 1.0 → no-op (отказываемся writing избыточный ExtGState).
+        // 1.0 is a no-op (we decline to write a redundant ExtGState).
         $img = PdfImage::fromPath($this->jpegPath);
         $doc = new Document(new Section(
             body: [new Paragraph([new Run('Body')])],
@@ -78,18 +78,18 @@ final class WatermarkOpacityTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // ExtGState с /ca 0.5 и /CA 0.5 (text может быть filled + stroked).
+        // An ExtGState with /ca 0.5 and /CA 0.5 (text can be filled and stroked).
         self::assertStringContainsString('/Type /ExtGState', $bytes);
         self::assertStringContainsString('/ca 0.5', $bytes);
-        // gs op применён перед rotated text.
+        // The gs op is applied before the rotated text.
         self::assertMatchesRegularExpression('@/Gs\d+\s+gs@', $bytes);
     }
 
     #[Test]
     public function extgstate_deduped_for_equal_opacity(): void
     {
-        // Image + text с одинаковым opacity → ExtGState переиспользуется
-        // на той же странице (dedup по key()).
+        // An image and text with the same opacity reuse the ExtGState on the
+        // same page (deduplicated by key()).
         $img = PdfImage::fromPath($this->jpegPath);
         $doc = new Document(new Section(
             body: [new Paragraph([new Run('Body')])],
@@ -100,9 +100,9 @@ final class WatermarkOpacityTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Хотя оба используют opacity 0.5, image использует только /ca,
-        // а text использует /ca + /CA → ключи разные → 2 ExtGState.
-        // Но дедуп проверим на сценарии одного типа.
+        // Although both use an opacity of 0.5, the image uses /ca only while
+        // the text uses /ca + /CA → different keys → 2 ExtGStates. The
+        // deduplication is checked on a single-kind scenario instead.
         $count = substr_count($bytes, '/Type /ExtGState');
         self::assertGreaterThanOrEqual(1, $count);
     }
@@ -135,8 +135,8 @@ final class WatermarkOpacityTest extends TestCase
     #[Test]
     public function content_stream_balances_q_and_Q_with_opacity(): void
     {
-        // q/Q должны быть сбалансированы: opacity wrapping не должен
-        // оставлять висящий graphics state push.
+        // q/Q have to be balanced: the opacity wrapping must not leave a
+        // dangling graphics-state push.
         $img = PdfImage::fromPath($this->jpegPath);
         $doc = new Document(new Section(
             body: [new Paragraph([new Run('Body')])],

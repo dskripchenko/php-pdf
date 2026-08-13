@@ -16,14 +16,14 @@ final class Code128SetCTest extends TestCase
         // 8 digits → Set C: 4 data CW + start + checksum + stop = 7 CW.
         // 11 modules per CW = 77 + 2 extra (stop pattern) = 79.
         $enc = new Code128Encoder('12345678');
-        // Set C is more compact: 4 CW for 8 digits vs 8 CW для Set B.
+        // Set C is more compact: 4 CW for 8 digits against 8 CW for Set B.
         $cModules = $enc->moduleCount();
 
-        // Compare против odd-length (forces Set B fallback).
+        // Compare against an odd length (which forces the Set B fallback).
         $encB = new Code128Encoder('123456789'); // 9 digits — Set B.
         $bModules = $encB->moduleCount();
 
-        // Set C при 8 digits (4 CW) < Set B при 9 digits (9 CW).
+        // Set C at 8 digits (4 CW) < Set B at 9 digits (9 CW).
         self::assertLessThan($bModules, $cModules);
     }
 
@@ -39,7 +39,7 @@ final class Code128SetCTest extends TestCase
     #[Test]
     public function set_b_used_for_short_digit_string(): void
     {
-        // <4 digits — Set C overhead не worth it → Set B used.
+        // Under 4 digits the Set C overhead is not worth it → Set B is used.
         $enc = new Code128Encoder('12');
         // Set B: start + 2 char CWs + checksum + stop = 5 CWs × 11 + 2 = 57.
         self::assertSame(57, $enc->moduleCount());
@@ -48,11 +48,12 @@ final class Code128SetCTest extends TestCase
     #[Test]
     public function odd_digit_string_uses_c_for_pairs_b_for_remainder(): void
     {
-        // Phase 164: auto-mode compresses 4 digits в Set C (=2 CW), trailing
-        // digit '5' → Set B (1 CW). Старое поведение: всё Set B (90 modules).
+        // Phase 164: auto mode compresses 4 digits into Set C (=2 CW), and the
+        // trailing digit '5' goes to Set B (1 CW). The old behaviour was all
+        // Set B (90 modules).
         $encAuto = new Code128Encoder('12345');
         $encLegacy = new Code128Encoder('12345', autoMode: false);
-        // Auto должен быть короче.
+        // Auto has to be shorter.
         self::assertLessThan($encLegacy->moduleCount(), $encAuto->moduleCount(),
             'auto-mode compresses через Set C switching');
     }
@@ -68,7 +69,7 @@ final class Code128SetCTest extends TestCase
     #[Test]
     public function set_c_renders_via_long_numeric(): void
     {
-        // 12-digit numeric (e.g. EAN-style barcode encoded в Code 128).
+        // A 12-digit numeric (an EAN-style barcode encoded in Code 128, say).
         $enc = new Code128Encoder('123456789012');
         // Set C: 6 pair CWs + start + checksum + stop = 9 CWs × 11 + 2 = 101.
         self::assertSame(101, $enc->moduleCount());

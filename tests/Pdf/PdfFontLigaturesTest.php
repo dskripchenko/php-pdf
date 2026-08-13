@@ -12,11 +12,11 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Integration tests для GSUB ligature substitution.
+ * Integration tests for GSUB ligature substitution.
  *
- * Liberation Sans не имеет 'liga' feature (design choice — metric-compat
- * с MS Arial). Так что для real-world проверки используем synthetic
- * LigatureSubstitutions через ReflectionClass.
+ * Liberation Sans has no 'liga' feature (a design choice — metric compatibility
+ * with MS Arial). So for a real-world check we use synthetic
+ * LigatureSubstitutions through ReflectionClass.
  */
 final class PdfFontLigaturesTest extends TestCase
 {
@@ -34,10 +34,10 @@ final class PdfFontLigaturesTest extends TestCase
     #[Test]
     public function liberation_text_renders_unchanged_without_liga(): void
     {
-        // Без 'liga' feature никакие ligatures не substituting.
+        // Without the 'liga' feature no ligatures are substituted.
         $font = new PdfFont($this->ttf);
         $hex = $font->encodeText('fi');
-        // f=73 (0x49), i=76 (0x4C). Без ligature substitution оба остаются.
+        // f=73 (0x49), i=76 (0x4C). Without ligature substitution both remain.
         $fGid = $this->ttf->glyphIdForChar(0x66);
         $iGid = $this->ttf->glyphIdForChar(0x69);
         $expected = sprintf('<%04X%04X>', $fGid, $iGid);
@@ -67,9 +67,9 @@ final class PdfFontLigaturesTest extends TestCase
     #[Test]
     public function tounicode_cmap_multi_codepoint_format(): void
     {
-        // Synthetic ligature: f+i → existing glyph (используем какой-то
-        // реальный glyph в font'е чтобы subsetter не пожаловался).
-        // Glyph 100 — какая-то Latin буква, неважно какая для теста CMap.
+        // A synthetic ligature: f+i → an existing glyph (some real glyph of the
+        // font, so that the subsetter does not complain). Glyph 100 is some
+        // Latin letter — which one does not matter for a CMap test.
         $ligGid = 100;
 
         $sub = new LigatureSubstitutions;
@@ -86,12 +86,12 @@ final class PdfFontLigaturesTest extends TestCase
         try {
             $font = new PdfFont($this->ttf, subset: false);
             $shaped = $font->shapedGlyphs('fi');
-            // После substitution — один glyph $ligGid с sources=[f,i]
+            // After the substitution there is a single glyph $ligGid with sources=[f,i]
             self::assertCount(1, $shaped);
             self::assertSame($ligGid, $shaped[0]['gid']);
             self::assertSame([0x66, 0x69], $shaped[0]['sourceCps']);
 
-            // ToUnicode CMap должен содержать <0064> <00660069>.
+            // The ToUnicode CMap has to contain <0064> <00660069>.
             // 100 = 0x64; 'f'=0x66, 'i'=0x69 → UTF-16BE <0066 0069>.
             $doc = Document::new();
             $doc->addPage()->showEmbeddedText('fi', 72, 720, $font, 12);
@@ -122,7 +122,7 @@ final class PdfFontLigaturesTest extends TestCase
             $font->disableLigatures();
 
             $shaped = $font->shapedGlyphs('fi');
-            // Without ligatures — два separate glyph'а.
+            // Without ligatures there are two separate glyphs.
             self::assertCount(2, $shaped);
             self::assertSame($fGid, $shaped[0]['gid']);
             self::assertSame($iGid, $shaped[1]['gid']);

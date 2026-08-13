@@ -9,10 +9,10 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Tests против real Liberation Sans Regular TTF в .cache/fonts/.
+ * Tests against the real Liberation Sans Regular TTF in .cache/fonts/.
  *
- * Файл скачивается отдельно (composer'ом не управляется), поэтому
- * тесты skip'аются если его нет.
+ * The file is downloaded separately (composer does not manage it), so the tests
+ * are skipped when it is absent.
  */
 final class TtfFileTest extends TestCase
 {
@@ -42,7 +42,7 @@ final class TtfFileTest extends TestCase
     public function parses_units_per_em(): void
     {
         $ttf = TtfFile::fromFile($this->liberationSansPath);
-        // Стандарт для TTF — 2048.
+        // The TTF standard is 2048.
         self::assertSame(2048, $ttf->unitsPerEm());
     }
 
@@ -50,7 +50,7 @@ final class TtfFileTest extends TestCase
     public function parses_glyph_count(): void
     {
         $ttf = TtfFile::fromFile($this->liberationSansPath);
-        // Liberation 2.1.5 имеет ровно 2620 glyph'ов.
+        // Liberation 2.1.5 has exactly 2620 glyphs.
         self::assertSame(2620, $ttf->numGlyphs());
     }
 
@@ -93,7 +93,7 @@ final class TtfFileTest extends TestCase
     public function cmap_returns_zero_notdef_for_unsupported_chars(): void
     {
         $ttf = TtfFile::fromFile($this->liberationSansPath);
-        // U+1F600 (😀 emoji) — Liberation Sans не покрывает, должно быть 0.
+        // U+1F600 (the 😀 emoji) is not covered by Liberation Sans — it has to be 0.
         self::assertSame(0, $ttf->glyphIdForChar(0x1F600));
     }
 
@@ -103,7 +103,7 @@ final class TtfFileTest extends TestCase
         $ttf = TtfFile::fromFile($this->liberationSansPath);
         $gidH = $ttf->glyphIdForChar(0x48);
         $w = $ttf->advanceWidth($gidH);
-        // H в Liberation Sans 2048-em — около 1479 FU.
+        // H in the 2048-em Liberation Sans is about 1479 FU.
         self::assertSame(1479, $w);
     }
 
@@ -132,7 +132,7 @@ final class TtfFileTest extends TestCase
     #[Test]
     public function rejects_otf_cff_files(): void
     {
-        // OTF файлы с CFF имеют magic 'OTTO' (0x4F54544F).
+        // OTF files with CFF have the magic 'OTTO' (0x4F54544F).
         $fakeOtf = "OTTO\x00\x01\x00\x00";
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('CFF-based OTF');
@@ -158,7 +158,7 @@ final class TtfFileTest extends TestCase
             self::markTestSkipped('LiberationSerif-Italic.ttf not in cache.');
         }
         $ttf = TtfFile::fromFile($italicPath);
-        // Italic — typically negative italicAngle (например, -12).
+        // Italic typically has a negative italicAngle (-12, for instance).
         self::assertLessThan(0, $ttf->italicAngle());
     }
 }

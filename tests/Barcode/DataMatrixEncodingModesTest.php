@@ -17,7 +17,7 @@ final class DataMatrixEncodingModesTest extends TestCase
     public function base256_mode_switch_codeword(): void
     {
         $cw = DataMatrixEncoder::encodeBase256('hello');
-        // First codeword = 231 (switch к Base 256).
+        // First codeword = 231 (switch to Base 256).
         self::assertSame(231, $cw[0]);
         // Total: 1 switch + 1 length + 5 data = 7 codewords.
         self::assertCount(7, $cw);
@@ -28,7 +28,7 @@ final class DataMatrixEncodingModesTest extends TestCase
     {
         $cw = DataMatrixEncoder::encodeBase256(str_repeat('A', 100));
         self::assertSame(231, $cw[0]);
-        // Length = 100; randomized с pos=2: temp = 100 + ((149*2)%255)+1 = 100 + 44 = 144.
+        // Length = 100; randomized with pos=2: temp = 100 + ((149*2)%255)+1 = 100 + 44 = 144.
         // After randomization: 144 (≤ 255).
         // Total: 1 + 1 + 100 = 102 codewords.
         self::assertCount(102, $cw);
@@ -64,7 +64,7 @@ final class DataMatrixEncodingModesTest extends TestCase
     public function c40_mode_switch_codeword(): void
     {
         $cw = DataMatrixEncoder::encodeC40('ABC');
-        // First codeword = 230 (switch к C40).
+        // First codeword = 230 (switch to C40).
         self::assertSame(230, $cw[0]);
         // 3 chars → 1 triplet = 2 codewords + switch = 3 total.
         self::assertCount(3, $cw);
@@ -163,8 +163,8 @@ final class DataMatrixEncodingModesTest extends TestCase
     {
         $ascii = new DataMatrixEncoder('HELLO', mode: DataMatrixEncoder::MODE_ASCII);
         $c40 = new DataMatrixEncoder('HELLO', mode: DataMatrixEncoder::MODE_C40);
-        // Both should produce valid symbols (sizes may differ; для short
-        // strings ASCII can be smaller due к switch overhead).
+        // Both should produce valid symbols (the sizes may differ; for short
+        // strings ASCII can be smaller because of the switch overhead).
         self::assertGreaterThan(0, $ascii->size());
         self::assertGreaterThan(0, $c40->size());
     }
@@ -183,7 +183,7 @@ final class DataMatrixEncodingModesTest extends TestCase
     public function auto_mode_picks_base256_for_binary(): void
     {
         $enc = new DataMatrixEncoder("hello\x80\xFF", mode: DataMatrixEncoder::MODE_AUTO);
-        // Should encode без exception (Base 256 handles high bytes).
+        // It should encode without an exception (Base 256 handles high bytes).
         self::assertGreaterThan(0, $enc->size());
     }
 
@@ -209,7 +209,7 @@ final class DataMatrixEncodingModesTest extends TestCase
     {
         // Macro 05: header conceptually "[)>RS05GS" prepended.
         $enc = new DataMatrixEncoder('123', macroMode: DataMatrixEncoder::MACRO_05);
-        // Symbol должен encode без exception.
+        // The symbol has to encode without an exception.
         self::assertGreaterThan(0, $enc->size());
     }
 
@@ -237,10 +237,10 @@ final class DataMatrixEncodingModesTest extends TestCase
     #[Test]
     public function no_macro_default_behavior(): void
     {
-        // Без macroMode — same as before.
+        // Without macroMode it is the same as before.
         $withoutMacro = new DataMatrixEncoder('hello');
         $withMacro = new DataMatrixEncoder('hello', macroMode: DataMatrixEncoder::MACRO_05);
-        // Withmacro adds 1 CW → symbol size может differ.
+        // With the macro it adds 1 CW → the symbol size may differ.
         self::assertGreaterThan(0, $withoutMacro->size());
         self::assertGreaterThan(0, $withMacro->size());
     }

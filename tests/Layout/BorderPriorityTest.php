@@ -37,7 +37,7 @@ final class BorderPriorityTest extends TestCase
     {
         // Cell A: right border thin (1pt)
         // Cell B: left border thick (3pt)
-        // Expected: thick wins на shared edge.
+        // Expected: the thick one wins on the shared edge.
         $thin = new Border(BorderStyle::Single, 8, '000000');     // 1pt
         $thick = new Border(BorderStyle::Single, 24, 'cc0000');   // 3pt red
 
@@ -52,7 +52,7 @@ final class BorderPriorityTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Should contain thick red stroke ' 3 w' и '0.8 0 0 RG'.
+        // It should contain the thick red stroke ' 3 w' and '0.8 0 0 RG'.
         self::assertStringContainsString("\n3 w", $bytes);
         self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+RG@', $bytes);
     }
@@ -105,7 +105,7 @@ final class BorderPriorityTest extends TestCase
     {
         // Row 1 cell A: bottom thick (3pt red).
         // Row 2 cell B (same column): top thin (1pt black).
-        // Expected: thick red wins на shared edge.
+        // Expected: the thick red one wins on the shared edge.
         $thin = new Border(BorderStyle::Single, 8, '000000');
         $thick = new Border(BorderStyle::Single, 24, 'cc0000');
 
@@ -119,7 +119,7 @@ final class BorderPriorityTest extends TestCase
             ),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // 3pt stroke и red color мapping на shared edge.
+        // A 3pt stroke and the red colour mapping on the shared edge.
         self::assertStringContainsString("\n3 w", $bytes);
         self::assertMatchesRegularExpression('@0\.8\s+0\s+0\s+RG@', $bytes);
     }
@@ -148,9 +148,10 @@ final class BorderPriorityTest extends TestCase
     #[Test]
     public function cross_row_span_propagates_bottom_to_two_columns(): void
     {
-        // Row 1: один колспан=2 cell с thick bottom.
-        // Row 2: две cells с thin tops.
-        // Expected: каждая cell в row 2 inherit thick top (по своему col index).
+        // Row 1: a single colspan=2 cell with a thick bottom.
+        // Row 2: two cells with thin tops.
+        // Expected: every cell in row 2 inherits the thick top (by its own
+        // column index).
         $thin = new Border(BorderStyle::Single, 8, '000000');
         $thick = new Border(BorderStyle::Single, 24, 'cc0000');
 
@@ -169,7 +170,7 @@ final class BorderPriorityTest extends TestCase
             ),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
-        // Thick red должен render-иться (минимум один раз).
+        // The thick red one has to render (at least once).
         self::assertStringContainsString("\n3 w", $bytes);
     }
 }

@@ -40,13 +40,13 @@ final class PdfImage
         public readonly int $bitsPerComponent,  // typically 8
         public readonly string $imageData,      // raw bytes for PDF stream
         /**
-         * Альфа-канал отдельным потоком (Flate, 8 бит, DeviceGray).
+         * The alpha channel as a separate stream (Flate, 8 bit, DeviceGray).
          *
-         * PDF не умеет прозрачность внутри самой картинки: она задаётся
-         * отдельным объектом-маской через `/SMask`. Раньше альфа просто
-         * отбрасывалась, и прозрачные точки печатались тем цветом, что лежал
-         * под ними — у подписей и печатей это чёрный прямоугольник вместо
-         * фона.
+         * PDF cannot carry transparency inside the image itself: it is given by
+         * a separate mask object through `/SMask`. The alpha used to be simply
+         * discarded, and transparent pixels printed in whatever colour lay
+         * beneath them — for signatures and stamps that is a black rectangle
+         * instead of the background.
          */
         public readonly ?string $alphaData = null,
     ) {}
@@ -77,9 +77,9 @@ final class PdfImage
         if ($this->objectId !== null) {
             return $this->objectId;
         }
-        // Маска регистрируется первой: её идентификатор нужен в словаре самой
-        // картинки. PDF не умеет прозрачность внутри изображения — она живёт
-        // отдельным объектом и подключается через `/SMask`.
+        // The mask is registered first: its identifier is needed in the
+        // dictionary of the image itself. PDF cannot carry transparency inside
+        // an image — it lives as a separate object, attached via `/SMask`.
         $smask = '';
         if ($this->alphaData !== null && $this->alphaData !== '') {
             $maskId = $writer->addObject(sprintf(
@@ -278,11 +278,12 @@ final class PdfImage
             $prevRow = $unfilteredRow;
         }
 
-        // Альфа-канал отделяется от цвета: PDF держит прозрачность отдельным
-        // объектом-маской (`/SMask`), внутри самой картинки её быть не может.
-        // Раньше альфа просто выбрасывалась, и прозрачные точки печатались
-        // тем цветом, что лежал под ними — у подписей и печатей это чёрный
-        // прямоугольник вместо фона.
+        // The alpha channel is separated from the colour: PDF keeps
+        // transparency as a separate mask object (`/SMask`), and it cannot live
+        // inside the image itself. The alpha used to be simply thrown away, and
+        // transparent pixels printed in whatever colour lay beneath them — for
+        // signatures and stamps that is a black rectangle instead of the
+        // background.
         $alpha = null;
         if ($colorType === 6) {
             $stripped = '';
@@ -305,8 +306,8 @@ final class PdfImage
             $components = 1;
         }
 
-        // Полностью непрозрачная картинка маски не требует — лишний объект в
-        // файле ничего не даёт.
+        // A fully opaque image needs no mask — an extra object in the file buys
+        // nothing.
         if ($alpha !== null && strspn($alpha, "\xFF") === strlen($alpha)) {
             $alpha = null;
         }

@@ -28,14 +28,14 @@ final class SoftHyphenTest extends TestCase
     #[Test]
     public function shy_invisible_when_no_overflow(): void
     {
-        // Word влезает на line без переноса → SHY должны быть невидимы.
+        // The word fits on the line without a break → the SHYs have to be invisible.
         $word = 'hyp'.self::SHY.'hen';
         $doc = new Document(new Section([
             new Paragraph([new Run($word)]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // SHY bytes (0xC2 0xAD UTF-8) НЕ должны попасть в content stream.
+        // The SHY bytes (0xC2 0xAD in UTF-8) must NOT reach the content stream.
         self::assertStringNotContainsString("\xC2\xAD", $bytes);
         // Word emitted full (no hyphen added).
         self::assertStringContainsString('(hyphen) Tj', $bytes);
@@ -44,8 +44,8 @@ final class SoftHyphenTest extends TestCase
     #[Test]
     public function shy_triggers_split_on_overflow(): void
     {
-        // Long word с SHY в середине, narrow content area → должен сплитнуться.
-        // Очень narrow margins (~50pt content) гарантируют overflow.
+        // A long word with a SHY in the middle and a narrow content area — it has
+        // to split. Very narrow margins (~50pt of content) guarantee an overflow.
         $setup = new PageSetup(
             margins: new PageMargins(leftPt: 270, rightPt: 270, topPt: 72, bottomPt: 72),
         );
@@ -56,10 +56,10 @@ final class SoftHyphenTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Хотя бы один SHY split должен сработать — присутствует word с
-        // trailing "-" в одной из ожидаемых форм. Phase 158: batched text
-        // может включать leading words на same line, поэтому regex допускает
-        // любые prefix chars перед терминальным `word-`.
+        // At least one SHY split has to happen — a word with a trailing "-" is
+        // present in one of the expected shapes. Phase 158: batched text can
+        // include leading words on the same line, so the regex allows any prefix
+        // characters before the terminal `word-`.
         $hasHyphen = preg_match('@[A-Za-z]+-\) Tj@', $bytes);
         self::assertSame(1, $hasHyphen, 'Soft-hyphen split must emit prefix with trailing "-"');
     }
@@ -67,8 +67,8 @@ final class SoftHyphenTest extends TestCase
     #[Test]
     public function shy_preserved_in_remainder_for_next_line(): void
     {
-        // Многократные SHY → возможны несколько wraps. Проверим что
-        // ни одного SHY-byte не утекло в финальный PDF.
+        // Repeated SHYs allow several wraps. Check that not a single SHY byte
+        // leaked into the final PDF.
         $setup = new PageSetup(
             margins: new PageMargins(leftPt: 240, rightPt: 240, topPt: 72, bottomPt: 72),
         );
@@ -79,28 +79,28 @@ final class SoftHyphenTest extends TestCase
         ));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // SHY UTF-8 bytes 0xC2 0xAD не должны попадать в текст.
+        // The SHY UTF-8 bytes 0xC2 0xAD must not reach the text.
         self::assertStringNotContainsString("\xC2\xAD", $bytes);
     }
 
     #[Test]
     public function shy_no_split_when_word_fits_remaining_too_tight(): void
     {
-        // Слово настолько маленькое и SHY-positions так размещены, что
-        // ни один prefix не помещается → fallback: word целиком на след. line.
+        // The word is so small, and the SHY positions placed so, that no prefix
+        // fits → the fallback: the whole word on the next line.
         $setup = new PageSetup(
             margins: new PageMargins(leftPt: 270, rightPt: 270, topPt: 72, bottomPt: 72),
         );
-        // contentWidth ≈ 55pt — ничего не влезает кроме coротких слов.
+        // contentWidth ≈ 55pt — nothing fits except short words.
         $word = 'ab'.self::SHY.'cd';
         $doc = new Document(new Section(
             body: [new Paragraph([new Run("filler $word end")])],
             pageSetup: $setup,
         ));
-        // Не должен бросить exception; word целиком на след. line.
+        // It must not throw; the whole word goes on the next line.
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Полное слово 'abcd' (без SHY) должно встречаться (когда не разбито).
+        // The full word 'abcd' (without the SHYs) has to occur (when unsplit).
         self::assertStringNotContainsString("\xC2\xAD", $bytes);
     }
 }

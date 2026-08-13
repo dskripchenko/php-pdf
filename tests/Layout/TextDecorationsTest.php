@@ -30,16 +30,16 @@ final class TextDecorationsTest extends TestCase
     #[Test]
     public function underline_emits_stroke_below_baseline(): void
     {
-        // Baseline для default 11pt text starts около y = topY - 11×0.8 ≈ topY - 8.8.
+        // The baseline for default 11pt text starts around y = topY - 11×0.8 ≈ topY - 8.8.
         // Underline = baseline - 11×0.12 ≈ baseline - 1.32.
         $doc = new Document(new Section([
             new Paragraph([new Run('underline', (new RunStyle)->withUnderline())]),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
 
-        // Stroke operator 'S' должен присутствовать (для underline line).
+        // The stroke operator 'S' has to be present (for the underline).
         self::assertStringContainsString("S\n", $bytes);
-        // С regular text (no underline) — stroke count = 0.
+        // With regular text (no underline) the stroke count is 0.
         $docRegular = new Document(new Section([
             new Paragraph([new Run('plain')]),
         ]));
@@ -108,10 +108,11 @@ final class TextDecorationsTest extends TestCase
     #[Test]
     public function underline_drawn_under_text_when_underlined(): void
     {
-        // Phase 158: multi-word underlined run теперь batched в single
-        // showText + single continuous underline stroke под всем batch.
-        // Раньше: 4 words = 4 strokes (per-word). Теперь: 4 words = 1 stroke
-        // (per-batch). Тестируем что underline присутствует (≥1 stroke).
+        // Phase 158: a multi-word underlined run is now batched into a single
+        // showText plus a single continuous underline stroke under the whole
+        // batch. It used to be 4 words = 4 strokes (per word); now 4 words = 1
+        // stroke (per batch). What is tested is that the underline is there
+        // (≥1 stroke).
         $doc = new Document(new Section([
             new Paragraph([new Run('one two three four',
                 (new RunStyle)->withUnderline()
@@ -121,7 +122,7 @@ final class TextDecorationsTest extends TestCase
         $sCount = substr_count($bytes, "S\n");
         self::assertGreaterThanOrEqual(1, $sCount, 'underline должен быть нарисован');
 
-        // Compare с baseline: без underline — strokes count меньше.
+        // Compare against the baseline: without an underline the stroke count is lower.
         $docPlain = new Document(new Section([
             new Paragraph([new Run('one two three four')]),
         ]));

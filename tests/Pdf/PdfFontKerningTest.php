@@ -52,7 +52,7 @@ final class PdfFontKerningTest extends TestCase
     public function encodeTextTjArray_single_run_no_kerning(): void
     {
         $tjOps = $this->font->encodeTextTjArray('AB');
-        // Нет kerning AB → один single hex run.
+        // No kerning for AB → a single hex run.
         self::assertCount(1, $tjOps);
         self::assertIsString($tjOps[0]);
     }
@@ -66,16 +66,16 @@ final class PdfFontKerningTest extends TestCase
         self::assertIsString($tjOps[0]);
         self::assertIsInt($tjOps[1]);
         self::assertIsString($tjOps[2]);
-        // adjustment должен быть positive (tighter pair).
+        // The adjustment has to be positive (a tighter pair).
         self::assertGreaterThan(0, $tjOps[1]);
     }
 
     #[Test]
     public function encodeTextTjArray_multiple_kerned_pairs(): void
     {
-        // ToWa имеет kerning между T-o, W-a (W-a в Liberation Sans).
+        // ToWa has kerning between T-o and W-a (W-a in Liberation Sans).
         $tjOps = $this->font->encodeTextTjArray('AVAYTo');
-        // Ожидаем несколько разделений.
+        // Several splits are expected.
         $intCount = 0;
         foreach ($tjOps as $op) {
             if (is_int($op)) {
@@ -88,8 +88,8 @@ final class PdfFontKerningTest extends TestCase
     #[Test]
     public function encodeText_still_works_without_kerning_split(): void
     {
-        // Backward-compat: encodeText всегда возвращает single hex string,
-        // независимо от kerning'а.
+        // Backwards compatibility: encodeText always returns a single hex
+        // string, kerning or no kerning.
         $hex = $this->font->encodeText('AV');
         self::assertStringStartsWith('<', $hex);
         self::assertStringEndsWith('>', $hex);
@@ -101,7 +101,7 @@ final class PdfFontKerningTest extends TestCase
         $doc = Document::new(compressStreams: false);
         $doc->addPage()->showEmbeddedText('AV', 72, 720, $this->font, 24);
         $pdf = $doc->toBytes();
-        // TJ operator (uppercase) — для kerning. Tj (lowercase) — для simple.
+        // The TJ operator (uppercase) is for kerning, Tj (lowercase) for the simple case.
         self::assertStringContainsString(' TJ', $pdf);
     }
 
@@ -111,7 +111,7 @@ final class PdfFontKerningTest extends TestCase
         $doc = Document::new(compressStreams: false);
         $doc->addPage()->showEmbeddedText('B', 72, 720, $this->font, 24);
         $pdf = $doc->toBytes();
-        // Только Tj (одна буква — точно нет kerning'а).
+        // Tj only (a single letter certainly has no kerning).
         self::assertStringContainsString(' Tj', $pdf);
     }
 }

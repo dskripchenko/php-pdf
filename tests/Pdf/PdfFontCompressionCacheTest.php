@@ -9,15 +9,17 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Запоминание сжатых тел шрифтов.
+ * Remembering the compressed font bodies.
  *
- * `gzcompress` уровня 6 на теле шрифта — самая дорогая часть встраивания:
- * замер в приложении-потребителе показал 2.2 мс на документ при двух шрифтах
- * по 62 КБ, а весь рендер занимал 12.6 мс. Тело от документа к документу одно
- * и то же, поэтому результат запоминается.
+ * Running `gzcompress` at level 6 over a font body is the most expensive part
+ * of embedding: a measurement in the consuming application showed 2.2 ms per
+ * document with two fonts of 62 KB, while the whole render took 12.6 ms. The
+ * body is one and the same from document to document, so the result is
+ * remembered.
  *
- * Тест держит два свойства: результат из кэша совпадает с честно сжатым (иначе
- * документы разъехались бы молча) и кэш не растёт без предела.
+ * The test holds two properties: what comes out of the cache matches what was
+ * compressed honestly (otherwise documents would drift apart silently), and the
+ * cache does not grow without a limit.
  */
 final class PdfFontCompressionCacheTest extends TestCase
 {
@@ -31,7 +33,7 @@ final class PdfFontCompressionCacheTest extends TestCase
         PdfFont::forgetCompressedCache();
     }
 
-    /** Доступ к приватному сжатию — проверяем именно его, а не весь рендер. */
+    /** Access to the private compression — it is what is under test, not the whole render. */
     private function compress(string $bytes): string
     {
         $m = new \ReflectionMethod(PdfFont::class, 'compress');
@@ -55,8 +57,9 @@ final class PdfFontCompressionCacheTest extends TestCase
     #[Test]
     public function different_bodies_do_not_share_a_cache_entry(): void
     {
-        // Ключ — хэш содержимого: сабсет у каждого документа свой, и подмена
-        // тела чужим сжатым потоком испортила бы документ.
+        // The key is the hash of the content: every document has a subset of its
+        // own, and swapping in someone else's compressed stream would ruin the
+        // document.
         $a = str_repeat('a', 5000);
         $b = str_repeat('b', 5000);
 
@@ -68,8 +71,8 @@ final class PdfFontCompressionCacheTest extends TestCase
     #[Test]
     public function cache_does_not_grow_without_bound(): void
     {
-        // Долгоживущий процесс обслуживает документы с разными шрифтами —
-        // без предела кэш рос бы вместе с их числом.
+        // A long-lived process serves documents with different fonts — without a
+        // limit the cache would grow along with their number.
         $limit = PdfFont::$compressedCacheLimit;
 
         for ($i = 0; $i <= $limit + 5; $i++) {

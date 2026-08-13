@@ -71,7 +71,7 @@ final class XrefStreamTest extends TestCase
         $doc = $this->buildDoc(useXref: true);
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // FlateDecode applied к stream content.
+        // FlateDecode is applied to the stream content.
         self::assertStringContainsString('/Filter /FlateDecode', $bytes);
     }
 
@@ -99,8 +99,8 @@ final class XrefStreamTest extends TestCase
     #[Test]
     public function xref_stream_output_smaller_than_classic_for_large_doc(): void
     {
-        // Many objects → xref stream advantage grows (10 bytes per entry в
-        // classic vs ~3-4 bytes compressed в stream).
+        // Many objects make the xref stream advantage grow (10 bytes per entry
+        // in the classic form against ~3-4 bytes compressed in a stream).
         $blocks = [];
         for ($i = 0; $i < 100; $i++) {
             $blocks[] = new Paragraph([new Run("Paragraph $i with some content к pad the object count.")]);
@@ -145,7 +145,7 @@ final class XrefStreamTest extends TestCase
     #[Test]
     public function xref_stream_with_compressed_content_streams(): void
     {
-        // Combine с FlateDecode content streams — exercise both filter paths.
+        // Combined with FlateDecode content streams — exercise both filter paths.
         $doc = $this->buildDoc(useXref: true);
         $bytes = $doc->toBytes(new Engine(compressStreams: true));
 
@@ -164,7 +164,7 @@ final class XrefStreamTest extends TestCase
         );
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // /Info reference в XRef dictionary.
+        // The /Info reference in the XRef dictionary.
         self::assertMatchesRegularExpression('@/Type /XRef.*?/Info \d+ 0 R@s', $bytes);
     }
 
@@ -182,10 +182,10 @@ final class XrefStreamTest extends TestCase
         self::assertMatchesRegularExpression('@startxref\n(\d+)\n@', $bytes);
         preg_match('@startxref\n(\d+)\n@', $bytes, $m);
         $offset = (int) $m[1];
-        // Offset должен point внутри document.
+        // The offset has to point inside the document.
         self::assertLessThan(strlen($bytes), $offset);
         self::assertGreaterThan(0, $offset);
-        // At offset должен start "N 0 obj" where N = XRef stream id.
+        // At the offset "N 0 obj" has to start, where N is the XRef stream id.
         self::assertMatchesRegularExpression(
             '@^\d+ 0 obj@',
             substr($bytes, $offset, 30),
@@ -202,7 +202,7 @@ final class XrefStreamTest extends TestCase
         $pdf->useXrefStream();
         $bytes = $pdf->toBytes();
 
-        // Header bumped from 1.4 к 1.5.
+        // The header is bumped from 1.4 to 1.5.
         self::assertStringStartsWith("%PDF-1.5\n", $bytes);
     }
 

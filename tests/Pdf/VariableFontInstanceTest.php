@@ -33,7 +33,7 @@ final class VariableFontInstanceTest extends TestCase
         if ($ttf === null) {
             self::markTestSkipped('System variable font not available');
         }
-        // Defaults для wght=400 (axis default) — no variation applied.
+        // The defaults for wght=400 (the axis default) — no variation applied.
         $inst = new VariableInstance($ttf, ['wght' => 400]);
         self::assertTrue($inst->isVariable());
     }
@@ -90,7 +90,7 @@ final class VariableFontInstanceTest extends TestCase
         $pdf1000->addPage()->showEmbeddedText('A', 50, 700, $font1000, 14);
         $b1000 = $pdf1000->toBytes();
 
-        // Differing axis values должны produce different FontFile2 contents.
+        // Differing axis values have to produce different FontFile2 contents.
         self::assertNotSame($b400, $b1000);
     }
 
@@ -128,16 +128,16 @@ final class VariableFontInstanceTest extends TestCase
         $pdf->addPage()->showEmbeddedText('A', 50, 700, $font, 14);
         $bytes = $pdf->toBytes();
 
-        // Variation tables ('fvar', 'gvar', 'HVAR', 'MVAR') stripped из embed.
-        // Their 4-char tags shouldn't appear в FontFile2 stream.
-        // Note: 'gvar' и 'HVAR' специфичны достаточно чтобы appear только
-        // в variation context (not random byte sequences).
-        // ASCII tag bytes для fvar = 0x66 0x76 0x61 0x72 = "fvar".
+        // The variation tables ('fvar', 'gvar', 'HVAR', 'MVAR') are stripped from
+        // the embed. Their 4-char tags should not appear in the FontFile2
+        // stream. Note: 'gvar' and 'HVAR' are specific enough to appear only in
+        // a variation context (not as random byte sequences).
+        // The ASCII tag bytes for fvar are 0x66 0x76 0x61 0x72 = "fvar".
         $fontFile = self::extractFontStream($bytes);
         if ($fontFile === null) {
             self::markTestSkipped('Could not extract FontFile2 stream');
         }
-        // Subset shouldn't have variation table tags в TTF table directory.
+        // The subset should have no variation table tags in the TTF table directory.
         // Check first 1024 bytes of font stream (where table directory lives).
         $head = substr($fontFile, 0, 2048);
         self::assertStringNotContainsString('fvar', $head);

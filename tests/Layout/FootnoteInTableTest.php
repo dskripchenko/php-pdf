@@ -46,8 +46,8 @@ final class FootnoteInTableTest extends TestCase
     #[Test]
     public function numberingDoesNotDriftWhenACellIsVisitedRepeatedly(): void
     {
-        // Двадцать строк заставляют таблицу разбиться между страницами, то
-        // есть ячейки будут разложены не по одному разу.
+        // Twenty rows force the table to break between pages, which means the
+        // cells get laid out more than once.
         $rows = [];
         for ($i = 0; $i < 20; $i++) {
             $rows[] = new Row([
@@ -62,8 +62,8 @@ final class FootnoteInTableTest extends TestCase
 
         $text = $this->render([new Table($rows)]);
 
-        // Ровно одна сноска — значит ни номер не уполз, ни текст не
-        // продублировался при повторных проходах по ячейке.
+        // Exactly one footnote — so neither the number drifted nor the text was
+        // duplicated on the repeated passes over the cell.
         self::assertSame(1, substr_count($text, 'The only note'));
         self::assertStringNotContainsString('2. The only note', $text);
     }
@@ -85,10 +85,10 @@ final class FootnoteInTableTest extends TestCase
     #[Test]
     public function aFullFootnoteZoneDoesNotRecurse(): void
     {
-        // Зона сносок рисуется обычными абзацами, а те умеют переносить
-        // страницу. Пока страница не помечалась выведенной до отрисовки,
-        // повторный вход сюда с тем же списком уходил в бесконечную
-        // рекурсию и съедал память до фатальной ошибки.
+        // The footnote area is drawn as ordinary paragraphs, and those can break
+        // the page. While the page was not marked as emitted before drawing,
+        // re-entering here with the same list went into infinite recursion and
+        // ate the memory up to a fatal error.
         $body = [];
         for ($i = 0; $i < 12; $i++) {
             $body[] = new Paragraph([

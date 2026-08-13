@@ -24,8 +24,8 @@ final class BarcodeRenderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Code 128 → много fill operators (по одному на contiguous black run).
-        // Минимум >= 10 черных rectangles ожидается для 'HELLO'.
+        // Code 128 gives many fill operators (one per contiguous black run).
+        // At least 10 black rectangles are expected for 'HELLO'.
         $count = preg_match_all('@^f$@m', $bytes);
         self::assertGreaterThan(10, $count, 'Barcode must emit multiple filled rects');
     }
@@ -38,7 +38,7 @@ final class BarcodeRenderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Caption parenthesized в PDF text show op.
+        // The caption is parenthesized in the PDF text-show op.
         self::assertStringContainsString('(ABC-123) Tj', $bytes);
     }
 
@@ -71,27 +71,28 @@ final class BarcodeRenderTest extends TestCase
     #[Test]
     public function barcode_clamps_to_content_width(): void
     {
-        // 10000pt requested — должно clamp'нуться к content area.
+        // 10000pt requested — it has to be clamped to the content area.
         $doc = new Document(new Section([
             new Barcode('A', widthPt: 10000),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // PDF не должен содержать unreasonably large coordinates.
+        // The PDF must not contain unreasonably large coordinates.
         self::assertDoesNotMatchRegularExpression('@\b10000(?:\.|\s)@', $bytes);
     }
 
     #[Test]
     public function barcode_alignment_center_offsets_x(): void
     {
-        // Center alignment должен отступить от leftX.
+        // Centre alignment has to move away from leftX.
         $doc = new Document(new Section([
             new Barcode('A', widthPt: 100, alignment: Alignment::Center),
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // Просто валидируем что PDF корректно собирается + content stream
-        // содержит fillRect для bars. Точный X — implementation-detail.
+        // Just validate that the PDF assembles correctly and that the content
+        // stream holds a fillRect for the bars. The exact X is an implementation
+        // detail.
         $count = preg_match_all('@^f$@m', $bytes);
         self::assertGreaterThan(5, $count);
     }
@@ -104,8 +105,8 @@ final class BarcodeRenderTest extends TestCase
         ]));
         $bytes = $doc->toBytes(new Engine(compressStreams: false));
 
-        // re оператор использует format: `x y w h re`. Должен содержать
-        // height 60 у каждого bar.
+        // The re operator has the format `x y w h re`. It has to carry a height
+        // of 60 for every bar.
         self::assertMatchesRegularExpression('@\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+60(?:\s)\s*re@', $bytes);
     }
 

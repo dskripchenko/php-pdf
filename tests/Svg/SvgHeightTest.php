@@ -17,10 +17,11 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Векторный блок занимает столько места, сколько объявил.
+ * A vector block takes up as much room as it declared.
  *
- * Пока измерение его не знало, строка таблицы со знаком мерилась нулевой
- * высотой: рисунок вылезал за строку и наезжал на её границу.
+ * While the measurement did not know about it, a table row holding a mark
+ * measured as zero height: the drawing spilled out of the row and ran into its
+ * border.
  */
 final class SvgHeightTest extends TestCase
 {
@@ -35,14 +36,15 @@ final class SvgHeightTest extends TestCase
     #[Test]
     public function a_row_is_as_tall_as_the_mark_inside_it(): void
     {
-        // Сравниваем два знака разной высоты: так минимальная высота строки
-        // из сравнения уходит, и остаётся ровно вклад рисунка.
+        // Compare two marks of different heights: the minimum row height then
+        // drops out of the comparison, leaving exactly the drawing's
+        // contribution.
         $row = static fn (float $h): Table => new Table([new Row([
             new Cell([new SvgElement(self::MARK, widthPt: 40, heightPt: $h)]),
         ])]);
 
-        // Положение абзаца под таблицей и есть высота строки: измерение
-        // проверяем тем же способом, каким его видит читатель.
+        // The position of the paragraph below the table IS the row height: the
+        // measurement is checked the same way a reader sees it.
         $textY = function (Table $t): float {
             $path = tempnam(sys_get_temp_dir(), 'svgh-').'.pdf';
             file_put_contents($path, $this->pdfOf(new Section([$t, new Paragraph([new Run('после')])])));
@@ -56,8 +58,8 @@ final class SvgHeightTest extends TestCase
             return (float) ($m[1] ?? 0);
         };
 
-        // Координаты извлечения растут вниз: знак вдвое выше опускает абзац
-        // ровно на разницу высот.
+        // The extraction coordinates grow downwards: a mark twice as tall pushes
+        // the paragraph down by exactly the difference in height.
         self::assertEqualsWithDelta(60.0, $textY($row(100)) - $textY($row(40)), 1.0);
     }
 }

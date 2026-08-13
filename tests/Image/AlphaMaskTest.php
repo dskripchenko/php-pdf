@@ -13,16 +13,16 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Прозрачность картинки доезжает до PDF.
+ * The transparency of an image makes it into the PDF.
  *
- * PDF не умеет прозрачность внутри изображения: она задаётся отдельным
- * объектом-маской через `/SMask`. Раньше альфа-канал выбрасывался, и
- * прозрачные точки печатались тем цветом, что лежал под ними — подпись и
- * печать из импортированного документа выходили на чёрном прямоугольнике.
+ * PDF cannot carry transparency inside an image: it is given by a separate mask
+ * object through `/SMask`. The alpha channel used to be thrown away, and
+ * transparent pixels printed in whatever colour lay beneath them — a signature
+ * and a stamp from an imported document came out on a black rectangle.
  */
 final class AlphaMaskTest extends TestCase
 {
-    /** PNG 2×2: два пикселя непрозрачных, два полностью прозрачных. */
+    /** A 2×2 PNG: two opaque pixels and two fully transparent ones. */
     private function transparentPng(): string
     {
         $image = imagecreatetruecolor(2, 2);
@@ -61,8 +61,8 @@ final class AlphaMaskTest extends TestCase
     #[Test]
     public function opaque_image_gets_no_mask(): void
     {
-        // Лишний объект в файле ничего не даёт: непрозрачной картинке маска
-        // не нужна.
+        // An extra object in the file buys nothing: an opaque image needs no
+        // mask.
         $image = imagecreatetruecolor(2, 2);
         imagefill($image, 0, 0, imagecolorallocate($image, 10, 20, 30));
         ob_start();
