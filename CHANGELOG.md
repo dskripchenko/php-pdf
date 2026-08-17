@@ -4,6 +4,14 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4] — 2026-08-17
+
+### Changed
+- The code's comments are in English, and the documentation follows the shared
+  layout: README and CHANGELOG at the root, the translations under `docs/`.
+  Nothing the library does has changed — the tag is here so that "the tag is
+  the state of the repository" keeps holding.
+
 ## [1.9.3] — 2026-08-06
 
 ### Fixed
