@@ -267,6 +267,64 @@ final class ExistingFormFillerTest extends TestCase
     }
 
     #[Test]
+    public function stamps_an_opaque_image_standalone(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $pdf->addPage();
+        $bytes = $pdf->toBytes();
+
+        $out = ExistingFormFiller::fromBytes($bytes)
+            ->stampImage(0, __DIR__ . '/../../fixtures/sample.png', 10, 20, 40, 30)
+            ->toBytes();
+
+        self::assertStringContainsString('/Subtype /Image', $out);
+        self::assertMatchesRegularExpression('@/Stamp\d+ Do@', $out);
+        self::assertStringNotContainsString('/SMask', $out);
+    }
+
+    #[Test]
+    public function stamps_a_transparent_image_with_an_smask(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $pdf->addPage();
+        $bytes = $pdf->toBytes();
+
+        $out = ExistingFormFiller::fromBytes($bytes)
+            ->stampImage(0, __DIR__ . '/../../fixtures/1x1.png', 0, 0, 10, 10)
+            ->toBytes();
+
+        self::assertStringContainsString('/SMask', $out);
+    }
+
+    #[Test]
+    public function composes_fill_flatten_and_stamp(): void
+    {
+        $bytes = $this->textFieldPdf();
+
+        $out = ExistingFormFiller::fromBytes($bytes)
+            ->setValue('full_name', 'Combined')
+            ->flatten()
+            ->stampImage(0, __DIR__ . '/../../fixtures/sample.png', 10, 10, 20, 15)
+            ->toBytes();
+
+        $doc = ReaderDocument::fromBytes($out);
+        self::assertSame(1, $doc->pageCount());
+        self::assertStringContainsString('(Combined) Tj', $this->pageText($doc, 0));
+        self::assertStringContainsString('/Subtype /Image', $out);
+    }
+
+    #[Test]
+    public function rejects_an_out_of_range_page(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $pdf->addPage();
+
+        $this->expectException(\OutOfRangeException::class);
+        ExistingFormFiller::fromBytes($pdf->toBytes())
+            ->stampImage(1, __DIR__ . '/../../fixtures/sample.png', 0, 0, 10, 10);
+    }
+
+    #[Test]
     public function opens_from_a_file_path(): void
     {
         $path = tempnam(sys_get_temp_dir(), 'php-pdf-forms-test-');

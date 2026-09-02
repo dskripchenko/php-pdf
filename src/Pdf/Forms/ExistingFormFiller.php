@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Dskripchenko\PhpPdf\Pdf\Forms;
 
+use Dskripchenko\PhpPdf\Image\PdfImage;
 use Dskripchenko\PhpPdf\Pdf\Merge\MergeSerializer;
 use Dskripchenko\PhpPdf\Pdf\Merge\ObjectImporter;
 use Dskripchenko\PhpPdf\Pdf\Merge\PdfSource;
@@ -145,6 +146,35 @@ final class ExistingFormFiller
         }
 
         $this->dropAcroFormIfEmpty($importer);
+
+        return $this;
+    }
+
+    /**
+     * Place a PNG/JPEG image (with alpha preserved for PNG) onto the given
+     * 0-based page, at `$x,$y,$w,$h` in top-left-origin points. Independent
+     * of any AcroForm field — composes with {@see setValue()} and
+     * {@see flatten()} on the same page.
+     */
+    public function stampImage(int $pageIndex, string $imagePath, float $x, float $y, float $width, float $height): self
+    {
+        return $this->stampImageBytes($pageIndex, (string) file_get_contents($imagePath), $x, $y, $width, $height);
+    }
+
+    public function stampImageBytes(int $pageIndex, string $bytes, float $x, float $y, float $width, float $height): self
+    {
+        $doc = $this->document();
+        $pages = $doc->pages();
+        if ($pageIndex < 0 || $pageIndex >= count($pages)) {
+            throw new \OutOfRangeException("Page {$pageIndex} does not exist (document has " . count($pages) . ' pages)');
+        }
+        $sourcePage = $pages[$pageIndex];
+
+        $importer = $this->importer();
+        $pageId = $importer->importObject($sourcePage->objectNumber)->number;
+        $image = PdfImage::fromBytes($bytes);
+
+        (new ImageStamper())->stamp($importer, $pageId, $image, $x, $y, $width, $height, $sourcePage->height());
 
         return $this;
     }
