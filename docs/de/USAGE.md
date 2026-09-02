@@ -545,9 +545,10 @@ Das Quelldokument wird nie verändert — jeder Aufruf arbeitet auf einer
 tiefen Kopie des *gesamten* Objektgraphen, sodass alles Unberührte
 (Lesezeichen, Metadaten, andere Annotationen) unverändert in die Ausgabe
 übernommen wird. `fields()` liefert für jedes Feld seinen vollständig
-qualifizierten, durch Punkte getrennten Namen, Typ, aktuellen Wert und (bei
-Checkbox/Radio) seine Ein-Zustand-Optionsnamen, sodass ein Aufrufer die Form
-einer Vorlage vor dem Ausfüllen ermitteln kann:
+qualifizierten, durch Punkte getrennten Namen, Typ, aktuellen Wert, seinen
+`/TU`-Tooltip (falls vorhanden) und (bei Checkbox/Radio) seine
+Ein-Zustand-Optionsnamen, sodass ein Aufrufer die Form einer Vorlage vor
+dem Ausfüllen ermitteln kann:
 
 ```php
 foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {

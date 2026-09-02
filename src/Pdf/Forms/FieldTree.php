@@ -68,8 +68,7 @@ final class FieldTree
             return;
         }
 
-        $ownT = $dict->get('T');
-        $partial = $ownT instanceof PdfString ? $this->decodeName($ownT) : null;
+        $partial = $this->decodeTextString($dict->get('T'));
         $name = $partial !== null
             ? ($parentName !== null ? $parentName . '.' . $partial : $partial)
             : $parentName;
@@ -77,6 +76,7 @@ final class FieldTree
         $ft = $this->nameValue($dict->get('FT')) ?? $inheritedFt;
         $da = $dict->get('DA') instanceof PdfString ? $this->decodeName($dict->get('DA')) : $inheritedDa;
         $ff = is_int($dict->get('Ff')) ? $dict->get('Ff') : $inheritedFf;
+        $tu = $this->decodeTextString($dict->get('TU'));
 
         $kids = $doc->deref($dict->get('Kids'));
         $childFieldRefs = [];
@@ -125,6 +125,7 @@ final class FieldTree
             widgetObjNums: $widgetObjNums,
             parentObjNum: $parentObjNum,
             da: $da,
+            tu: $tu,
             value: $value,
             options: $options,
             required: (($ff ?? 0) & 2) !== 0,
@@ -184,6 +185,27 @@ final class FieldTree
     private function decodeName(mixed $value): ?string
     {
         return $value instanceof PdfString ? $value->bytes : null;
+    }
+
+    /**
+     * Decodes a PDF text string (ISO 32000-1 §7.9.2.2): UTF-16BE with a
+     * `\xFE\xFF` byte order mark, or PDFDocEncoding (ASCII-compatible for
+     * the characters this library writes) when the BOM is absent.
+     */
+    private function decodeTextString(mixed $value): ?string
+    {
+        if (!$value instanceof PdfString) {
+            return null;
+        }
+
+        $bytes = $value->bytes;
+        if (!str_starts_with($bytes, "\xFE\xFF")) {
+            return $bytes;
+        }
+
+        $decoded = @iconv('UTF-16BE', 'UTF-8', substr($bytes, 2));
+
+        return $decoded !== false ? $decoded : $bytes;
     }
 
     private function stringValue(mixed $value): string

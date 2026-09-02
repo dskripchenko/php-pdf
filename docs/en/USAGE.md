@@ -531,9 +531,9 @@ ExistingFormFiller::fromFile('template.pdf')
 The source document is never mutated — every call works on a deep copy of
 the *entire* object graph, so anything not touched (outlines, metadata,
 other annotations) survives untouched into the output. `fields()` returns
-each field's fully-qualified dotted name, type, current value and (for
-checkbox/radio) its on-state option names, so a caller can discover a
-template's shape before filling it:
+each field's fully-qualified dotted name, type, current value, its `/TU`
+tooltip (if any) and (for checkbox/radio) its on-state option names, so a
+caller can discover a template's shape before filling it:
 
 ```php
 foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {

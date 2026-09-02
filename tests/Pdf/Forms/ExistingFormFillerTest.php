@@ -61,6 +61,38 @@ final class ExistingFormFillerTest extends TestCase
     }
 
     #[Test]
+    public function exposes_the_tu_tooltip(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->addFormField('text', 'hint', 0, 0, 100, 20, tooltip: '{"width":"auto","height":140,"left":50,"top":770,"page":1}');
+
+        $filler = ExistingFormFiller::fromBytes($pdf->toBytes());
+        self::assertSame(
+            '{"width":"auto","height":140,"left":50,"top":770,"page":1}',
+            $filler->fields()['hint']->tu,
+        );
+    }
+
+    #[Test]
+    public function decodes_a_non_ascii_tu_tooltip(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->addFormField('text', 'hint', 0, 0, 100, 20, tooltip: 'Naam invöeren');
+
+        $filler = ExistingFormFiller::fromBytes($pdf->toBytes());
+        self::assertSame('Naam invöeren', $filler->fields()['hint']->tu);
+    }
+
+    #[Test]
+    public function tu_is_null_when_not_set(): void
+    {
+        $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
+        self::assertNull($filler->fields()['full_name']->tu);
+    }
+
+    #[Test]
     public function reads_a_required_readonly_field(): void
     {
         $pdf = PdfDocument::new(compressStreams: false);

@@ -24,6 +24,8 @@ final readonly class FieldInfo
         public array $options,
         public bool $required,
         public bool $readOnly,
+        /** The field's `/TU` (alternate field name / tooltip), if any. */
+        public ?string $tu = null,
     ) {
     }
 }

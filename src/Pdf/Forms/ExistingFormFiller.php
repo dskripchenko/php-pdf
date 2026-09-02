@@ -79,6 +79,7 @@ final class ExistingFormFiller
                 options: $node->options,
                 required: $node->required,
                 readOnly: $node->readOnly,
+                tu: $node->tu,
             );
         }
 
