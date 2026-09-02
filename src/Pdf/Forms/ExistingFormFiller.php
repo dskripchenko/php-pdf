@@ -9,6 +9,7 @@ use Dskripchenko\PhpPdf\Pdf\Merge\ObjectImporter;
 use Dskripchenko\PhpPdf\Pdf\Merge\PdfSource;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfReference;
+use Dskripchenko\PhpPdf\Pdf\Reader\PdfString;
 use Dskripchenko\PhpPdf\Pdf\Reader\ReaderDocument;
 
 /**
@@ -114,6 +115,40 @@ final class ExistingFormFiller
         return $this;
     }
 
+    /**
+     * Bake the current value of the given fields into their page content and
+     * remove their interactive widgets. `null` (default) flattens every
+     * field. When flattening leaves no fields behind, `/AcroForm` is dropped
+     * from the output catalog entirely.
+     *
+     * @param  list<string>|null  $fieldNames
+     */
+    public function flatten(?array $fieldNames = null): self
+    {
+        $tree = $this->tree();
+        $names = $fieldNames ?? array_keys($tree);
+        $importer = $this->importer();
+        $doc = $this->document();
+        $flattener = new FormFlattener();
+        // Both depend only on the fixed /AcroForm object, not on the field
+        // being flattened — compute them once rather than per field.
+        $dr = $this->importedDr($importer);
+        $acroFormDa = $this->acroFormLevelDa($doc);
+
+        foreach ($names as $name) {
+            $node = $tree[$name] ?? null;
+            if ($node === null) {
+                throw new \InvalidArgumentException("Unknown field: {$name}");
+            }
+            $flattener->flatten($importer, $doc, $node, $dr, $acroFormDa);
+            $this->removeFromAcroForm($importer, $node);
+        }
+
+        $this->dropAcroFormIfEmpty($importer);
+
+        return $this;
+    }
+
     public function toBytes(): string
     {
         $importer = $this->importer();
@@ -173,6 +208,131 @@ final class ExistingFormFiller
         $this->acroFormObjNum = $acroFormRaw instanceof PdfReference ? $acroFormRaw->number : null;
 
         return $this->importer = $importer;
+    }
+
+    private function importedDr(ObjectImporter $importer): ?PdfDictionary
+    {
+        if ($this->acroFormObjNum === null) {
+            return null;
+        }
+        $acroForm = $importer->get($importer->importObject($this->acroFormObjNum)->number);
+        if (!$acroForm instanceof PdfDictionary) {
+            return null;
+        }
+        $dr = $acroForm->get('DR');
+        if ($dr instanceof PdfReference) {
+            $dr = $importer->get($dr->number);
+        }
+
+        return $dr instanceof PdfDictionary ? $dr : null;
+    }
+
+    private function acroFormLevelDa(ReaderDocument $doc): ?string
+    {
+        if ($this->acroFormObjNum === null) {
+            return null;
+        }
+        $acroForm = $doc->deref(new PdfReference($this->acroFormObjNum, 0));
+        if (!$acroForm instanceof PdfDictionary) {
+            return null;
+        }
+        $da = $acroForm->get('DA');
+
+        return $da instanceof PdfString ? $da->bytes : null;
+    }
+
+    private function removeFromAcroForm(ObjectImporter $importer, FieldNode $node): void
+    {
+        $fieldNewId = $importer->importObject($node->fieldObjNum)->number;
+
+        if ($node->parentObjNum !== null) {
+            $parentId = $importer->importObject($node->parentObjNum)->number;
+            $this->removeRefFromArrayKey($importer, $parentId, 'Kids', $fieldNewId);
+
+            // A non-terminal parent left with no /Kids is a dangling field
+            // node — drop it from /AcroForm /Fields too, or dropAcroFormIfEmpty()
+            // would never see the AcroForm as empty once every terminal field
+            // reachable only through it has been flattened.
+            $parentDict = $importer->get($parentId);
+            $kids = $parentDict instanceof PdfDictionary ? $parentDict->get('Kids') : null;
+            if ($kids instanceof PdfReference) {
+                $kids = $importer->get($kids->number);
+            }
+            if (is_array($kids) && $kids === [] && $this->acroFormObjNum !== null) {
+                $acroFormId = $importer->importObject($this->acroFormObjNum)->number;
+                $this->removeRefFromArrayKey($importer, $acroFormId, 'Fields', $parentId);
+            }
+
+            return;
+        }
+
+        if ($this->acroFormObjNum === null) {
+            return;
+        }
+        $acroFormId = $importer->importObject($this->acroFormObjNum)->number;
+        $this->removeRefFromArrayKey($importer, $acroFormId, 'Fields', $fieldNewId);
+    }
+
+    private function removeRefFromArrayKey(ObjectImporter $importer, int $objId, string $key, int $targetNewId): void
+    {
+        $dict = $importer->get($objId);
+        if (!$dict instanceof PdfDictionary) {
+            return;
+        }
+        $arr = $dict->get($key);
+
+        // The array itself may be an indirect object (ISO 32000-1 allows any
+        // value to be indirect) rather than inlined into the dictionary.
+        $arrObjId = null;
+        if ($arr instanceof PdfReference) {
+            $arrObjId = $arr->number;
+            $arr = $importer->get($arrObjId);
+        }
+        if (!is_array($arr)) {
+            return;
+        }
+
+        $filtered = array_values(array_filter(
+            $arr,
+            static fn ($ref) => !($ref instanceof PdfReference && $ref->number === $targetNewId),
+        ));
+
+        if ($arrObjId !== null) {
+            $importer->set($arrObjId, $filtered);
+
+            return;
+        }
+
+        $items = $dict->all();
+        $items[$key] = $filtered;
+        $importer->set($objId, new PdfDictionary($items));
+    }
+
+    private function dropAcroFormIfEmpty(ObjectImporter $importer): void
+    {
+        if ($this->acroFormObjNum === null) {
+            return;
+        }
+        $acroFormId = $importer->importObject($this->acroFormObjNum)->number;
+        $acroForm = $importer->get($acroFormId);
+        if (!$acroForm instanceof PdfDictionary) {
+            return;
+        }
+        $fields = $acroForm->get('Fields');
+        if ($fields instanceof PdfReference) {
+            $fields = $importer->get($fields->number);
+        }
+        if (!is_array($fields) || $fields !== []) {
+            return;
+        }
+
+        $catalog = $importer->get($this->catalogId());
+        if ($catalog instanceof PdfDictionary) {
+            $items = $catalog->all();
+            unset($items['AcroForm']);
+            $importer->set($this->catalogId(), new PdfDictionary($items));
+        }
+        $this->acroFormObjNum = null;
     }
 
     private function catalogId(): int

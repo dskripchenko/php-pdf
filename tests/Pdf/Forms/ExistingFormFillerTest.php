@@ -9,6 +9,7 @@ use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
 use Dskripchenko\PhpPdf\Pdf\Forms\FieldTree;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfName;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfReference;
+use Dskripchenko\PhpPdf\Pdf\Reader\PdfStream;
 use Dskripchenko\PhpPdf\Pdf\Reader\ReaderDocument;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -122,6 +123,23 @@ final class ExistingFormFillerTest extends TestCase
     }
 
     #[Test]
+    public function flattening_a_parent_inherited_field_removes_the_acroform(): void
+    {
+        $path = __DIR__.'/../../fixtures/forms/parent-inherited.pdf';
+        if (!is_file($path)) {
+            self::markTestSkipped('Fixture parent-inherited.pdf not present');
+        }
+
+        $out = ExistingFormFiller::fromFile($path)
+            ->setValue('employer.name', 'Acme Corp')
+            ->flatten()
+            ->toBytes();
+
+        self::assertSame([], ExistingFormFiller::fromBytes($out)->fields());
+        self::assertStringNotContainsString('/AcroForm', $out);
+    }
+
+    #[Test]
     public function setting_an_unknown_field_throws(): void
     {
         $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
@@ -192,6 +210,60 @@ final class ExistingFormFillerTest extends TestCase
         // original value — the mutation must not have touched the source.
         $original = ExistingFormFiller::fromBytes($bytes);
         self::assertSame('Jane Roe', $original->fields()['full_name']->value);
+    }
+
+    #[Test]
+    public function flattening_all_fields_removes_the_acroform(): void
+    {
+        $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
+        $out = $filler->setValue('full_name', 'Baked In')->flatten()->toBytes();
+
+        self::assertSame([], ExistingFormFiller::fromBytes($out)->fields());
+        self::assertStringNotContainsString('/AcroForm', $out);
+    }
+
+    private function pageText(ReaderDocument $doc, int $index): string
+    {
+        $contents = $doc->pages()[$index]->dict->get('Contents');
+        $streams = is_array($contents) ? $contents : [$contents];
+        $parts = [];
+        foreach ($streams as $entry) {
+            $stream = $doc->deref($entry);
+            if ($stream instanceof PdfStream) {
+                $parts[] = $doc->streamData($stream);
+            }
+        }
+
+        return implode("\n", $parts);
+    }
+
+    #[Test]
+    public function flattened_value_is_drawn_on_the_page(): void
+    {
+        $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
+        $out = $filler->setValue('full_name', 'Baked In')->flatten()->toBytes();
+
+        self::assertStringContainsString('(Baked In) Tj', $this->pageText(ReaderDocument::fromBytes($out), 0));
+    }
+
+    #[Test]
+    public function flattening_a_subset_leaves_other_fields_interactive(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->addFormField('text', 'first', 100, 700, 200, 20, defaultValue: 'A');
+        $page->addFormField('text', 'second', 100, 650, 200, 20, defaultValue: 'B');
+
+        $out = ExistingFormFiller::fromBytes($pdf->toBytes())
+            ->setValue('first', 'Baked')
+            ->flatten(['first'])
+            ->toBytes();
+
+        $result = ExistingFormFiller::fromBytes($out);
+        $fields = $result->fields();
+        self::assertArrayNotHasKey('first', $fields);
+        self::assertArrayHasKey('second', $fields);
+        self::assertSame('B', $fields['second']->value);
     }
 
     #[Test]

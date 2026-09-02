@@ -124,6 +124,7 @@ final class FieldTree
             fieldObjNum: $ref->number,
             widgetObjNums: $widgetObjNums,
             parentObjNum: $parentObjNum,
+            da: $da,
             value: $value,
             options: $options,
             required: (($ff ?? 0) & 2) !== 0,

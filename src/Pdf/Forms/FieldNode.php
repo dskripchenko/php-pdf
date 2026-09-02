@@ -24,6 +24,7 @@ final readonly class FieldNode
         public int $fieldObjNum,
         public array $widgetObjNums,
         public ?int $parentObjNum,
+        public ?string $da,
         public string $value,
         /** @var list<string> */
         public array $options,
