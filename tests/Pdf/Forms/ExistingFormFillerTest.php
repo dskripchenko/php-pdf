@@ -6,6 +6,10 @@ namespace Dskripchenko\PhpPdf\Tests\Pdf\Forms;
 
 use Dskripchenko\PhpPdf\Pdf\Document as PdfDocument;
 use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+use Dskripchenko\PhpPdf\Pdf\Forms\FieldTree;
+use Dskripchenko\PhpPdf\Pdf\Reader\PdfName;
+use Dskripchenko\PhpPdf\Pdf\Reader\PdfReference;
+use Dskripchenko\PhpPdf\Pdf\Reader\ReaderDocument;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -67,6 +71,127 @@ final class ExistingFormFillerTest extends TestCase
 
         self::assertTrue($field->required);
         self::assertTrue($field->readOnly);
+    }
+
+    /** @return list<string> AS state of every widget of $name, in fixture order */
+    private function widgetStates(ReaderDocument $doc, string $name): array
+    {
+        $node = (new FieldTree())->build($doc)[$name];
+        $states = [];
+        foreach ($node->widgetObjNums as $objNum) {
+            $widget = $doc->deref(new PdfReference($objNum, 0));
+            $as = $widget->get('AS');
+            $states[] = $as instanceof PdfName ? $as->value : '';
+        }
+
+        return $states;
+    }
+
+    #[Test]
+    public function sets_a_text_field_value(): void
+    {
+        $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
+        $out = $filler->setValue('full_name', 'John Doe')->toBytes();
+
+        $result = ExistingFormFiller::fromBytes($out);
+        self::assertSame('John Doe', $result->fields()['full_name']->value);
+    }
+
+    #[Test]
+    public function fill_sets_need_appearances_on_the_acroform(): void
+    {
+        $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
+        $out = $filler->setValue('full_name', 'John Doe')->toBytes();
+
+        self::assertStringContainsString('/NeedAppearances true', $out);
+    }
+
+    #[Test]
+    public function sets_a_field_reachable_only_through_parent_inheritance(): void
+    {
+        $path = __DIR__.'/../../fixtures/forms/parent-inherited.pdf';
+        if (!is_file($path)) {
+            self::markTestSkipped('Fixture parent-inherited.pdf not present');
+        }
+
+        $filler = ExistingFormFiller::fromFile($path);
+        $out = $filler->setValue('employer.name', 'Acme Corp')->toBytes();
+
+        $result = ExistingFormFiller::fromBytes($out);
+        self::assertSame('Acme Corp', $result->fields()['employer.name']->value);
+    }
+
+    #[Test]
+    public function setting_an_unknown_field_throws(): void
+    {
+        $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
+        $this->expectException(\InvalidArgumentException::class);
+        $filler->setValue('does_not_exist', 'x');
+    }
+
+    #[Test]
+    public function checks_a_checkbox(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->addFormField('checkbox', 'subscribe', 100, 700, 14, 14);
+        $bytes = $pdf->toBytes();
+
+        $out = ExistingFormFiller::fromBytes($bytes)->setValue('subscribe', 'yes')->toBytes();
+
+        $result = ExistingFormFiller::fromBytes($out);
+        self::assertSame('Yes', $result->fields()['subscribe']->value);
+        self::assertSame(['Yes'], $this->widgetStates(ReaderDocument::fromBytes($out), 'subscribe'));
+    }
+
+    #[Test]
+    public function unchecks_a_checkbox(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->addFormField('checkbox', 'subscribe', 100, 700, 14, 14, defaultValue: 'on');
+        $bytes = $pdf->toBytes();
+
+        $out = ExistingFormFiller::fromBytes($bytes)->setValue('subscribe', 'no')->toBytes();
+
+        $result = ExistingFormFiller::fromBytes($out);
+        self::assertSame('Off', $result->fields()['subscribe']->value);
+        self::assertSame(['Off'], $this->widgetStates(ReaderDocument::fromBytes($out), 'subscribe'));
+    }
+
+    #[Test]
+    public function selects_one_radio_option_and_unselects_the_rest(): void
+    {
+        $pdf = PdfDocument::new(compressStreams: false);
+        $page = $pdf->addPage();
+        $page->addFormField('radio-group', 'size', 100, 700, 60, 14,
+            options: ['S', 'M', 'L'],
+            radioWidgets: [
+                ['x' => 100, 'y' => 700, 'w' => 14, 'h' => 14],
+                ['x' => 120, 'y' => 700, 'w' => 14, 'h' => 14],
+                ['x' => 140, 'y' => 700, 'w' => 14, 'h' => 14],
+            ],
+        );
+        $bytes = $pdf->toBytes();
+
+        $out = ExistingFormFiller::fromBytes($bytes)->setValue('size', 'M')->toBytes();
+
+        $result = ExistingFormFiller::fromBytes($out);
+        self::assertSame('M', $result->fields()['size']->value);
+        self::assertSame(['Off', 'M', 'Off'], $this->widgetStates(ReaderDocument::fromBytes($out), 'size'));
+    }
+
+    #[Test]
+    public function does_not_mutate_the_original_source_document(): void
+    {
+        $bytes = $this->textFieldPdf();
+        $filler = ExistingFormFiller::fromBytes($bytes);
+        $filler->setValue('full_name', 'Changed')->toBytes();
+
+        // A fresh filler over the same original bytes must still see the
+        // original value — the mutation must not have touched the source.
+        $original = ExistingFormFiller::fromBytes($bytes);
+        self::assertSame('Jane Roe', $original->fields()['full_name']->value);
     }
 
     #[Test]

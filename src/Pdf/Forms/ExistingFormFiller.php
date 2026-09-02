@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Dskripchenko\PhpPdf\Pdf\Forms;
 
+use Dskripchenko\PhpPdf\Pdf\Merge\MergeSerializer;
+use Dskripchenko\PhpPdf\Pdf\Merge\ObjectImporter;
 use Dskripchenko\PhpPdf\Pdf\Merge\PdfSource;
+use Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary;
+use Dskripchenko\PhpPdf\Pdf\Reader\PdfReference;
 use Dskripchenko\PhpPdf\Pdf\Reader\ReaderDocument;
 
 /**
@@ -31,6 +35,15 @@ final class ExistingFormFiller
 
     /** @var array<string, FieldNode>|null */
     private ?array $fieldTree = null;
+
+    private ?ObjectImporter $importer = null;
+
+    private ?int $catalogId = null;
+
+    /** Source object number of `/AcroForm`, or null when the source has none. */
+    private ?int $acroFormObjNum = null;
+
+    private bool $mutated = false;
 
     private function __construct(PdfSource $source)
     {
@@ -70,6 +83,65 @@ final class ExistingFormFiller
         return $out;
     }
 
+    /**
+     * Set one field's value by its fully-qualified dotted name (see
+     * {@see fields()}). For a checkbox, any of `on`/`yes`/`true`/`1` (case
+     * insensitive) or the exact on-state export name checks it, anything
+     * else unchecks it. For a radio group, the value must match one of the
+     * group's option export names (case insensitive) to select it.
+     */
+    public function setValue(string $name, string $value): self
+    {
+        $node = $this->tree()[$name] ?? null;
+        if ($node === null) {
+            throw new \InvalidArgumentException("Unknown field: {$name}");
+        }
+
+        $importer = $this->importer();
+        (new FieldValueSetter())->apply($importer, $node, $value);
+        $this->mutated = true;
+
+        return $this;
+    }
+
+    /** @param array<string,string> $values */
+    public function setValues(array $values): self
+    {
+        foreach ($values as $name => $value) {
+            $this->setValue($name, $value);
+        }
+
+        return $this;
+    }
+
+    public function toBytes(): string
+    {
+        $importer = $this->importer();
+
+        if ($this->mutated && $this->acroFormObjNum !== null) {
+            $acroFormId = $importer->importObject($this->acroFormObjNum)->number;
+            $acroForm = $importer->get($acroFormId);
+            if ($acroForm instanceof PdfDictionary) {
+                $items = $acroForm->all();
+                $items['NeedAppearances'] = true;
+                $importer->set($acroFormId, new PdfDictionary($items));
+            }
+        }
+
+        return (new MergeSerializer())->serialize($importer->objects(), $this->catalogId());
+    }
+
+    public function toFile(string $path): int
+    {
+        $bytes = $this->toBytes();
+        $written = @file_put_contents($path, $bytes);
+        if ($written === false) {
+            throw new \RuntimeException("Cannot write PDF file: {$path}");
+        }
+
+        return $written;
+    }
+
     /** @return array<string, FieldNode> */
     private function tree(): array
     {
@@ -79,5 +151,37 @@ final class ExistingFormFiller
     private function document(): ReaderDocument
     {
         return $this->source->document();
+    }
+
+    private function importer(): ObjectImporter
+    {
+        if ($this->importer !== null) {
+            return $this->importer;
+        }
+
+        $doc = $this->document();
+        $rootRef = $doc->trailer()->get('Root');
+        if (!$rootRef instanceof PdfReference) {
+            throw new \RuntimeException('Document catalog (/Root) is not an indirect reference');
+        }
+
+        $importer = new ObjectImporter();
+        $importer->useSource($doc);
+        $this->catalogId = $importer->importObject($rootRef->number)->number;
+
+        $acroFormRaw = $doc->catalog()->get('AcroForm');
+        $this->acroFormObjNum = $acroFormRaw instanceof PdfReference ? $acroFormRaw->number : null;
+
+        return $this->importer = $importer;
+    }
+
+    private function catalogId(): int
+    {
+        $this->importer(); // ensure catalogId is populated
+        if ($this->catalogId === null) {
+            throw new \LogicException('Catalog was not imported');
+        }
+
+        return $this->catalogId;
     }
 }
