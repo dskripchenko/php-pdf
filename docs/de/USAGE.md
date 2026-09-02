@@ -24,6 +24,7 @@ einen Rundgang oder springen Sie direkt zum benötigten Feature.
 - [SVG](#svg)
 - [Hyperlinks und Lesezeichen](#hyperlinks-und-lesezeichen)
 - [Formulare (AcroForm)](#formulare-acroform)
+- [Ein bestehendes Formular ausfüllen (AcroForm)](#ein-bestehendes-formular-ausfüllen-acroform)
 - [Annotationen](#annotationen)
 - [Verschlüsselung](#verschlüsselung)
 - [Digitale Signatur](#digitale-signatur)
@@ -516,6 +517,66 @@ JavaScript-Hooks pro Feld: `keystrokeScript`, `validateScript`,
 `calculateScript`, `formatScript`, `clickScript`. Ereignisse auf
 Dokumentebene: `WC` (WillClose), `WS` (WillSave), `DS` (DidSave), `WP`
 (WillPrint), `DP` (DidPrint).
+
+---
+
+## Ein bestehendes Formular ausfüllen (AcroForm)
+
+Das Obige erstellt ein neues Formular. Um ein von jemand anderem erzeugtes
+PDF zu öffnen — eine hochgeladene Vorlage, ein Behördenformular — und die
+Werte seiner bereits definierten Felder namentlich auszufüllen, verwenden
+Sie stattdessen `ExistingFormFiller`:
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+
+ExistingFormFiller::fromFile('template.pdf')
+    ->setValues([
+        'full_name' => 'Jane Roe',
+        'agree' => 'yes',
+        'employer.name' => 'Acme Corp', // über /Parent-Vererbung aufgelöst
+    ])
+    ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
+    ->flatten()
+    ->toFile('filled.pdf');
+```
+
+Das Quelldokument wird nie verändert — jeder Aufruf arbeitet auf einer
+tiefen Kopie des *gesamten* Objektgraphen, sodass alles Unberührte
+(Lesezeichen, Metadaten, andere Annotationen) unverändert in die Ausgabe
+übernommen wird. `fields()` liefert für jedes Feld seinen vollständig
+qualifizierten, durch Punkte getrennten Namen, Typ, aktuellen Wert und (bei
+Checkbox/Radio) seine Ein-Zustand-Optionsnamen, sodass ein Aufrufer die Form
+einer Vorlage vor dem Ausfüllen ermitteln kann:
+
+```php
+foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
+    echo "{$name}: {$field->type} = {$field->value}\n";
+}
+```
+
+Unterstützte Feldtypen: `text`, `text-multiline`, `checkbox`, `radio`. Eine
+Checkbox akzeptiert `on`/`yes`/`true`/`1` (ohne Groß-/Kleinschreibung) oder
+ihren exakten Ein-Zustand-Exportnamen; alles andere hakt sie ab. Der Wert
+einer Radiogruppe muss einem ihrer Options-Exportnamen entsprechen (ohne
+Groß-/Kleinschreibung).
+
+`flatten(?array $fieldNames = null)` bäckt den aktuellen Wert in den
+Seiteninhalt ein und entfernt das interaktive Widget — übergeben Sie eine
+Liste von Namen, um eine Teilmenge zu flatten und den Rest interaktiv zu
+lassen, oder lassen Sie es weg, um alles zu flatten (was auch `/AcroForm`
+entfernt, sobald nichts mehr darin übrig ist). Nur `text`/`text-multiline`-
+Werte werden gezeichnet; andere Feldtypen verlieren nur ihr Widget. Das
+Platzhalter-Erscheinungsbild eines nicht ausgefüllten geflatteten Feldes
+(z. B. ein grauer Hintergrund) wird nicht eingebacken — nur Felder mit
+einem Wert erhalten an ihrer Stelle etwas Gezeichnetes. Lassen Sie Felder
+ungeflatteten (Standard), um das Ergebnis ein gewöhnliches interaktives PDF
+bleiben zu lassen.
+
+`stampImage()`/`stampImageBytes()` platziert ein PNG (mit Alphakanal) oder
+JPEG an einer gegebenen Seite/x/y/Breite/Höhe, unabhängig von jedem Feld —
+nützlich für eine Signatur oder ein Foto, das selbst kein Formularfeld ist.
+Koordinaten sind Punkte mit Ursprung oben links.
 
 ---
 

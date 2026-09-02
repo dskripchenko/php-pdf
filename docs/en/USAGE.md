@@ -24,6 +24,7 @@ the feature you need.
 - [SVG](#svg)
 - [Hyperlinks and bookmarks](#hyperlinks-and-bookmarks)
 - [Forms (AcroForm)](#forms-acroform)
+- [Fill an existing form (AcroForm)](#fill-an-existing-form-acroform)
 - [Annotations](#annotations)
 - [Encryption](#encryption)
 - [Digital signing](#digital-signing)
@@ -504,6 +505,61 @@ Per-field JavaScript hooks: `keystrokeScript`, `validateScript`,
 `calculateScript`, `formatScript`, `clickScript`. Document-level
 events: `WC` (WillClose), `WS` (WillSave), `DS` (DidSave), `WP`
 (WillPrint), `DP` (DidPrint).
+
+---
+
+## Fill an existing form (AcroForm)
+
+The above authors a brand-new form. To open a PDF someone else produced —
+an uploaded template, a government form — and fill in the values of its
+already-defined fields by name, use `ExistingFormFiller` instead:
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+
+ExistingFormFiller::fromFile('template.pdf')
+    ->setValues([
+        'full_name' => 'Jane Roe',
+        'agree' => 'yes',
+        'employer.name' => 'Acme Corp', // resolved via /Parent inheritance
+    ])
+    ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
+    ->flatten()
+    ->toFile('filled.pdf');
+```
+
+The source document is never mutated — every call works on a deep copy of
+the *entire* object graph, so anything not touched (outlines, metadata,
+other annotations) survives untouched into the output. `fields()` returns
+each field's fully-qualified dotted name, type, current value and (for
+checkbox/radio) its on-state option names, so a caller can discover a
+template's shape before filling it:
+
+```php
+foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
+    echo "{$name}: {$field->type} = {$field->value}\n";
+}
+```
+
+Supported field types: `text`, `text-multiline`, `checkbox`, `radio`. A
+checkbox accepts `on`/`yes`/`true`/`1` (case insensitive) or its exact
+on-state export name; anything else unchecks it. A radio group's value must
+match one of its option export names (case insensitive).
+
+`flatten(?array $fieldNames = null)` bakes the current value into the page
+content and removes the interactive widget — pass a list of names to
+flatten a subset and leave the rest interactive, or omit it to flatten
+everything (which also removes `/AcroForm` once nothing is left in it).
+Only `text`/`text-multiline` values are drawn; other field types just lose
+their widget. An unfilled flattened field's placeholder appearance (e.g. a
+grey background) is not baked in — only fields with a value get anything
+drawn in their place. Leave fields unflattened (the default) to keep the
+result an ordinary interactive PDF instead.
+
+`stampImage()`/`stampImageBytes()` place a PNG (with alpha) or JPEG at a
+given page/x/y/width/height, independent of any field — useful for a
+signature or photo that isn't itself a form field. Coordinates are
+top-left-origin points.
 
 ---
 

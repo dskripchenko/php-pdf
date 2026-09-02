@@ -23,6 +23,7 @@ HTML 转 PDF 一直深入到最底层的页面发射。每个章节都是自包�
 - [SVG](#svg)
 - [超链接与书签](#超链接与书签)
 - [表单（AcroForm）](#表单acroform)
+- [填写已有表单（AcroForm）](#填写已有表单acroform)
 - [标注](#标注)
 - [加密](#加密)
 - [数字签名](#数字签名)
@@ -495,6 +496,55 @@ DocumentBuilder::new()
 `calculateScript`、`formatScript`、`clickScript`。文档级事件：
 `WC`（WillClose）、`WS`（WillSave）、`DS`（DidSave）、`WP`
 （WillPrint）、`DP`（DidPrint）。
+
+---
+
+## 填写已有表单（AcroForm）
+
+以上是从零创建新表单。若要打开他人生成的 PDF——上传的模板、政府表格——
+并按名称填写其中已定义字段的值，请改用 `ExistingFormFiller`：
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+
+ExistingFormFiller::fromFile('template.pdf')
+    ->setValues([
+        'full_name' => 'Jane Roe',
+        'agree' => 'yes',
+        'employer.name' => 'Acme Corp', // 通过 /Parent 继承解析
+    ])
+    ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
+    ->flatten()
+    ->toFile('filled.pdf');
+```
+
+源文档永远不会被修改——每次调用都作用于*整个*对象图的深拷贝，因此未被
+触及的内容（大纲、元数据、其他标注）会原样保留到输出中。`fields()` 会
+返回每个字段的完整点分名称、类型、当前值，以及（对复选框/单选按钮而言）
+其选中状态的导出名称，方便调用方在填写前了解模板的结构：
+
+```php
+foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
+    echo "{$name}: {$field->type} = {$field->value}\n";
+}
+```
+
+支持的字段类型：`text`、`text-multiline`、`checkbox`、`radio`。复选框接受
+`on`/`yes`/`true`/`1`（不区分大小写）或其精确的选中状态导出名称；其他任何
+值都会取消勾选。单选按钮组的值必须匹配其某个选项的导出名称（不区分大小
+写）。
+
+`flatten(?array $fieldNames = null)` 会将当前值绘制进页面内容并移除交互
+式部件——传入字段名称列表可只压平其中一部分、其余字段保持交互，省略参数
+则压平全部字段（这也会在 `/AcroForm` 中不再留有任何字段时将其整体移除）。
+仅 `text`/`text-multiline` 的值会被绘制；其他字段类型只是失去其部件。未
+填写字段被压平后，其占位外观（例如灰色背景）不会被绘制保留——只有有值的
+字段才会在原位置绘制内容。保持默认（不压平）可使结果仍是一份普通的交互
+式 PDF。
+
+`stampImage()`/`stampImageBytes()` 可在指定的页面/x/y/宽/高处放置一张 PNG
+（保留透明度）或 JPEG 图片，与任何字段无关——适用于签名或照片这类本身并
+非表单字段的内容。坐标以左上角为原点。
 
 ---
 
