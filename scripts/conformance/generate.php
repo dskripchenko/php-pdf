@@ -22,6 +22,8 @@ use Dskripchenko\PhpPdf\Element\Run;
 use Dskripchenko\PhpPdf\Element\Table;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 use Dskripchenko\PhpPdf\Layout\Engine;
+use Dskripchenko\PhpPdf\Pdf\Document as PdfDocument;
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
 use Dskripchenko\PhpPdf\Pdf\PdfAConfig;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
 use Dskripchenko\PhpPdf\Pdf\PdfXConfig;
@@ -184,5 +186,32 @@ if (is_readable($cmykIccPath)) {
     ));
     $failures += $ok ? 0 : 1;
 }
+
+// Visual fixture for ExistingFormFiller: a small template with Latin and
+// Cyrillic text fields and a checkbox, filled, flattened, and stamped with an
+// image — exercises the whole fill/flatten/stamp pipeline in one rendered page.
+$template = PdfDocument::new(compressStreams: false);
+$templatePage = $template->addPage();
+$templatePage->addFormField('text', 'full_name', 72, 700, 250, 20, defaultValue: '');
+$templatePage->addFormField('text', 'city', 72, 670, 250, 20, defaultValue: '');
+$templatePage->addFormField('checkbox', 'agree', 72, 640, 14, 14);
+
+$formFillOk = true;
+try {
+    $bytes = ExistingFormFiller::fromBytes($template->toBytes())
+        ->useFont($fontDir.'/LiberationSans-Regular.ttf')
+        ->setValue('full_name', 'Jane Roe')
+        ->setValue('city', 'Москва')
+        ->setValue('agree', true)
+        ->flatten()
+        ->stampImage(0, $root.'/tests/fixtures/sample.png', 72, 200, 80, 60)
+        ->toBytes();
+    file_put_contents($outDir.'/form-fill.pdf', $bytes);
+    echo "generated $outDir/form-fill.pdf\n";
+} catch (\Throwable $e) {
+    fwrite(STDERR, "FAILED form-fill: {$e->getMessage()}\n");
+    $formFillOk = false;
+}
+$failures += $formFillOk ? 0 : 1;
 
 exit($failures > 0 ? 1 : 0);

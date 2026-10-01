@@ -23,6 +23,7 @@ HTML 转 PDF 一直深入到最底层的页面发射。每个章节都是自包�
 - [SVG](#svg)
 - [超链接与书签](#超链接与书签)
 - [表单（AcroForm）](#表单acroform)
+- [填写已有表单（AcroForm）](#填写已有表单acroform)
 - [标注](#标注)
 - [加密](#加密)
 - [数字签名](#数字签名)
@@ -495,6 +496,56 @@ DocumentBuilder::new()
 `calculateScript`、`formatScript`、`clickScript`。文档级事件：
 `WC`（WillClose）、`WS`（WillSave）、`DS`（DidSave）、`WP`
 （WillPrint）、`DP`（DidPrint）。
+
+---
+
+## 填写已有表单（AcroForm）
+
+上文介绍的是从零创建表单。若要打开他人生成的 PDF（上传的模板、政府表单），并按名称填写其中已定义字段的值，请改用 `ExistingFormFiller`：
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+
+ExistingFormFiller::fromFile('template.pdf')
+    ->useFont('fonts/NotoSansSC-Regular.ttf') // 用于非拉丁文字的值
+    ->setValues([
+        'full_name' => '张伟',
+        'agree' => true,
+        'employer.name' => 'Acme Corp', // 通过 /Parent 继承解析
+        'country' => 'China',           // 组合框选项（导出值或显示文本）
+    ])
+    ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
+    ->flatten()
+    ->toFile('filled.pdf');
+```
+
+源文档永远不会被修改——每次调用都作用于*整个*对象图的深拷贝，因此未触及的内容（书签、元数据、其他注释）会原样保留到输出中。`fields()` 返回每个字段以点分隔的完整名称、类型、当前值、可接受的选项、`/MaxLen` 以及 `/TU` 提示，便于在填写前了解模板结构：
+
+```php
+foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
+    echo "{$name}: {$field->type} = ".json_encode($field->value, JSON_UNESCAPED_UNICODE)."\n";
+}
+```
+
+各字段类型接受的值：
+
+| 类型 | 可接受的值 |
+|---|---|
+| `text`、`text-multiline` | 字符串；会校验 `/MaxLen` |
+| `checkbox` | `true`/`false`、`on`/`yes`/`true`/`1`、`off`/`no`/`false`/`0`，或其导出值 |
+| `radio` | `options` 之一（不区分大小写），或 `Off` |
+| `combo`、`list` | 选项的导出值或显示文本；多选列表框可传入数组 |
+| `signature`、`push` | 不可设置——抛出 `LogicException` |
+
+未知选项会抛出 `InvalidArgumentException`，而不会被静默忽略。
+
+填写后的文本字段和选择字段会获得新生成的外观流——使用 `/DA` 中的字体、字号（含自动字号）、颜色和对齐方式，`/MK` 中的背景和边框，以及梳状单元格和多行换行——因此值在任何阅读器中都能显示，而不仅限于支持 `/NeedAppearances` 的阅读器。当表单自带字体无法显示某个值（西里尔文、希腊文、中日韩文字等）时，会改用嵌入的 TrueType 字体绘制：可通过 `useFont()` 传入字体（或通过 `useFontProvider()` 传入 `FontProvider`），也可以安装 `dskripchenko/php-pdf-fonts-liberation`，届时会自动使用。若没有可用字体，此类值会抛出带有字段名的 `RuntimeException`。
+
+`flatten(?array $fieldNames = null)` 以 Acrobat 的方式把字段变为静态页面内容：将每个控件自身的外观（勾选标记、单选圆点、背景、边框）绘制到页面上，并移除该控件。传入名称列表可只扁平化部分字段、保留其余字段可交互；省略参数则扁平化所有控件并删除 `/AcroForm`。
+
+`stampImage()`/`stampImageBytes()` 可在任意字段之外放置 PNG（含透明通道）或 JPEG——适用于本身不是表单字段的签名或照片。`x`/`y` 为图像左上角，以点为单位，从*阅读器所显示页面*（CropBox，已应用 `/Rotate`）的左上角起算；`pageSize($index)` 返回该尺寸。
+
+输出是对文档的完整重写，且不加密。已有的数字签名将不再有效；一旦有任何改动，XFA 表单定义会被移除（否则支持 XFA 的阅读器会显示 XFA 层而不是已填写的值）。
 
 ---
 

@@ -24,6 +24,7 @@ einen Rundgang oder springen Sie direkt zum benötigten Feature.
 - [SVG](#svg)
 - [Hyperlinks und Lesezeichen](#hyperlinks-und-lesezeichen)
 - [Formulare (AcroForm)](#formulare-acroform)
+- [Ein bestehendes Formular ausfüllen (AcroForm)](#ein-bestehendes-formular-ausfüllen-acroform)
 - [Annotationen](#annotationen)
 - [Verschlüsselung](#verschlüsselung)
 - [Digitale Signatur](#digitale-signatur)
@@ -516,6 +517,89 @@ JavaScript-Hooks pro Feld: `keystrokeScript`, `validateScript`,
 `calculateScript`, `formatScript`, `clickScript`. Ereignisse auf
 Dokumentebene: `WC` (WillClose), `WS` (WillSave), `DS` (DidSave), `WP`
 (WillPrint), `DP` (DidPrint).
+
+---
+
+## Ein bestehendes Formular ausfüllen (AcroForm)
+
+Oben wird ein neues Formular erstellt. Um ein PDF zu öffnen, das jemand
+anderes erzeugt hat — eine hochgeladene Vorlage, ein Behördenformular — und
+die Werte seiner bereits definierten Felder per Name auszufüllen, verwenden
+Sie stattdessen `ExistingFormFiller`:
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+
+ExistingFormFiller::fromFile('template.pdf')
+    ->useFont('fonts/LiberationSans-Regular.ttf') // für nicht-lateinische Werte
+    ->setValues([
+        'full_name' => 'Erika Mustermann',
+        'agree' => true,
+        'employer.name' => 'Acme GmbH', // über /Parent-Vererbung aufgelöst
+        'country' => 'Deutschland',    // Combo-Box-Option (Exportwert oder Beschriftung)
+    ])
+    ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
+    ->flatten()
+    ->toFile('filled.pdf');
+```
+
+Das Quelldokument wird nie verändert — jeder Aufruf arbeitet auf einer
+tiefen Kopie des *gesamten* Objektgraphen, sodass alles Unberührte
+(Lesezeichen, Metadaten, andere Annotationen) unverändert in die Ausgabe
+übernommen wird. `fields()` liefert für jedes Feld den vollqualifizierten
+Punktnamen, Typ, aktuellen Wert, zulässige Optionen, `/MaxLen` und den
+`/TU`-Tooltip, sodass man den Aufbau einer Vorlage vor dem Ausfüllen
+erkunden kann:
+
+```php
+foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
+    echo "{$name}: {$field->type} = ".json_encode($field->value)."\n";
+}
+```
+
+Werte je Feldtyp:
+
+| Typ | Akzeptierter Wert |
+|---|---|
+| `text`, `text-multiline` | ein String; `/MaxLen` wird durchgesetzt |
+| `checkbox` | `true`/`false`, `on`/`yes`/`true`/`1`, `off`/`no`/`false`/`0` oder sein Exportwert |
+| `radio` | eine der `options` (ohne Groß-/Kleinschreibung) oder `Off` |
+| `combo`, `list` | Exportwert oder Beschriftung einer Option; eine Liste davon bei Mehrfachauswahl |
+| `signature`, `push` | nicht setzbar — `LogicException` |
+
+Eine unbekannte Option wird mit `InvalidArgumentException` abgelehnt, statt
+stillschweigend ignoriert zu werden.
+
+Ausgefüllte Text- und Auswahlfelder erhalten einen neu erzeugten
+Appearance-Stream — Schrift, Größe (inklusive Auto-Größe), Farbe und
+Ausrichtung aus `/DA`, Hintergrund und Rahmen aus `/MK`, Comb-Zellen,
+mehrzeiliger Umbruch —, sodass der Wert in jedem Viewer erscheint, nicht nur
+in solchen, die `/NeedAppearances` beachten. Kann die formulareigene Schrift
+einen Wert nicht darstellen (Kyrillisch, Griechisch, CJK, …), wird er mit
+einer eingebetteten TrueType-Schrift gezeichnet: Übergeben Sie eine an
+`useFont()` (oder einen `FontProvider` an `useFontProvider()`), oder
+installieren Sie `dskripchenko/php-pdf-fonts-liberation`, das dann
+automatisch verwendet wird. Ohne Schrift löst ein solcher Wert eine
+`RuntimeException` mit dem Feldnamen aus.
+
+`flatten(?array $fieldNames = null)` macht Felder so zu statischem
+Seiteninhalt, wie Acrobat es tut: Das eigene Erscheinungsbild jedes Widgets
+— Häkchen, Radio-Punkte, Hintergründe, Rahmen — wird auf die Seite gezeichnet
+und das Widget entfernt. Übergeben Sie eine Namensliste, um nur einen Teil
+zu glätten und den Rest interaktiv zu lassen, oder lassen Sie sie weg, um
+alle Widgets zu glätten und `/AcroForm` zu entfernen.
+
+`stampImage()`/`stampImageBytes()` platzieren ein PNG (mit Alpha) oder JPEG
+unabhängig von Feldern — nützlich für eine Unterschrift oder ein Foto, das
+selbst kein Formularfeld ist. `x`/`y` ist die linke obere Ecke des Bildes in
+Punkt, gemessen von der linken oberen Ecke der Seite *so, wie ein Viewer sie
+zeigt* (CropBox, nach `/Rotate`); `pageSize($index)` liefert diese Größe.
+
+Die Ausgabe ist eine vollständige, unverschlüsselte Neuschreibung des
+Dokuments. Bestehende digitale Signaturen sind danach nicht mehr gültig, und
+sobald sich etwas ändert, wird eine XFA-Formulardefinition entfernt
+(XFA-fähige Viewer würden sonst die XFA-Ebene statt der ausgefüllten Werte
+anzeigen).
 
 ---
 

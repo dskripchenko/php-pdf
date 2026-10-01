@@ -24,6 +24,7 @@ the feature you need.
 - [SVG](#svg)
 - [Hyperlinks and bookmarks](#hyperlinks-and-bookmarks)
 - [Forms (AcroForm)](#forms-acroform)
+- [Fill an existing form (AcroForm)](#fill-an-existing-form-acroform)
 - [Annotations](#annotations)
 - [Encryption](#encryption)
 - [Digital signing](#digital-signing)
@@ -504,6 +505,84 @@ Per-field JavaScript hooks: `keystrokeScript`, `validateScript`,
 `calculateScript`, `formatScript`, `clickScript`. Document-level
 events: `WC` (WillClose), `WS` (WillSave), `DS` (DidSave), `WP`
 (WillPrint), `DP` (DidPrint).
+
+---
+
+## Fill an existing form (AcroForm)
+
+The above authors a brand-new form. To open a PDF someone else produced —
+an uploaded template, a government form — and fill in the values of its
+already-defined fields by name, use `ExistingFormFiller` instead:
+
+```php
+use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
+
+ExistingFormFiller::fromFile('template.pdf')
+    ->useFont('fonts/LiberationSans-Regular.ttf') // for non-Latin values
+    ->setValues([
+        'full_name' => 'Jane Roe',
+        'agree' => true,
+        'employer.name' => 'Acme Corp', // resolved via /Parent inheritance
+        'country' => 'Germany',         // combo box option (export value or label)
+    ])
+    ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
+    ->flatten()
+    ->toFile('filled.pdf');
+```
+
+The source document is never mutated — every call works on a deep copy of
+the *entire* object graph, so anything not touched (outlines, metadata,
+other annotations) survives untouched into the output. `fields()` returns
+each field's fully-qualified dotted name, type, current value, accepted
+options, `/MaxLen` and `/TU` tooltip, so a caller can discover a template's
+shape before filling it:
+
+```php
+foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
+    echo "{$name}: {$field->type} = ".json_encode($field->value)."\n";
+}
+```
+
+Values by field type:
+
+| Type | Accepted value |
+|---|---|
+| `text`, `text-multiline` | a string; `/MaxLen` is enforced |
+| `checkbox` | `true`/`false`, `on`/`yes`/`true`/`1`, `off`/`no`/`false`/`0`, or its export value |
+| `radio` | one of `options` (case insensitive), or `Off` |
+| `combo`, `list` | an option's export value or its label; a list of them for a multi-select list box |
+| `signature`, `push` | cannot be set — `LogicException` |
+
+An unknown option is rejected with an `InvalidArgumentException` rather than
+silently ignored.
+
+Filled text and choice fields get a freshly generated appearance stream —
+the field's `/DA` font, size (auto size included), colour and alignment, its
+`/MK` background and border, comb cells, multi-line wrapping — so the value
+shows in every viewer, not only those that honour `/NeedAppearances`. When
+the form's own font cannot show a value (Cyrillic, Greek, CJK, …), the
+value is drawn with an embedded TrueType font: pass one to `useFont()` (or a
+`FontProvider` to `useFontProvider()`), or install
+`dskripchenko/php-pdf-fonts-liberation`, which is then picked up
+automatically. Without one, such a value throws a `RuntimeException` naming
+the field.
+
+`flatten(?array $fieldNames = null)` turns fields into static page content
+the way Acrobat does: each widget's own appearance — check marks, radio
+dots, backgrounds, borders — is drawn on the page and the widget is
+removed. Pass a list of names to flatten a subset and leave the rest
+interactive, or omit it to flatten every widget and drop `/AcroForm`.
+
+`stampImage()`/`stampImageBytes()` place a PNG (with alpha) or JPEG,
+independent of any field — useful for a signature or photo that isn't
+itself a form field. `x`/`y` is the image's top-left corner in points from
+the top-left of the page *as a viewer shows it* (the CropBox, after
+`/Rotate`); `pageSize($index)` returns that size.
+
+The output is a full rewrite of the document, unencrypted. Existing digital
+signatures no longer verify, and once anything changes an XFA form
+definition is removed (XFA-aware viewers would otherwise show the XFA layer
+instead of the filled values).
 
 ---
 
