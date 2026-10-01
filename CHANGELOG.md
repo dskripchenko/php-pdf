@@ -4,6 +4,30 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`ExistingFormFiller` — fill, flatten and stamp a PDF form produced
+  elsewhere** (contributed by Christiaan Baartse, #1). Reads the AcroForm's
+  fields by fully-qualified name (`fields()`), sets text, check box, radio,
+  combo and list box values (`setValue()`), bakes fields into the page
+  (`flatten()`), and places an image on a page (`stampImage()`).
+  - Filled fields get a generated appearance stream — the `/DA` font, size
+    (auto size included), colour and alignment, the `/MK` background and
+    border, comb cells, multi-line wrapping — so values show in every viewer.
+  - Values the form's fonts cannot show are drawn with an embedded TrueType
+    font: `useFont()`, `useFontProvider()`, or Liberation picked up
+    automatically when `dskripchenko/php-pdf-fonts-liberation` is installed.
+  - `flatten()` draws each widget's own appearance, as Acrobat does, so check
+    marks, backgrounds and borders survive.
+  - Values are validated: `/MaxLen`, radio and choice options; signature and
+    push-button fields refuse a value.
+  - Inherited page resources, the page's graphics state, `/Info`, `/ID`, the
+    CropBox and `/Rotate` are respected; an XFA definition is dropped once
+    values change.
+- `ObjectImporter::withSource()` — import objects from a second document into
+  a graph without losing the current source's deduplication.
+
 ## [1.9.4] — 2026-08-17
 
 ### Changed

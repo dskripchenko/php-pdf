@@ -522,19 +522,21 @@ Dokumentebene: `WC` (WillClose), `WS` (WillSave), `DS` (DidSave), `WP`
 
 ## Ein bestehendes Formular ausfüllen (AcroForm)
 
-Das Obige erstellt ein neues Formular. Um ein von jemand anderem erzeugtes
-PDF zu öffnen — eine hochgeladene Vorlage, ein Behördenformular — und die
-Werte seiner bereits definierten Felder namentlich auszufüllen, verwenden
+Oben wird ein neues Formular erstellt. Um ein PDF zu öffnen, das jemand
+anderes erzeugt hat — eine hochgeladene Vorlage, ein Behördenformular — und
+die Werte seiner bereits definierten Felder per Name auszufüllen, verwenden
 Sie stattdessen `ExistingFormFiller`:
 
 ```php
 use Dskripchenko\PhpPdf\Pdf\Forms\ExistingFormFiller;
 
 ExistingFormFiller::fromFile('template.pdf')
+    ->useFont('fonts/LiberationSans-Regular.ttf') // für nicht-lateinische Werte
     ->setValues([
-        'full_name' => 'Jane Roe',
-        'agree' => 'yes',
-        'employer.name' => 'Acme Corp', // über /Parent-Vererbung aufgelöst
+        'full_name' => 'Erika Mustermann',
+        'agree' => true,
+        'employer.name' => 'Acme GmbH', // über /Parent-Vererbung aufgelöst
+        'country' => 'Deutschland',    // Combo-Box-Option (Exportwert oder Beschriftung)
     ])
     ->stampImage(0, 'signature.png', x: 100, y: 600, width: 120, height: 40)
     ->flatten()
@@ -544,40 +546,60 @@ ExistingFormFiller::fromFile('template.pdf')
 Das Quelldokument wird nie verändert — jeder Aufruf arbeitet auf einer
 tiefen Kopie des *gesamten* Objektgraphen, sodass alles Unberührte
 (Lesezeichen, Metadaten, andere Annotationen) unverändert in die Ausgabe
-übernommen wird. `fields()` liefert für jedes Feld seinen vollständig
-qualifizierten, durch Punkte getrennten Namen, Typ, aktuellen Wert, seinen
-`/TU`-Tooltip (falls vorhanden) und (bei Checkbox/Radio) seine
-Ein-Zustand-Optionsnamen, sodass ein Aufrufer die Form einer Vorlage vor
-dem Ausfüllen ermitteln kann:
+übernommen wird. `fields()` liefert für jedes Feld den vollqualifizierten
+Punktnamen, Typ, aktuellen Wert, zulässige Optionen, `/MaxLen` und den
+`/TU`-Tooltip, sodass man den Aufbau einer Vorlage vor dem Ausfüllen
+erkunden kann:
 
 ```php
 foreach (ExistingFormFiller::fromFile('template.pdf')->fields() as $name => $field) {
-    echo "{$name}: {$field->type} = {$field->value}\n";
+    echo "{$name}: {$field->type} = ".json_encode($field->value)."\n";
 }
 ```
 
-Unterstützte Feldtypen: `text`, `text-multiline`, `checkbox`, `radio`. Eine
-Checkbox akzeptiert `on`/`yes`/`true`/`1` (ohne Groß-/Kleinschreibung) oder
-ihren exakten Ein-Zustand-Exportnamen; alles andere hakt sie ab. Der Wert
-einer Radiogruppe muss einem ihrer Options-Exportnamen entsprechen (ohne
-Groß-/Kleinschreibung).
+Werte je Feldtyp:
 
-`flatten(?array $fieldNames = null)` bäckt den aktuellen Wert in den
-Seiteninhalt ein und entfernt das interaktive Widget — übergeben Sie eine
-Liste von Namen, um eine Teilmenge zu flatten und den Rest interaktiv zu
-lassen, oder lassen Sie es weg, um alles zu flatten (was auch `/AcroForm`
-entfernt, sobald nichts mehr darin übrig ist). Nur `text`/`text-multiline`-
-Werte werden gezeichnet; andere Feldtypen verlieren nur ihr Widget. Das
-Platzhalter-Erscheinungsbild eines nicht ausgefüllten geflatteten Feldes
-(z. B. ein grauer Hintergrund) wird nicht eingebacken — nur Felder mit
-einem Wert erhalten an ihrer Stelle etwas Gezeichnetes. Lassen Sie Felder
-ungeflatteten (Standard), um das Ergebnis ein gewöhnliches interaktives PDF
-bleiben zu lassen.
+| Typ | Akzeptierter Wert |
+|---|---|
+| `text`, `text-multiline` | ein String; `/MaxLen` wird durchgesetzt |
+| `checkbox` | `true`/`false`, `on`/`yes`/`true`/`1`, `off`/`no`/`false`/`0` oder sein Exportwert |
+| `radio` | eine der `options` (ohne Groß-/Kleinschreibung) oder `Off` |
+| `combo`, `list` | Exportwert oder Beschriftung einer Option; eine Liste davon bei Mehrfachauswahl |
+| `signature`, `push` | nicht setzbar — `LogicException` |
 
-`stampImage()`/`stampImageBytes()` platziert ein PNG (mit Alphakanal) oder
-JPEG an einer gegebenen Seite/x/y/Breite/Höhe, unabhängig von jedem Feld —
-nützlich für eine Signatur oder ein Foto, das selbst kein Formularfeld ist.
-Koordinaten sind Punkte mit Ursprung oben links.
+Eine unbekannte Option wird mit `InvalidArgumentException` abgelehnt, statt
+stillschweigend ignoriert zu werden.
+
+Ausgefüllte Text- und Auswahlfelder erhalten einen neu erzeugten
+Appearance-Stream — Schrift, Größe (inklusive Auto-Größe), Farbe und
+Ausrichtung aus `/DA`, Hintergrund und Rahmen aus `/MK`, Comb-Zellen,
+mehrzeiliger Umbruch —, sodass der Wert in jedem Viewer erscheint, nicht nur
+in solchen, die `/NeedAppearances` beachten. Kann die formulareigene Schrift
+einen Wert nicht darstellen (Kyrillisch, Griechisch, CJK, …), wird er mit
+einer eingebetteten TrueType-Schrift gezeichnet: Übergeben Sie eine an
+`useFont()` (oder einen `FontProvider` an `useFontProvider()`), oder
+installieren Sie `dskripchenko/php-pdf-fonts-liberation`, das dann
+automatisch verwendet wird. Ohne Schrift löst ein solcher Wert eine
+`RuntimeException` mit dem Feldnamen aus.
+
+`flatten(?array $fieldNames = null)` macht Felder so zu statischem
+Seiteninhalt, wie Acrobat es tut: Das eigene Erscheinungsbild jedes Widgets
+— Häkchen, Radio-Punkte, Hintergründe, Rahmen — wird auf die Seite gezeichnet
+und das Widget entfernt. Übergeben Sie eine Namensliste, um nur einen Teil
+zu glätten und den Rest interaktiv zu lassen, oder lassen Sie sie weg, um
+alle Widgets zu glätten und `/AcroForm` zu entfernen.
+
+`stampImage()`/`stampImageBytes()` platzieren ein PNG (mit Alpha) oder JPEG
+unabhängig von Feldern — nützlich für eine Unterschrift oder ein Foto, das
+selbst kein Formularfeld ist. `x`/`y` ist die linke obere Ecke des Bildes in
+Punkt, gemessen von der linken oberen Ecke der Seite *so, wie ein Viewer sie
+zeigt* (CropBox, nach `/Rotate`); `pageSize($index)` liefert diese Größe.
+
+Die Ausgabe ist eine vollständige, unverschlüsselte Neuschreibung des
+Dokuments. Bestehende digitale Signaturen sind danach nicht mehr gültig, und
+sobald sich etwas ändert, wird eine XFA-Formulardefinition entfernt
+(XFA-fähige Viewer würden sonst die XFA-Ebene statt der ausgefüllten Werte
+anzeigen).
 
 ---
 

@@ -187,21 +187,24 @@ if (is_readable($cmykIccPath)) {
     $failures += $ok ? 0 : 1;
 }
 
-// Visual fixture for ExistingFormFiller: a small template with a text field
-// and a checkbox, filled, flattened, and stamped with a signature image —
-// exercises the whole fill/flatten/stamp pipeline in one rendered page.
+// Visual fixture for ExistingFormFiller: a small template with Latin and
+// Cyrillic text fields and a checkbox, filled, flattened, and stamped with an
+// image — exercises the whole fill/flatten/stamp pipeline in one rendered page.
 $template = PdfDocument::new(compressStreams: false);
 $templatePage = $template->addPage();
 $templatePage->addFormField('text', 'full_name', 72, 700, 250, 20, defaultValue: '');
-$templatePage->addFormField('checkbox', 'agree', 72, 660, 14, 14);
+$templatePage->addFormField('text', 'city', 72, 670, 250, 20, defaultValue: '');
+$templatePage->addFormField('checkbox', 'agree', 72, 640, 14, 14);
 
 $formFillOk = true;
 try {
     $bytes = ExistingFormFiller::fromBytes($template->toBytes())
+        ->useFont($fontDir.'/LiberationSans-Regular.ttf')
         ->setValue('full_name', 'Jane Roe')
-        ->setValue('agree', 'yes')
+        ->setValue('city', 'Москва')
+        ->setValue('agree', true)
         ->flatten()
-        ->stampImage(0, $root.'/tests/fixtures/1x1.png', 72, 600, 40, 40)
+        ->stampImage(0, $root.'/tests/fixtures/sample.png', 72, 200, 80, 60)
         ->toBytes();
     file_put_contents($outDir.'/form-fill.pdf', $bytes);
     echo "generated $outDir/form-fill.pdf\n";
