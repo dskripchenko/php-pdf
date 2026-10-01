@@ -46,6 +46,28 @@ final class ObjectImporter
     }
 
     /**
+     * Run `$import` against another source, then restore the current one with
+     * its dedup map intact — for pulling a few foreign objects (an embedded
+     * font, say) into a graph that is still being edited.
+     *
+     * @template T
+     * @param callable(self):T $import
+     * @return T
+     */
+    public function withSource(ReaderDocument $source, callable $import): mixed
+    {
+        $savedSource = $this->source;
+        $savedMap = $this->sourceMap;
+        $this->useSource($source);
+        try {
+            return $import($this);
+        } finally {
+            $this->source = $savedSource;
+            $this->sourceMap = $savedMap;
+        }
+    }
+
+    /**
      * Reserve the next object ID and store a value at it directly (used for the
      * merger's own catalog / page-tree nodes).
      *

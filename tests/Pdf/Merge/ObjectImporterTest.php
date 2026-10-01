@@ -96,4 +96,24 @@ final class ObjectImporterTest extends TestCase
         self::assertLessThan(30, $importer->count());
         self::assertGreaterThanOrEqual(5, $importer->count());
     }
+    #[Test]
+    public function with_source_imports_foreign_objects_and_restores_the_current_source(): void
+    {
+        $main = ReaderDocument::fromBytes($this->sourcePdf(1));
+        $foreign = ReaderDocument::fromBytes($this->sourcePdf(2));
+        $importer = new ObjectImporter();
+        $importer->useSource($main);
+        $rootRef = $main->trailer()->get('Root');
+        self::assertInstanceOf(PdfReference::class, $rootRef);
+        $root = $importer->importObject($rootRef->number);
+        $count = $importer->count();
+
+        $foreignRoot = $foreign->trailer()->get('Root');
+        self::assertInstanceOf(PdfReference::class, $foreignRoot);
+        $imported = $importer->withSource($foreign, fn (ObjectImporter $i) => $i->importObject($foreignRoot->number));
+
+        self::assertGreaterThan($count, $imported->number, 'foreign objects get fresh ids');
+        // Back on the main source, already-imported objects are still deduplicated.
+        self::assertSame($root->number, $importer->importObject($rootRef->number)->number);
+    }
 }

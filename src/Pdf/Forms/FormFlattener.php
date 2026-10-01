@@ -4,296 +4,257 @@ declare(strict_types=1);
 
 namespace Dskripchenko\PhpPdf\Pdf\Forms;
 
-use Dskripchenko\PhpPdf\Pdf\Merge\ObjectImporter;
+use Dskripchenko\PhpPdf\Pdf\Forms\Appearance\AppearanceBuilder;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfName;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfReference;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfStream;
-use Dskripchenko\PhpPdf\Pdf\Reader\PdfString;
-use Dskripchenko\PhpPdf\Pdf\Reader\ReaderDocument;
+use Dskripchenko\PhpPdf\Pdf\Reader\ReaderPage;
 
 /**
- * Bakes one field's current value into its page's content stream and
- * removes the interactive widget annotation, on an already-imported (deep
- * copied) object graph.
+ * Bakes widgets into page content the way Acrobat and pdftk do: each widget's
+ * normal appearance (`/AP /N`, or its `/AS` state) is drawn on the page as a
+ * Form XObject, mapped from its `/BBox` and `/Matrix` onto the widget's
+ * `/Rect` (ISO 32000-1 §12.5.5), and the widget annotation is removed.
  *
- * Only text/text-multiline fields get their value drawn — the appearance is
- * built from the field's own `/DA` (font/size, resolved via the AcroForm's
- * imported `/DR` so no font is redeclared) and its widget's `/Rect`, single
- * line or naive fixed-leading multi-line. Other field types (checkbox,
- * radio, choice, …) just lose their widget annotation; baking in a checked
- * glyph or a choice's display text is not attempted here.
+ * That keeps everything the form author drew — check marks, radio dots,
+ * backgrounds, borders, the font — instead of re-rendering values. A text or
+ * choice appearance is regenerated first when it is missing, or when the form
+ * says its appearances are stale (`/NeedAppearances true`).
  *
- * Known limitation carried over from the original spike: an *unfilled*
- * flattened field only has its annotation removed — its placeholder
- * appearance (e.g. an `/MK /BG` background) is not baked in, so it
- * disappears rather than surviving as static content the way pdftk's
- * flatten does.
+ * @internal
  */
 final class FormFlattener
 {
-    public function flatten(
-        ObjectImporter $importer,
-        ReaderDocument $doc,
-        FieldNode $node,
-        ?PdfDictionary $importedDr,
-        ?string $acroFormDa,
-    ): void {
-        // Read the field's *current* value from the already-imported copy,
-        // not the FieldNode snapshot — a prior setValue() call has already
-        // mutated the copy, and the snapshot reflects only the source.
-        $fieldDict = $importer->get($importer->importObject($node->fieldObjNum)->number);
-        $currentValue = $fieldDict instanceof PdfDictionary ? $this->stringValue($fieldDict->get('V')) : $node->value;
+    private const FLAG_HIDDEN = 2;
 
-        foreach ($node->widgetObjNums as $widgetObjNum) {
-            $this->flattenWidget($importer, $doc, $node, $currentValue, $widgetObjNum, $importedDr, $acroFormDa);
-        }
+    /** @var array<int,ReaderPage>|null source widget object number → page */
+    private ?array $widgetPages = null;
+
+    public function __construct(
+        private readonly FormGraph $graph,
+        private readonly PageEditor $pages,
+        private readonly AppearanceBuilder $appearances,
+        private readonly ?PdfDictionary $acroForm,
+        private readonly ?PdfDictionary $dr,
+        private readonly bool $needAppearances,
+    ) {
     }
 
-    private function flattenWidget(
-        ObjectImporter $importer,
-        ReaderDocument $doc,
-        FieldNode $node,
-        string $currentValue,
-        int $widgetObjNum,
-        ?PdfDictionary $importedDr,
-        ?string $acroFormDa,
-    ): void {
-        $sourcePageObjNum = $this->findSourcePage($doc, $widgetObjNum);
-        if ($sourcePageObjNum === null) {
-            return;
-        }
-        $pageId = $importer->importObject($sourcePageObjNum)->number;
-        $widgetId = $importer->importObject($widgetObjNum)->number;
-        $widget = $importer->get($widgetId);
-        if (!$widget instanceof PdfDictionary) {
-            return;
-        }
-
-        if (in_array($node->type, ['text', 'text-multiline'], true) && $currentValue !== '') {
-            $rect = $this->rect($widget);
-            if ($rect !== null) {
-                // buildContentStream() always returns a stream (it draws
-                // whatever font it could resolve, or none at all), so there
-                // is no null case to guard against here.
-                [$content, $fontKey, $fontRef] = $this->buildContentStream($node, $currentValue, $rect, $node->da ?? $acroFormDa, $importedDr);
-                $this->appendContent($importer, $pageId, $content, $fontKey, $fontRef);
-            }
-        }
-
-        $this->removeAnnotation($importer, $pageId, $widgetId);
-    }
-
-    private function stringValue(mixed $value): string
+    /**
+     * Flatten every widget annotation of the document.
+     */
+    public function flattenAll(): void
     {
-        if ($value instanceof PdfString) {
-            return $value->bytes;
+        $byPage = [];
+        foreach ($this->widgetPages() as $widgetObjNum => $page) {
+            $byPage[$page->objectNumber][] = $widgetObjNum;
         }
-        if ($value instanceof PdfName) {
-            return $value->value;
+        foreach ($byPage as $widgetObjNums) {
+            $this->flattenWidgets($widgetObjNums, null);
         }
-
-        return '';
     }
 
-    private function findSourcePage(ReaderDocument $doc, int $widgetObjNum): ?int
+    /**
+     * Flatten the widgets of the given fields only.
+     *
+     * @param list<FieldNode> $nodes
+     */
+    public function flattenFields(array $nodes): void
     {
-        $widget = $doc->deref(new PdfReference($widgetObjNum, 0));
-        if ($widget instanceof PdfDictionary) {
-            $p = $widget->get('P');
-            if ($p instanceof PdfReference) {
-                return $p->number;
-            }
-        }
-        foreach ($doc->pages() as $page) {
-            $annots = $doc->deref($page->dict->get('Annots'));
-            if (!is_array($annots)) {
-                continue;
-            }
-            foreach ($annots as $ref) {
-                if ($ref instanceof PdfReference && $ref->number === $widgetObjNum) {
-                    return $page->objectNumber;
+        $byPage = [];
+        $map = $this->widgetPages();
+        foreach ($nodes as $node) {
+            foreach ($node->widgetObjNums as $widgetObjNum) {
+                if (isset($map[$widgetObjNum])) {
+                    $byPage[$map[$widgetObjNum]->objectNumber][$widgetObjNum] = $node->name;
                 }
             }
+        }
+        foreach ($byPage as $widgets) {
+            $this->flattenWidgets(array_keys($widgets), $widgets);
+        }
+    }
+
+    /**
+     * @param list<int>               $widgetObjNums all on the same page
+     * @param array<int,string>|null  $names         widget → field name, for messages
+     */
+    private function flattenWidgets(array $widgetObjNums, ?array $names): void
+    {
+        $page = $this->widgetPages()[$widgetObjNums[0]];
+        $pageId = $this->graph->id($page->objectNumber);
+        $ops = [];
+        foreach ($widgetObjNums as $widgetObjNum) {
+            $widgetId = $this->graph->id($widgetObjNum);
+            $draw = $this->drawOps($page, $widgetId, $names[$widgetObjNum] ?? null);
+            if ($draw !== null) {
+                $ops[] = $draw;
+            }
+            $this->graph->removeFromArray($pageId, 'Annots', $widgetId);
+        }
+        if ($ops !== []) {
+            $this->pages->appendContent($page, implode("\n", $ops));
+        }
+    }
+
+    private function drawOps(ReaderPage $page, int $widgetId, ?string $fieldName): ?string
+    {
+        $widget = $this->graph->dict($widgetId);
+        if ($widget === null) {
+            return null;
+        }
+        $flags = $this->graph->resolve($widget->get('F'));
+        if (is_int($flags) && ($flags & self::FLAG_HIDDEN) !== 0) {
+            return null;
+        }
+
+        $appearance = $this->appearance($widgetId, $widget, $fieldName);
+        $stream = $appearance !== null ? $this->graph->get($appearance->number) : null;
+        $rect = $this->numbers($widget->get('Rect'), 4);
+        if (!$stream instanceof PdfStream || $rect === null) {
+            return null;
+        }
+        $bbox = $this->numbers($stream->dict->get('BBox'), 4);
+        if ($bbox === null) {
+            return null;
+        }
+        if (!$stream->dict->get('Subtype') instanceof PdfName) {
+            $this->graph->update($appearance->number, ['Type' => new PdfName('XObject'), 'Subtype' => new PdfName('Form')]);
+        }
+
+        // §12.5.5 algorithm: transform BBox by Matrix, then fit the result to Rect.
+        $m = $this->numbers($stream->dict->get('Matrix'), 6) ?? [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        $xs = $ys = [];
+        foreach ([[$bbox[0], $bbox[1]], [$bbox[2], $bbox[1]], [$bbox[0], $bbox[3]], [$bbox[2], $bbox[3]]] as [$x, $y]) {
+            $xs[] = $m[0] * $x + $m[2] * $y + $m[4];
+            $ys[] = $m[1] * $x + $m[3] * $y + $m[5];
+        }
+        [$bx0, $bx1, $by0, $by1] = [min($xs), max($xs), min($ys), max($ys)];
+        [$rx0, $rx1] = [min($rect[0], $rect[2]), max($rect[0], $rect[2])];
+        [$ry0, $ry1] = [min($rect[1], $rect[3]), max($rect[1], $rect[3])];
+        if ($bx1 - $bx0 <= 0 || $by1 - $by0 <= 0) {
+            return null;
+        }
+        $sx = ($rx1 - $rx0) / ($bx1 - $bx0);
+        $sy = ($ry1 - $ry0) / ($by1 - $by0);
+
+        $name = $this->pages->addResource($page, 'XObject', 'FlatAP', $appearance);
+
+        return sprintf(
+            "q %s 0 0 %s %s %s cm /%s Do Q",
+            self::num($sx),
+            self::num($sy),
+            self::num($rx0 - $bx0 * $sx),
+            self::num($ry0 - $by0 * $sy),
+            $name,
+        );
+    }
+
+    /** The appearance stream to draw for a widget, generating one when needed. */
+    private function appearance(int $widgetId, PdfDictionary $widget, ?string $fieldName): ?PdfReference
+    {
+        $attributes = FieldAttributes::forWidget($this->graph, $widgetId, $this->acroForm);
+        $normal = $this->graph->dict($widget->get('AP'))?->get('N');
+        $normalValue = $this->graph->resolve($normal);
+
+        if (in_array($attributes->ft, ['Tx', 'Ch'], true)
+            && ($this->needAppearances || !$normalValue instanceof PdfStream)) {
+            return $this->appearances->variableText($attributes, $widget, $this->dr, $fieldName ?? $this->fallbackName($widgetId));
+        }
+
+        if ($normalValue instanceof PdfStream) {
+            return $normal instanceof PdfReference ? $normal : $this->graph->allocate($normalValue);
+        }
+
+        $state = $widget->get('AS');
+        $state = $state instanceof PdfName ? $state->value : 'Off';
+        if ($normalValue instanceof PdfDictionary) {
+            $chosen = $normalValue->get($state);
+            if ($chosen instanceof PdfReference && $this->graph->get($chosen->number) instanceof PdfStream) {
+                return $chosen;
+            }
+
+            return null;
+        }
+
+        if ($attributes->ft === 'Btn' && ($attributes->flags & FieldAttributes::FF_PUSHBUTTON) === 0) {
+            $generated = $this->appearances->button($widget, ($attributes->flags & FieldAttributes::FF_RADIO) !== 0);
+
+            return $generated === null ? null : ($state !== 'Off' ? $generated[0] : $generated[1]);
         }
 
         return null;
     }
 
-    /** @return array{float,float,float,float}|null */
-    private function rect(PdfDictionary $widget): ?array
-    {
-        $rect = $widget->get('Rect');
-        if (!is_array($rect) || count($rect) !== 4) {
-            return null;
-        }
-        $values = array_map(static fn ($v) => is_numeric($v) ? (float) $v : null, $rect);
-        if (in_array(null, $values, true)) {
-            return null;
-        }
-
-        return [$values[0], $values[1], $values[2], $values[3]];
-    }
-
     /**
-     * @param  array{float,float,float,float}  $rect
-     * @return array{string, ?string, ?PdfReference}
+     * Every widget annotation reachable from a page's `/Annots`, mapped to its
+     * page (source object numbers).
+     *
+     * @return array<int,ReaderPage>
      */
-    private function buildContentStream(FieldNode $node, string $value, array $rect, ?string $da, ?PdfDictionary $importedDr): array
+    private function widgetPages(): array
     {
-        [$fontKey, $fontSize] = $this->parseDa($da);
-        $fontRef = null;
-        if ($fontKey !== null && $importedDr instanceof PdfDictionary) {
-            $fonts = $importedDr->get('Font');
-            if ($fonts instanceof PdfDictionary) {
-                $ref = $fonts->get($fontKey);
-                if ($ref instanceof PdfReference) {
-                    $fontRef = $ref;
+        if ($this->widgetPages !== null) {
+            return $this->widgetPages;
+        }
+        $this->widgetPages = [];
+        $doc = $this->graph->source;
+        foreach ($this->pages->pages() as $page) {
+            $annots = $doc->deref($page->dict->get('Annots'));
+            foreach (is_array($annots) ? $annots : [] as $ref) {
+                if (!$ref instanceof PdfReference || isset($this->widgetPages[$ref->number])) {
+                    continue;
+                }
+                $annot = $doc->deref($ref);
+                $subtype = $annot instanceof PdfDictionary ? $annot->get('Subtype') : null;
+                if ($subtype instanceof PdfName && $subtype->value === 'Widget') {
+                    $this->widgetPages[$ref->number] = $page;
                 }
             }
         }
 
-        [$llx, $lly, , $ury] = $rect;
-        $lines = $node->type === 'text-multiline' ? explode("\n", $value) : [$value];
-        $leading = $fontSize * 1.15;
-
-        $ops = ['q', 'BT'];
-        if ($fontKey !== null && $fontRef !== null) {
-            $ops[] = sprintf('/%s %s Tf', $fontKey, $this->fmt($fontSize));
-        }
-        $ops[] = '0 g';
-        $x = $llx + 2.0;
-        $y = $node->type === 'text-multiline'
-            ? $ury - $fontSize - 2.0
-            : $lly + max(0.0, ($ury - $lly - $fontSize) / 2) + 1.0;
-        $ops[] = sprintf('%s %s Td', $this->fmt($x), $this->fmt($y));
-        foreach ($lines as $i => $line) {
-            if ($i > 0) {
-                $ops[] = sprintf('0 %s Td', $this->fmt(-$leading));
-            }
-            $ops[] = sprintf('(%s) Tj', $this->escape($line));
-        }
-        $ops[] = 'ET';
-        $ops[] = 'Q';
-
-        return [implode("\n", $ops), $fontKey, $fontRef];
+        return $this->widgetPages;
     }
 
-    /** @return array{?string, float} */
-    private function parseDa(?string $da): array
+    private function fallbackName(int $widgetId): string
     {
-        if ($da !== null && preg_match('@/(\S+)\s+([\d.eE+-]+)\s+Tf@', $da, $m) === 1) {
-            return [$m[1], (float) $m[2]];
+        $parts = [];
+        $id = $widgetId;
+        for ($depth = 0; $id !== null && $depth < 64; $depth++) {
+            $dict = $this->graph->dict($id);
+            $partial = TextString::decode($dict?->get('T'));
+            if ($partial !== null) {
+                array_unshift($parts, $partial);
+            }
+            $parent = $dict?->get('Parent');
+            $id = $parent instanceof PdfReference ? $parent->number : null;
         }
 
-        return [null, 9.0];
+        return implode('.', $parts);
     }
 
-    private function escape(string $text): string
+    /** @return list<float>|null */
+    private function numbers(mixed $value, int $count): ?array
     {
-        $out = '';
-        for ($i = 0; $i < strlen($text); $i++) {
-            $c = $text[$i];
-            $ord = ord($c);
-            if ($c === '\\' || $c === '(' || $c === ')') {
-                $out .= '\\'.$c;
-            } elseif ($ord < 0x20 || $ord > 0x7E) {
-                $out .= sprintf('\\%03o', $ord);
-            } else {
-                $out .= $c;
+        $array = $this->graph->array($value);
+        if ($array === null || count($array) !== $count) {
+            return null;
+        }
+        $out = [];
+        foreach ($array as $v) {
+            $v = $this->graph->resolve($v);
+            if (!is_int($v) && !is_float($v)) {
+                return null;
             }
+            $out[] = (float) $v;
         }
 
         return $out;
     }
 
-    private function fmt(float $v): string
+    private static function num(float $v): string
     {
-        if ($v === floor($v) && abs($v) < 1e9) {
-            return (string) (int) $v;
-        }
-
-        return rtrim(rtrim(sprintf('%.4f', $v), '0'), '.');
-    }
-
-    private function appendContent(ObjectImporter $importer, int $pageId, string $content, ?string $fontKey, ?PdfReference $fontRef): void
-    {
-        $dict = $importer->get($pageId);
-        if (!$dict instanceof PdfDictionary) {
-            return;
-        }
-        $items = $dict->all();
-
-        $contents = $items['Contents'] ?? null;
-        $list = match (true) {
-            is_array($contents) => array_values($contents),
-            $contents !== null => [$contents],
-            default => [],
-        };
-        $list[] = new PdfReference($importer->allocate(new PdfStream(new PdfDictionary([]), $content)), 0);
-        $items['Contents'] = $list;
-
-        if ($fontKey !== null && $fontRef !== null) {
-            $resources = $this->resolveDict($importer, $items['Resources'] ?? null) ?? new PdfDictionary([]);
-            $fonts = $this->resolveDict($importer, $resources->get('Font')) ?? new PdfDictionary([]);
-            $fontItems = $fonts->all();
-            if (!isset($fontItems[$fontKey])) {
-                $fontItems[$fontKey] = $fontRef;
-                $resItems = $resources->all();
-                $resItems['Font'] = new PdfDictionary($fontItems);
-                $resources = new PdfDictionary($resItems);
-            }
-            $items['Resources'] = $resources;
-        }
-
-        $importer->set($pageId, new PdfDictionary($items));
-    }
-
-    private function removeAnnotation(ObjectImporter $importer, int $pageId, int $widgetId): void
-    {
-        $dict = $importer->get($pageId);
-        if (!$dict instanceof PdfDictionary) {
-            return;
-        }
-        $annots = $this->resolveArray($importer, $dict->get('Annots'));
-        if ($annots === null) {
-            return;
-        }
-        $filtered = array_values(array_filter(
-            $annots,
-            static fn ($ref) => !($ref instanceof PdfReference && $ref->number === $widgetId),
-        ));
-        $items = $dict->all();
-        $items['Annots'] = $filtered;
-        $importer->set($pageId, new PdfDictionary($items));
-    }
-
-    /**
-     * A dictionary value already read off an imported object may itself be an
-     * indirect reference (ISO 32000-1 allows any value to be indirect) rather
-     * than inlined — resolve it against the importer's own object map before
-     * treating an absent match as "no such dictionary".
-     */
-    private function resolveDict(ObjectImporter $importer, mixed $value): ?PdfDictionary
-    {
-        if ($value instanceof PdfReference) {
-            $value = $importer->get($value->number);
-        }
-
-        return $value instanceof PdfDictionary ? $value : null;
-    }
-
-    /**
-     * Same as {@see resolveDict()}, but for an array-valued entry (e.g. /Annots).
-     *
-     * @return list<mixed>|null
-     */
-    private function resolveArray(ObjectImporter $importer, mixed $value): ?array
-    {
-        if ($value instanceof PdfReference) {
-            $value = $importer->get($value->number);
-        }
-
-        return is_array($value) ? $value : null;
+        return FormGraph::number($v, 5);
     }
 }

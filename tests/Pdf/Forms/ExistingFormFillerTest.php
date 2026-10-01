@@ -70,7 +70,7 @@ final class ExistingFormFillerTest extends TestCase
         $filler = ExistingFormFiller::fromBytes($pdf->toBytes());
         self::assertSame(
             '{"width":"auto","height":140,"left":50,"top":770,"page":1}',
-            $filler->fields()['hint']->tu,
+            $filler->fields()['hint']->tooltip,
         );
     }
 
@@ -82,14 +82,14 @@ final class ExistingFormFillerTest extends TestCase
         $page->addFormField('text', 'hint', 0, 0, 100, 20, tooltip: 'Naam invöeren');
 
         $filler = ExistingFormFiller::fromBytes($pdf->toBytes());
-        self::assertSame('Naam invöeren', $filler->fields()['hint']->tu);
+        self::assertSame('Naam invöeren', $filler->fields()['hint']->tooltip);
     }
 
     #[Test]
     public function tu_is_null_when_not_set(): void
     {
         $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
-        self::assertNull($filler->fields()['full_name']->tu);
+        self::assertNull($filler->fields()['full_name']->tooltip);
     }
 
     #[Test]
@@ -131,12 +131,18 @@ final class ExistingFormFillerTest extends TestCase
     }
 
     #[Test]
-    public function fill_sets_need_appearances_on_the_acroform(): void
+    public function fill_generates_an_appearance_showing_the_value(): void
     {
         $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
         $out = $filler->setValue('full_name', 'John Doe')->toBytes();
 
-        self::assertStringContainsString('/NeedAppearances true', $out);
+        $doc = ReaderDocument::fromBytes($out);
+        $node = (new FieldTree())->build($doc)['full_name'];
+        $widget = $doc->deref(new PdfReference($node->widgetObjNums[0], 0));
+        $appearance = $doc->deref($doc->deref($widget->get('AP'))->get('N'));
+
+        self::assertInstanceOf(PdfStream::class, $appearance);
+        self::assertStringContainsString('(John Doe) Tj', $doc->streamData($appearance));
     }
 
     #[Test]
@@ -254,28 +260,13 @@ final class ExistingFormFillerTest extends TestCase
         self::assertStringNotContainsString('/AcroForm', $out);
     }
 
-    private function pageText(ReaderDocument $doc, int $index): string
-    {
-        $contents = $doc->pages()[$index]->dict->get('Contents');
-        $streams = is_array($contents) ? $contents : [$contents];
-        $parts = [];
-        foreach ($streams as $entry) {
-            $stream = $doc->deref($entry);
-            if ($stream instanceof PdfStream) {
-                $parts[] = $doc->streamData($stream);
-            }
-        }
-
-        return implode("\n", $parts);
-    }
-
     #[Test]
     public function flattened_value_is_drawn_on_the_page(): void
     {
         $filler = ExistingFormFiller::fromBytes($this->textFieldPdf());
         $out = $filler->setValue('full_name', 'Baked In')->flatten()->toBytes();
 
-        self::assertStringContainsString('(Baked In) Tj', $this->pageText(ReaderDocument::fromBytes($out), 0));
+        self::assertStringContainsString('(Baked In) Tj', FormPdf::drawn(ReaderDocument::fromBytes($out)));
     }
 
     #[Test]
@@ -310,7 +301,7 @@ final class ExistingFormFillerTest extends TestCase
             ->toBytes();
 
         self::assertStringContainsString('/Subtype /Image', $out);
-        self::assertMatchesRegularExpression('@/Stamp\d+ Do@', $out);
+        self::assertMatchesRegularExpression('@/Stamp\d+ Do@', FormPdf::drawn(ReaderDocument::fromBytes($out)));
         self::assertStringNotContainsString('/SMask', $out);
     }
 
@@ -341,7 +332,7 @@ final class ExistingFormFillerTest extends TestCase
 
         $doc = ReaderDocument::fromBytes($out);
         self::assertSame(1, $doc->pageCount());
-        self::assertStringContainsString('(Combined) Tj', $this->pageText($doc, 0));
+        self::assertStringContainsString('(Combined) Tj', FormPdf::drawn($doc));
         self::assertStringContainsString('/Subtype /Image', $out);
     }
 

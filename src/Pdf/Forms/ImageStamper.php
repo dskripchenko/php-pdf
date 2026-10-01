@@ -5,53 +5,56 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Pdf\Forms;
 
 use Dskripchenko\PhpPdf\Image\PdfImage;
-use Dskripchenko\PhpPdf\Pdf\Merge\ObjectImporter;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfDictionary;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfName;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfReference;
 use Dskripchenko\PhpPdf\Pdf\Reader\PdfStream;
+use Dskripchenko\PhpPdf\Pdf\Reader\ReaderPage;
 
 /**
  * Places a raster image (PNG/JPEG, with alpha preserved via `/SMask`) onto a
- * page of an already-imported object graph, as its own `/XObject` — a
- * standalone primitive independent of any AcroForm field, so a caller can
- * drive it with whatever placement convention it likes (a signature, a
- * photo, a watermark, …).
+ * page — a standalone primitive independent of any AcroForm field, so a
+ * caller can drive it with whatever placement convention it likes (a
+ * signature, a photo, a watermark, …).
  *
- * Decoding reuses {@see PdfImage} (already used by the authoring side); only
- * XObject registration differs, since here objects are `allocate()`d on a
- * shared {@see ObjectImporter} instead of written via the authoring `Writer`
- * — mirrors the pattern in {@see \Dskripchenko\PhpPdf\Pdf\Merge\PageXObjectBuilder}.
+ * Coordinates are in points from the top-left corner of the page *as a
+ * viewer shows it*: the visible CropBox, after `/Rotate`. The image is drawn
+ * upright in that view.
  *
- * Input coordinates are top-left origin (matching how callers already
- * measure a page for placement), converted here to PDF's bottom-left origin.
+ * @internal
  */
 final class ImageStamper
 {
-    public function stamp(
-        ObjectImporter $importer,
-        int $pageId,
-        PdfImage $image,
-        float $x,
-        float $y,
-        float $width,
-        float $height,
-        float $pageHeight,
-    ): void {
-        $imageId = $this->registerImage($importer, $image);
-        $name = 'Stamp' . $imageId;
-
-        $pdfY = $pageHeight - $y - $height;
-        $cm = sprintf(
-            '%s 0 0 %s %s %s cm',
-            $this->fmt($width), $this->fmt($height), $this->fmt($x), $this->fmt($pdfY),
-        );
-        $content = "q\n{$cm}\n/{$name} Do\nQ";
-
-        $this->appendToPage($importer, $pageId, $content, $name, new PdfReference($imageId, 0));
+    public function __construct(
+        private readonly FormGraph $graph,
+        private readonly PageEditor $pages,
+    ) {
     }
 
-    private function registerImage(ObjectImporter $importer, PdfImage $image): int
+    public function stamp(ReaderPage $page, PdfImage $image, float $x, float $y, float $width, float $height): void
+    {
+        $name = $this->pages->addResource($page, 'XObject', 'Stamp', $this->register($image));
+
+        // Unit square (u right, v up) → display box (y down) → user space.
+        [$a, $b, $c, $d, $e, $f] = PageEditor::displayToUser($page);
+        $point = static fn (float $dx, float $dy): array => [$a * $dx + $c * $dy + $e, $b * $dx + $d * $dy + $f];
+        [$ox, $oy] = $point($x, $y + $height);
+        [$ux, $uy] = $point($x + $width, $y + $height);
+        [$vx, $vy] = $point($x, $y);
+
+        $this->pages->appendContent($page, sprintf(
+            "q %s %s %s %s %s %s cm /%s Do Q",
+            FormGraph::number($ux - $ox),
+            FormGraph::number($uy - $oy),
+            FormGraph::number($vx - $ox),
+            FormGraph::number($vy - $oy),
+            FormGraph::number($ox),
+            FormGraph::number($oy),
+            $name,
+        ));
+    }
+
+    private function register(PdfImage $image): PdfReference
     {
         $items = [
             'Type' => new PdfName('XObject'),
@@ -64,7 +67,7 @@ final class ImageStamper
         ];
 
         if ($image->alphaData !== null && $image->alphaData !== '') {
-            $maskDict = new PdfDictionary([
+            $items['SMask'] = $this->graph->allocate(new PdfStream(new PdfDictionary([
                 'Type' => new PdfName('XObject'),
                 'Subtype' => new PdfName('Image'),
                 'Width' => $image->widthPx,
@@ -72,63 +75,9 @@ final class ImageStamper
                 'ColorSpace' => new PdfName('DeviceGray'),
                 'BitsPerComponent' => 8,
                 'Filter' => new PdfName('FlateDecode'),
-            ]);
-            $maskId = $importer->allocate(new PdfStream($maskDict, $image->alphaData));
-            $items['SMask'] = new PdfReference($maskId, 0);
+            ]), $image->alphaData));
         }
 
-        return $importer->allocate(new PdfStream(new PdfDictionary($items), $image->imageData));
-    }
-
-    private function appendToPage(ObjectImporter $importer, int $pageId, string $content, string $name, PdfReference $imageRef): void
-    {
-        $dict = $importer->get($pageId);
-        if (!$dict instanceof PdfDictionary) {
-            throw new \InvalidArgumentException("Page object {$pageId} was not imported");
-        }
-        $items = $dict->all();
-
-        $contents = $items['Contents'] ?? null;
-        $list = match (true) {
-            is_array($contents) => array_values($contents),
-            $contents !== null => [$contents],
-            default => [],
-        };
-        $list[] = new PdfReference($importer->allocate(new PdfStream(new PdfDictionary([]), $content)), 0);
-        $items['Contents'] = $list;
-
-        $resources = $this->resolveDict($importer, $items['Resources'] ?? null) ?? new PdfDictionary([]);
-        $xobjects = $this->resolveDict($importer, $resources->get('XObject')) ?? new PdfDictionary([]);
-        $xobjItems = $xobjects->all();
-        $xobjItems[$name] = $imageRef;
-        $resItems = $resources->all();
-        $resItems['XObject'] = new PdfDictionary($xobjItems);
-        $items['Resources'] = new PdfDictionary($resItems);
-
-        $importer->set($pageId, new PdfDictionary($items));
-    }
-
-    /**
-     * A dictionary value already read off an imported object may itself be an
-     * indirect reference (ISO 32000-1 allows any value to be indirect) rather
-     * than inlined — resolve it against the importer's own object map before
-     * treating an absent match as "no such dictionary".
-     */
-    private function resolveDict(ObjectImporter $importer, mixed $value): ?PdfDictionary
-    {
-        if ($value instanceof PdfReference) {
-            $value = $importer->get($value->number);
-        }
-
-        return $value instanceof PdfDictionary ? $value : null;
-    }
-
-    private function fmt(float $v): string
-    {
-        if ($v === floor($v) && abs($v) < 1e9) {
-            return (string) (int) $v;
-        }
-
-        return rtrim(rtrim(sprintf('%.4f', $v), '0'), '.');
+        return $this->graph->allocate(new PdfStream(new PdfDictionary($items), $image->imageData));
     }
 }
