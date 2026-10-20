@@ -660,6 +660,14 @@ Bézierkurven), Formen (`<rect>`, `<circle>`, `<ellipse>`, `<line>`,
 Transformationen (`translate`, `scale`, `rotate`, `skewX`, `skewY`,
 `matrix`), `<use>` / `<defs>`, Styling über CSS-Klassen.
 
+`fill-rule="evenodd"` — am Element, in seinem `style`, in einem Stylesheet
+oder an einer Gruppe — füllt Pfade und Polygone nach der Gerade-Ungerade-Regel:
+Ein Loch, das in derselben Richtung wie sein Umriss gezeichnet ist (ein Ring,
+der Buchstabe O), bleibt leer.
+Verläufe füllen jede Form, in beiden `gradientUnits`; `fill`, `stroke` und
+ihre Deckkraft werden von Gruppen geerbt, und verschachtelte Transformationen
+werden verkettet.
+
 `<text>` wird in den Schriften des Dokuments gesetzt — dieselbe
 Familienkette, dieselben Ersatzschriften und Fett-/Kursivschnitte wie ein
 Absatz —, kyrillischer und anderer nicht-lateinischer Text erscheint also wie

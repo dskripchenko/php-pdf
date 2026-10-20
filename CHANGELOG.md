@@ -4,6 +4,54 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `Page::emitPath()` and `ContentStream::emitPath()` take the modes
+  `'fill-evenodd'` (`f*`) and `'fillstroke-evenodd'` (`B*`), which fill by
+  the even-odd rule: a subpath inside another is a hole whichever way round
+  it is drawn.
+- `Page::fillPathWithPattern()` and `ContentStream::fillPathWithPattern()`
+  fill any path with a registered shading pattern.
+- `emitPath()` and `fillPathWithPattern()` take any iterable of commands,
+  so a generator is written as it is read.
+- SVG gradients fill paths, polygons, circles, ellipses and transformed
+  rectangles, not only plain rectangles, and honour
+  `gradientUnits="userSpaceOnUse"`. The pattern follows the shape's
+  transforms, its bounding box and `gradientTransform`. Before, those
+  shapes printed black.
+
+### Fixed
+- SVG ignored `fill-rule`, so every path and polygon filled by the nonzero
+  rule: a hole drawn the same way round as its outline — a ring of two
+  circles in one path, a single-path letter O, nested squares — filled
+  solid, and a five-point star with `fill-rule="evenodd"` had a filled
+  centre. `fill-rule="evenodd"` on the element, in its `style`, in a style
+  sheet or inherited from a group fills with `f*` (`B*` with a stroke).
+- A gradient fill on a `<rect>` inside a `<g>` printed black: walking into
+  a group dropped the document's gradients.
+- `fill`, `stroke`, `stroke-width`, `fill-opacity` and `stroke-opacity`
+  were read from each shape's own attribute only, so a group's
+  `<g fill="#f00">` was ignored and its shapes printed black. They are
+  inherited now, and read from inline `style` too, like the text properties.
+- Inside a transformed group, the `transform` of a nested group or shape
+  was ignored: `<g transform="scale(2)"><g transform="translate(2,2)">`, as
+  QR code generators write it, lost its translate. Nested transforms
+  compose now, and stroke widths follow the combined scale.
+- SVG circles and ellipses are drawn as four cubic Béziers instead of
+  36-sided polygons, so they are round at any size, and filled and
+  stroked as one path. A 25,000-dot scatter plot renders in half the
+  time with less than half the memory, and its PDF is a third of the size
+  (1.8 MB instead of 5.2 MB). A zero radius draws nothing, as SVG defines.
+- SVG path data is parsed and written as it is read. A dense chart or map
+  with a million path points peaked at about 500 MB, a PHP array per
+  command; it now peaks at about 11 MB, mostly the page's content stream.
+- `<use>` copies are capped at `SvgRenderer::MAX_USE_COPIES` (50,000)
+  elements per document. `<use>` elements that refer to groups of
+  `<use>` elements, or a group with `<use>` references to itself, could
+  make a small file expand into millions of shapes and take minutes to
+  draw. A `<use>` that would pass the cap is left out.
+
 ## [1.25.0] — 2026-10-19
 
 ### Fixed

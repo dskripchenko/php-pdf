@@ -611,6 +611,11 @@ DocumentBuilder::new()
 （`translate`、`scale`、`rotate`、`skewX`、`skewY`、`matrix`）、
 `<use>` / `<defs>`、CSS 类样式。
 
+`fill-rule="evenodd"`（写在元素上、其 `style` 中、样式表中或分组上）按奇偶规则
+填充 path 与多边形：与外轮廓同向绘制的孔（圆环、字母 O）保持镂空。
+渐变可填充任意图形，支持两种 `gradientUnits`；`fill`、`stroke` 及其不透明度
+从分组继承，嵌套的变换会依次叠加。
+
 `<text>` 使用文档的字体排版 —— 与段落相同的字体族链、后备字体以及粗体/斜体
 字形 —— 因此西里尔字母及其他非拉丁文字的显示与正文一致；没有嵌入字体时，
 会退回到只含拉丁字形的 base-14 字体。`font-family`、`font-weight`、

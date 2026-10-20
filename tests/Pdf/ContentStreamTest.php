@@ -67,6 +67,70 @@ final class ContentStreamTest extends TestCase
     }
 
     #[Test]
+    public function emitPath_fill_evenodd_uses_f_star(): void
+    {
+        $cs = (new ContentStream)->emitPath(self::twoSquares(), 'fill-evenodd', ['r' => 1, 'g' => 0, 'b' => 0]);
+        $s = $cs->toString();
+
+        self::assertStringContainsString('1 0 0 rg', $s);
+        self::assertStringContainsString("h\nf*\nQ\n", $s);
+    }
+
+    #[Test]
+    public function emitPath_fillstroke_evenodd_uses_B_star(): void
+    {
+        $cs = (new ContentStream)->emitPath(
+            self::twoSquares(), 'fillstroke-evenodd',
+            ['r' => 1, 'g' => 0, 'b' => 0], ['r' => 0, 'g' => 0, 'b' => 1], 2.0,
+        );
+        $s = $cs->toString();
+
+        // Both colours and the line width are set, as for 'fillstroke'.
+        self::assertStringContainsString('1 0 0 rg', $s);
+        self::assertStringContainsString('0 0 1 RG', $s);
+        self::assertStringContainsString('2 w', $s);
+        self::assertStringContainsString("h\nB*\nQ\n", $s);
+    }
+
+    #[Test]
+    public function emitPath_keeps_nonzero_operators_and_unknown_mode_falls_back_to_f(): void
+    {
+        $squares = self::twoSquares();
+
+        self::assertStringContainsString("h\nf\nQ\n", (new ContentStream)->emitPath($squares, 'fill')->toString());
+        self::assertStringContainsString("h\nS\nQ\n", (new ContentStream)->emitPath($squares, 'stroke')->toString());
+        self::assertStringContainsString("h\nB\nQ\n", (new ContentStream)->emitPath($squares, 'fillstroke')->toString());
+        self::assertStringContainsString("h\nf\nQ\n", (new ContentStream)->emitPath($squares, 'bogus')->toString());
+    }
+
+    #[Test]
+    public function fillPathWithPattern_selects_the_pattern_and_fills(): void
+    {
+        $s = (new ContentStream)->fillPathWithPattern(self::twoSquares(), 'P1')->toString();
+        self::assertStringStartsWith("q\n/Pattern cs\n/P1 scn\n0 0 m\n", $s);
+        self::assertStringEndsWith("h\nf\nQ\n", $s);
+
+        $evenOdd = (new ContentStream)->fillPathWithPattern(self::twoSquares(), 'P2', evenOdd: true)->toString();
+        self::assertStringEndsWith("h\nf*\nQ\n", $evenOdd);
+        self::assertTrue((new ContentStream)->fillPathWithPattern([], 'P1')->isEmpty());
+    }
+
+    /**
+     * A square with a smaller square inside it, both drawn the same way
+     * round: under the nonzero rule the inner one fills, under even-odd it
+     * is a hole.
+     *
+     * @return list<array{0: string, 1: float, 2: float}|string>
+     */
+    private static function twoSquares(): array
+    {
+        return [
+            ['M', 0, 0], ['L', 0, 100], ['L', 100, 100], ['L', 100, 0], 'Z',
+            ['M', 25, 25], ['L', 25, 75], ['L', 75, 75], ['L', 75, 25], 'Z',
+        ];
+    }
+
+    #[Test]
     public function empty_stream_isEmpty(): void
     {
         $cs = new ContentStream;

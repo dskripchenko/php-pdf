@@ -93,4 +93,41 @@ SVG;
             ->toBytes(new Engine(compressStreams: false));
         self::assertMatchesRegularExpression('@0\s+0\s+1\s+rg@', $bytes);
     }
+
+    #[Test]
+    public function use_copies_stop_at_the_limit(): void
+    {
+        // Each group holds ten copies of the one before: 10^5 rects in all.
+        $defs = '<g id="l0"><rect width="1" height="1" fill="#f00"/></g>';
+        for ($i = 1; $i <= 5; $i++) {
+            $defs .= sprintf('<g id="l%d">%s</g>', $i, str_repeat(sprintf('<use href="#l%d"/>', $i - 1), 10));
+        }
+        $page = \Dskripchenko\PhpPdf\Pdf\Document::new()->addPage(customDimensionsPt: [100, 100]);
+        \Dskripchenko\PhpPdf\Svg\SvgRenderer::render('<svg viewBox="0 0 100 100"><defs>'.$defs.'</defs><use href="#l5"/></svg>', $page, 0, 0, 100, 100);
+
+        $rects = substr_count($page->rawContentStream()->toString(), "1 0 0 rg\n");
+        self::assertLessThanOrEqual(\Dskripchenko\PhpPdf\Svg\SvgRenderer::MAX_USE_COPIES, $rects);
+    }
+
+    #[Test]
+    public function a_group_that_uses_itself_stays_within_the_limit(): void
+    {
+        // Each resolved <use> copies the group with the copies made so far: 2^n without the cap.
+        $page = \Dskripchenko\PhpPdf\Pdf\Document::new()->addPage(customDimensionsPt: [100, 100]);
+        \Dskripchenko\PhpPdf\Svg\SvgRenderer::render('<svg viewBox="0 0 100 100"><g id="a"><rect width="1" height="1" fill="#f00"/>'.str_repeat('<use href="#a"/>', 40).'</g></svg>', $page, 0, 0, 100, 100);
+
+        $rects = substr_count($page->rawContentStream()->toString(), "1 0 0 rg\n");
+        self::assertGreaterThan(0, $rects);
+        self::assertLessThanOrEqual(\Dskripchenko\PhpPdf\Svg\SvgRenderer::MAX_USE_COPIES, $rects);
+    }
+
+    #[Test]
+    public function a_small_use_after_one_over_the_limit_is_still_drawn(): void
+    {
+        $big = '<g id="big">'.str_repeat('<rect width="1" height="1"/>', \Dskripchenko\PhpPdf\Svg\SvgRenderer::MAX_USE_COPIES).'</g>';
+        $page = \Dskripchenko\PhpPdf\Pdf\Document::new()->addPage(customDimensionsPt: [100, 100]);
+        \Dskripchenko\PhpPdf\Svg\SvgRenderer::render('<svg viewBox="0 0 100 100"><defs>'.$big.'<rect id="dot" width="1" height="1" fill="#f00"/></defs><use href="#big"/><use href="#dot"/></svg>', $page, 0, 0, 100, 100);
+
+        self::assertSame(1, substr_count($page->rawContentStream()->toString(), "1 0 0 rg\n"));
+    }
 }
