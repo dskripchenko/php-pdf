@@ -86,7 +86,7 @@ final class PdfFontTest extends TestCase
         self::assertStringContainsString('/FontFile2', $pdf);
         self::assertStringContainsString('/Encoding /Identity-H', $pdf);
         self::assertStringContainsString('/ToUnicode', $pdf);
-        self::assertStringContainsString('/BaseFont /LiberationSans', $pdf);
+        self::assertMatchesRegularExpression('~/BaseFont /[A-Z]{6}\+LiberationSans ~', $pdf);
         // The ToUnicode CMap has to hold bfchar entries for the glyphs used
         self::assertStringContainsString('beginbfchar', $pdf);
     }
@@ -128,5 +128,76 @@ final class PdfFontTest extends TestCase
         // 😀 (U+1F600) is not covered by Liberation; the glyph ID is 0 (.notdef).
         $hex = $font->encodeText('😀');
         self::assertSame('<0000>', $hex);
+    }
+
+    #[Test]
+    public function a_subset_font_is_named_with_a_six_letter_tag(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath));
+        $font->encodeText('Hello');
+        $pdf = $this->embed($font);
+
+        // ISO 32000-1 §9.6.4: the same tag on both /BaseFont entries and /FontName.
+        self::assertSame(1, preg_match('~/Subtype /Type0 /BaseFont /([A-Z]{6})\+LiberationSans ~', $pdf, $m));
+        self::assertStringContainsString('/Subtype /CIDFontType2 /BaseFont /'.$m[1].'+LiberationSans ', $pdf);
+        self::assertStringContainsString('/FontName /'.$m[1].'+LiberationSans ', $pdf);
+    }
+
+    #[Test]
+    public function different_subsets_of_one_font_get_different_tags(): void
+    {
+        $tag = function (string $text): string {
+            $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath));
+            $font->encodeText($text);
+            preg_match('~/FontName /([A-Z]{6})\+~', $this->embed($font), $m);
+
+            return $m[1];
+        };
+
+        self::assertNotSame($tag('Hello'), $tag('World'));
+        self::assertSame($tag('Hello'), $tag('Hello'), 'the same subset must get the same tag');
+    }
+
+    #[Test]
+    public function a_font_embedded_whole_has_no_tag(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath), subset: false);
+        $font->encodeText('Hello');
+        $pdf = $this->embed($font);
+
+        self::assertStringContainsString('/BaseFont /LiberationSans ', $pdf);
+        self::assertStringContainsString('/FontName /LiberationSans ', $pdf);
+        self::assertDoesNotMatchRegularExpression('~/[A-Z]{6}\+LiberationSans~', $pdf);
+    }
+
+    #[Test]
+    public function delimiters_in_a_font_name_are_escaped(): void
+    {
+        // Same-length swap of the PostScript name in both name-table encodings.
+        $bytes = (string) file_get_contents($this->liberationSansPath);
+        $bytes = str_replace('LiberationSans', 'Liberation(S/s', $bytes);
+        $bytes = str_replace(
+            mb_convert_encoding('LiberationSans', 'UTF-16BE', 'UTF-8'),
+            mb_convert_encoding('Liberation(S/s', 'UTF-16BE', 'UTF-8'),
+            $bytes,
+        );
+        $ttf = new TtfFile($bytes);
+        self::assertSame('Liberation(S/s', $ttf->postScriptName());
+
+        $font = new PdfFont($ttf, subset: false);
+        $font->encodeText('Hi');
+        $pdf = $this->embed($font);
+
+        self::assertStringContainsString('/BaseFont /Liberation#28S#2Fs ', $pdf);
+        self::assertStringContainsString('/FontName /Liberation#28S#2Fs ', $pdf);
+    }
+
+    private function embed(PdfFont $font): string
+    {
+        $writer = new Writer;
+        $fontId = $font->registerWith($writer);
+        $writer->setRoot($writer->addObject("<< /Type /Catalog /Pages $fontId 0 R >>"));
+
+        return $writer->toBytes();
     }
 }
