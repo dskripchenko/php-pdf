@@ -31,6 +31,7 @@ final class PdfFontCompressionCacheTest extends TestCase
     protected function tearDown(): void
     {
         PdfFont::forgetCompressedCache();
+        PdfFont::$compressionLevel = 6;
     }
 
     /** Access to the private compression — it is what is under test, not the whole render. */
@@ -82,5 +83,19 @@ final class PdfFontCompressionCacheTest extends TestCase
         $prop = new \ReflectionProperty(PdfFont::class, 'compressedCache');
 
         self::assertLessThanOrEqual($limit, count($prop->getValue()));
+    }
+
+    #[Test]
+    public function the_compression_level_is_used_and_kept_apart_in_the_cache(): void
+    {
+        $bytes = random_bytes(2048).str_repeat('font body ', 4000);
+        $atSix = $this->compress($bytes);
+
+        PdfFont::$compressionLevel = 1;
+        $atOne = $this->compress($bytes);
+
+        self::assertSame(gzcompress($bytes, 1), $atOne, 'level 1, not the level-6 body from the cache');
+        self::assertNotSame($atSix, $atOne);
+        self::assertSame($bytes, gzuncompress($atOne));
     }
 }

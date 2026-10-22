@@ -31,16 +31,6 @@ final class GposReader
 
     private const VALUE_X_ADVANCE = 0x0004;
 
-    private const VALUE_Y_ADVANCE = 0x0008;
-
-    private const VALUE_X_PLA_DEVICE = 0x0010;
-
-    private const VALUE_Y_PLA_DEVICE = 0x0020;
-
-    private const VALUE_X_ADV_DEVICE = 0x0040;
-
-    private const VALUE_Y_ADV_DEVICE = 0x0080;
-
     /**
      * @param  array{offset: int, length: int}  $gposTableInfo
      */
@@ -161,16 +151,17 @@ final class GposReader
             return; // No X_ADVANCE for the first glyph — not kerning in our sense
         }
 
-        // Parse coverage list — glyph IDs that can be 'first'.
-        $coverageGlyphs = $this->readCoverage($bytes, $subOffset + $coverageOffset);
-        if ($coverageGlyphs === []) {
-            return;
-        }
-
         if ($posFormat === 1) {
-            $this->readFormat1($bytes, $reader, $subOffset, $coverageGlyphs, $valueFormat1, $valueFormat2, $table);
+            // Coverage list — glyph IDs that can be 'first', in pair set order.
+            $coverageGlyphs = $this->readCoverage($bytes, $subOffset + $coverageOffset);
+            if ($coverageGlyphs !== []) {
+                $this->readFormat1($bytes, $reader, $subOffset, $coverageGlyphs, $valueFormat1, $valueFormat2, $table);
+            }
         } elseif ($posFormat === 2) {
-            $this->readFormat2($bytes, $reader, $subOffset, $coverageGlyphs, $valueFormat1, $valueFormat2, $table);
+            $coverage = $this->coverageMask($bytes, $subOffset + $coverageOffset);
+            if ($coverage !== '') {
+                $this->readFormat2($bytes, $reader, $subOffset, $coverage, $valueFormat1, $valueFormat2, $table);
+            }
         }
     }
 
@@ -224,31 +215,41 @@ final class GposReader
         int $valueSize2,
         KerningTable $table,
     ): void {
-        $reader = new BinaryReader($bytes);
-        $reader->seek($pairSetOffset);
-        $pairValueCount = $reader->readUInt16();
-
-        for ($j = 0; $j < $pairValueCount; $j++) {
-            $secondGid = $reader->readUInt16();
-            $value1 = $this->readValueRecord($reader, $valueFormat1);
-            // Skip value2 (we only use value1.xAdvance).
-            $reader->skip($valueSize2);
-
-            $xAdvance = $value1['xAdvance'];
-            if ($xAdvance !== 0) {
-                $table->add($firstGid, $secondGid, $xAdvance);
-            }
+        $pairValueCount = (new BinaryReader($bytes))->peekUInt16($pairSetOffset);
+        if ($pairValueCount === 0) {
+            return;
         }
+
+        // PairValueRecord: uint16 secondGlyph, ValueRecord value1, ValueRecord value2.
+        // With xAdvance as the only value (the usual kerning format) the set
+        // already is (secondGlyph, xAdvance) words: it is kept as it is.
+        if ($valueFormat1 === self::VALUE_X_ADVANCE && $valueFormat2 === 0) {
+            $table->addPairs($firstGid, substr($bytes, $pairSetOffset + 2, $pairValueCount * 4));
+
+            return;
+        }
+        $words = 1 + (($valueSize1 + $valueSize2) >> 1);
+        $xAt = 1 + ($valueFormat1 & self::VALUE_X_PLACEMENT ? 1 : 0) + ($valueFormat1 & self::VALUE_Y_PLACEMENT ? 1 : 0);
+        $set = unpack('n*', substr($bytes, $pairSetOffset + 2, $pairValueCount * $words * 2));
+        if ($set === false || count($set) < $pairValueCount * $words) {
+            return; // truncated
+        }
+        $pairs = [];
+        for ($j = 0, $i = 1; $j < $pairValueCount; $j++, $i += $words) {
+            $pairs[] = $set[$i];
+            $pairs[] = $set[$i + $xAt];
+        }
+        $table->addPairs($firstGid, pack('n*', ...$pairs));
     }
 
     /**
-     * @param  list<int>  $coverageGlyphs
+     * @param  string  $coverage  one byte per glyph id, "\1" for a first glyph the subtable covers
      */
     private function readFormat2(
         string $bytes,
         BinaryReader $reader,
         int $subOffset,
-        array $coverageGlyphs,
+        string $coverage,
         int $valueFormat1,
         int $valueFormat2,
         KerningTable $table,
@@ -263,8 +264,8 @@ final class GposReader
         $class1Count = $reader->readUInt16();
         $class2Count = $reader->readUInt16();
 
-        $classDef1 = $this->readClassDef($bytes, $subOffset + $classDef1Offset);
-        $classDef2 = $this->readClassDef($bytes, $subOffset + $classDef2Offset);
+        $classDef1 = $this->classString($bytes, $subOffset + $classDef1Offset);
+        $classDef2 = $this->classString($bytes, $subOffset + $classDef2Offset);
 
         $valueSize1 = $this->valueRecordSize($valueFormat1);
         $valueSize2 = $this->valueRecordSize($valueFormat2);
@@ -274,48 +275,34 @@ final class GposReader
         // Each record contains value1 + value2 for the (class1, class2) pair.
         $classRecordsBase = $reader->tell();
 
-        // Pre-compute (class1, class2) → xAdvance — skip cells that have
-        // zero adjustments (most pairs).
-        $kerningByClass = []; // class1 → class2 → xAdvance
-        for ($c1 = 0; $c1 < $class1Count; $c1++) {
-            for ($c2 = 0; $c2 < $class2Count; $c2++) {
-                $cellOffset = $classRecordsBase + ($c1 * $class2Count + $c2) * $recordSize;
-                $reader->seek($cellOffset);
-                $value1 = $this->readValueRecord($reader, $valueFormat1);
-                $xAdvance = $value1['xAdvance'];
-                if ($xAdvance !== 0) {
-                    $kerningByClass[$c1][$c2] = $xAdvance;
-                }
+        // The class1 × class2 matrix of xAdvance values. With xAdvance as the
+        // only value it is a slice of the font; otherwise it is read with one
+        // unpack (every value is a 16-bit word) and the xAdvance words kept.
+        $cells = $class1Count * $class2Count;
+        if ($valueFormat1 === self::VALUE_X_ADVANCE && $valueFormat2 === 0) {
+            $matrix = substr($bytes, $classRecordsBase, $cells * 2);
+            if (strlen($matrix) < $cells * 2) {
+                return; // truncated
             }
+        } else {
+            $words = $recordSize >> 1;
+            $xAt = ($valueFormat1 & self::VALUE_X_PLACEMENT ? 1 : 0) + ($valueFormat1 & self::VALUE_Y_PLACEMENT ? 1 : 0);
+            $all = $cells === 0 ? [] : unpack('n*', substr($bytes, $classRecordsBase, $cells * $recordSize));
+            if ($all === false || count($all) < $cells * $words) {
+                return; // truncated
+            }
+            $values = [];
+            for ($i = 1 + $xAt, $end = $cells * $words; $i <= $end; $i += $words) {
+                $values[] = $all[$i];
+            }
+            $matrix = $values === [] ? '' : pack('n*', ...$values);
         }
 
-        // Expand (class1, class2) → (gid1, gid2). For each covered
-        // first-glyph (i.e. in the coverage list) we look up class1, then
-        // for each class2 with a non-zero adjustment we add a pair for
-        // all gid2 in class2.
-        //
+        // Kept as classes rather than expanded into (gid1, gid2) pairs.
         // Class 0 = "default class", contains all glyphs that are not
-        // assigned an explicit class. For kerning we care only about
-        // explicit-classed glyphs in Coverage (for first) and in
-        // classDef2 (for second).
-
-        // Reverse classDef2: class → list<gid>.
-        $class2Members = [];
-        foreach ($classDef2 as $gid => $class) {
-            $class2Members[$class][] = $gid;
-        }
-
-        foreach ($coverageGlyphs as $firstGid) {
-            $c1 = $classDef1[$firstGid] ?? 0;
-            if (! isset($kerningByClass[$c1])) {
-                continue;
-            }
-            foreach ($kerningByClass[$c1] as $c2 => $xAdvance) {
-                foreach ($class2Members[$c2] ?? [] as $secondGid) {
-                    $table->add($firstGid, $secondGid, $xAdvance);
-                }
-            }
-        }
+        // assigned an explicit class: it applies to covered first glyphs,
+        // never to second glyphs.
+        $table->addClasses($coverage, $classDef1, $classDef2, $class2Count, $matrix);
     }
 
     /**
@@ -360,6 +347,102 @@ final class GposReader
         }
 
         return $out;
+    }
+
+    /**
+     * A Coverage table as one byte per glyph id: "\1" covered, "\0" not.
+     * Format 2 ranges are written whole, never glyph by glyph.
+     */
+    private function coverageMask(string $bytes, int $offset): string
+    {
+        $reader = new BinaryReader($bytes);
+        $reader->seek($offset);
+        $format = $reader->readUInt16();
+        $count = $reader->readUInt16();
+        if ($count === 0 || ($format !== 1 && $format !== 2)) {
+            return '';
+        }
+        $words = unpack('n*', substr($bytes, $offset + 4, $count * ($format === 1 ? 2 : 6)));
+        if ($words === false || count($words) < $count * ($format === 1 ? 1 : 3)) {
+            return ''; // truncated
+        }
+        if ($format === 1) {
+            $mask = str_repeat("\0", max($words) + 1);
+            foreach ($words as $gid) {
+                $mask[$gid] = "\1";
+            }
+
+            return $mask;
+        }
+        $last = 0;
+        for ($i = 1; $i <= $count * 3; $i += 3) {
+            $last = max($last, $words[$i + 1]);
+        }
+        $mask = str_repeat("\0", $last + 1);
+        for ($i = 1; $i <= $count * 3; $i += 3) {
+            if ($words[$i + 1] >= $words[$i]) {
+                $mask = substr_replace($mask, str_repeat("\1", $words[$i + 1] - $words[$i] + 1), $words[$i], $words[$i + 1] - $words[$i] + 1);
+            }
+        }
+
+        return $mask;
+    }
+
+    /**
+     * A ClassDef table as a big-endian uint16 class per glyph id (0 past the
+     * end). Format 1 is a slice of the font behind zero padding; format 2
+     * ranges are written whole when sorted and disjoint, as the spec requires.
+     */
+    private function classString(string $bytes, int $offset): string
+    {
+        $reader = new BinaryReader($bytes);
+        $reader->seek($offset);
+        $format = $reader->readUInt16();
+        if ($format === 1) {
+            $start = $reader->readUInt16();
+            $count = $reader->readUInt16();
+            $values = substr($bytes, $offset + 6, $count * 2);
+            if (strlen($values) < $count * 2) {
+                return $this->packClasses($this->readClassDef($bytes, $offset));
+            }
+
+            return str_repeat("\0\0", $start).$values;
+        }
+        if ($format !== 2) {
+            return '';
+        }
+        $count = $reader->readUInt16();
+        $words = $count === 0 ? [] : unpack('n*', substr($bytes, $offset + 4, $count * 6));
+        if ($words === false || count($words) < $count * 3) {
+            return $this->packClasses($this->readClassDef($bytes, $offset));
+        }
+        $out = '';
+        $next = 0;
+        for ($i = 1; $i <= $count * 3; $i += 3) {
+            [$start, $end, $class] = [$words[$i], $words[$i + 1], $words[$i + 2]];
+            if ($start < $next || $end < $start) {
+                // unsorted or overlapping ranges: glyph by glyph, as before
+                return $this->packClasses($this->readClassDef($bytes, $offset));
+            }
+            $out .= str_repeat("\0\0", $start - $next).str_repeat(pack('n', $class), $end - $start + 1);
+            $next = $end + 1;
+        }
+
+        return $out;
+    }
+
+    /** @param  array<int, int>  $classes  glyph id → class */
+    private function packClasses(array $classes): string
+    {
+        if ($classes === []) {
+            return '';
+        }
+        $words = array_fill(0, max(array_keys($classes)) + 1, 0);
+        foreach ($classes as $gid => $class) {
+            $words[$gid] = $class;
+        }
+
+        return pack('n*', ...$words);
     }
 
     /**
@@ -430,43 +513,5 @@ final class GposReader
         }
 
         return $size;
-    }
-
-    /**
-     * Reads ValueRecord by valueFormat. Returns only xAdvance — the only
-     * thing we care about for kerning.
-     *
-     * @return array{xAdvance: int}
-     */
-    private function readValueRecord(BinaryReader $reader, int $valueFormat): array
-    {
-        $xAdvance = 0;
-        if ($valueFormat & self::VALUE_X_PLACEMENT) {
-            $reader->skip(2);
-        }
-        if ($valueFormat & self::VALUE_Y_PLACEMENT) {
-            $reader->skip(2);
-        }
-        if ($valueFormat & self::VALUE_X_ADVANCE) {
-            $xAdvance = $reader->readInt16();
-        }
-        if ($valueFormat & self::VALUE_Y_ADVANCE) {
-            $reader->skip(2);
-        }
-        // Device tables — uint16 offsets (skip).
-        if ($valueFormat & self::VALUE_X_PLA_DEVICE) {
-            $reader->skip(2);
-        }
-        if ($valueFormat & self::VALUE_Y_PLA_DEVICE) {
-            $reader->skip(2);
-        }
-        if ($valueFormat & self::VALUE_X_ADV_DEVICE) {
-            $reader->skip(2);
-        }
-        if ($valueFormat & self::VALUE_Y_ADV_DEVICE) {
-            $reader->skip(2);
-        }
-
-        return ['xAdvance' => $xAdvance];
     }
 }

@@ -28,7 +28,7 @@ final class GposReaderTest extends TestCase
         self::assertNotNull($kt);
         self::assertFalse($kt->isEmpty());
         // Liberation Sans 2.1.5 has 2015 kerning pairs (through class-based GPOS).
-        self::assertGreaterThan(1500, $kt->pairCount());
+        self::assertSame(2015, $kt->pairCount());
     }
 
     #[Test]

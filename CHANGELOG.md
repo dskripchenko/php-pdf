@@ -4,6 +4,52 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `TtfFile::exportState()` and `TtfFile::fromState()` save a parsed font,
+  kerning included, as plain data and restore it without parsing — for a
+  cache across requests. A restore takes 0.07–0.55 ms against 0.4–3.6 ms to
+  parse. The state carries `TtfFile::STATE_FORMAT` and a fingerprint of the
+  font's table directory: `fromState()` refuses, with an
+  `InvalidArgumentException`, a state of another format, of another font
+  file, or a damaged one. `KerningTable::exportState()` and
+  `KerningTable::fromState()` do the same for a kerning table.
+- `PdfFont::$compressionLevel` sets the zlib level for embedded font
+  bodies (default 6, as before). Level 1 compresses a subset two to five
+  times faster and the stream is within a few percent of the level-6 size.
+
+### Changed
+- Kerning is no longer expanded into glyph pairs. GPOS class-based
+  subtables (PairPos format 2) are kept as classes, and the whole table is
+  held as packed binary strings — for the usual value format, slices of the
+  font itself — searched in place. Fonts with class kerning parsed for tens
+  of milliseconds and held tens of megabytes: Inter Regular took 35 ms and
+  26 MB for its 447,676 pairs, Fira Sans 37 ms and 27 MB. They now take
+  about 1 ms and 0.25 MB; Merriweather's 102,000 explicit pairs take
+  0.7 ms and 0.5 MB instead of 38 ms and 7 MB. Every lookup answers as
+  before: compared pair by pair on 77 fonts.
+- `KerningTable::addPairs()` and `KerningTable::addClasses()` add packed
+  pairs and class subtables. `pairCount()` now counts by expanding the
+  table, so it is meant for diagnostics rather than the render path.
+- Font subsetting is about twice as fast: table checksums are summed from
+  one `unpack()` instead of one call per 32-bit word. Inter Regular
+  subsets in 0.8 ms instead of 1.9 ms, Noto Sans JP in 4.0 ms instead of
+  8.2 ms; the subsets are byte-identical.
+- Fonts parse two to three times faster: the `cmap` (formats 4 and 12) and
+  `hmtx` tables are read with one `unpack()` per array instead of one call
+  per value. Inter Regular parses in 0.7 ms instead of 1.9 ms, Noto Sans JP
+  (17,000 glyphs) in 3.4 ms instead of 9.2 ms. The parsed tables are
+  unchanged: identical on 241 fonts compared, the 8 others rejected with
+  the same errors as before.
+
+### Fixed
+- Embedded font subsets kept the source font's `head.checkSumAdjustment`,
+  and the `head` entry of their table directory was summed with it, so the
+  subset's checksums were wrong: strict validators and font tools flag such
+  a font. The adjustment is zeroed for the table checksums and set so the
+  whole subset sums to `0xB1B0AFBA`, as OpenType requires.
+
 ## [1.25.0] — 2026-10-19
 
 ### Fixed
