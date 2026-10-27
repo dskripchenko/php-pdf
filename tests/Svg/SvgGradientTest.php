@@ -120,4 +120,19 @@ SVG;
         self::assertStringContainsString('/P1 scn', $bytes);
         self::assertStringContainsString('/P2 scn', $bytes);
     }
+
+    #[Test]
+    public function a_quoted_gradient_reference_fills_a_plain_rect(): void
+    {
+        foreach (["url('#g1')", 'url("#g1")', 'url( #g1 )'] as $fill) {
+            $svg = '<svg width="100" height="100"><defs><linearGradient id="g1">'
+                .'<stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/>'
+                .'</linearGradient></defs><rect width="50" height="50" fill="'.htmlspecialchars($fill).'"/></svg>';
+            $bytes = (new Document(new Section([new SvgElement($svg)])))
+                ->toBytes(new Engine(compressStreams: false));
+
+            self::assertStringContainsString('/P1 scn', $bytes, $fill);
+            self::assertStringNotContainsString("0 0 0 rg\n", $bytes, $fill);
+        }
+    }
 }

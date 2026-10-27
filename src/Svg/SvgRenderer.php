@@ -23,6 +23,13 @@ use Dskripchenko\PhpPdf\Pdf\StandardFont;
 final class SvgRenderer
 {
     /**
+     * The most elements all <use> references in one document may copy.
+     * Copies past it are left out, so nested <use> elements cannot
+     * multiply a small file into millions of shapes.
+     */
+    public const MAX_USE_COPIES = 50_000;
+
+    /**
      * @return array{0: int, 1: int, 2: int}|null
      */
     private static function namedColorRgb(string $name): ?array
@@ -45,11 +52,14 @@ final class SvgRenderer
      */
     private static function parseOpacity(\SimpleXMLElement $el, string $attr, float $multiplier = 1.0): float
     {
-        $val = $el[$attr] ?? null;
+        // fill-opacity and stroke-opacity are inherited; opacity is not.
+        $val = in_array($attr, ['fill-opacity', 'stroke-opacity'], true)
+            ? self::inheritedProperty($el, $attr)
+            : (isset($el[$attr]) ? (string) $el[$attr] : null);
         if ($val === null) {
             return $multiplier;
         }
-        $f = (float) (string) $val;
+        $f = (float) $val;
         if ($f < 0) {
             $f = 0;
         }
@@ -273,7 +283,17 @@ final class SvgRenderer
         // Collect linearGradient definitions (id → params).
         $gradients = self::parseGradients($xml);
 
-        self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY, $gradients);
+        // Shapes at any depth look gradients up here; set once per document
+        // so that walking into a group does not lose them.
+        $previous = self::$currentGradients;
+        self::$currentGradients = $gradients;
+        try {
+            self::walkElement($xml, $page, $tx, $ty, $scaleX, $scaleY);
+        } finally {
+            self::$currentGradients = $previous;
+            self::$chainOf = null;
+            self::$chain = [];
+        }
     }
 
     /**
@@ -300,6 +320,7 @@ final class SvgRenderer
                 : null;
             $out[$id] = [
                 'type' => 'linear',
+                'userSpace' => (string) ($g['gradientUnits'] ?? '') === 'userSpaceOnUse',
                 'x1' => $x1, 'y1' => $y1, 'x2' => $x2, 'y2' => $y2,
                 'stops' => $stops,
                 'transform' => $gradTransform,
@@ -322,6 +343,7 @@ final class SvgRenderer
                 : null;
             $out[$id] = [
                 'type' => 'radial',
+                'userSpace' => (string) ($g['gradientUnits'] ?? '') === 'userSpaceOnUse',
                 'cx' => $cx, 'cy' => $cy, 'r' => $r, 'fx' => $fx, 'fy' => $fy,
                 'stops' => $stops,
                 'transform' => $gradTransform,
@@ -380,13 +402,20 @@ final class SvgRenderer
         }
         // Find all use elements.
         $uses = $root->xpath('//use') ?: [];
+        $copied = 0;
+        // Ids whose element was too big for what was left of the cap. It
+        // only grows and the room only shrinks, so they stay refused.
+        $refused = [];
         foreach ($uses as $use) {
+            if ($copied >= self::MAX_USE_COPIES) {
+                break; // Every copy takes at least one element.
+            }
             $href = (string) ($use['href'] ?? $use->attributes('xlink', true)?->href ?? '');
             if ($href === '' || ! str_starts_with($href, '#')) {
                 continue;
             }
             $refId = substr($href, 1);
-            if (! isset($idMap[$refId])) {
+            if (! isset($idMap[$refId]) || isset($refused[$refId])) {
                 continue;
             }
             $ref = $idMap[$refId];
@@ -394,6 +423,15 @@ final class SvgRenderer
             $newName = $ref->getName();
             $dom = dom_import_simplexml($use);
             $refDom = dom_import_simplexml($ref);
+            // Counted before cloning: an earlier <use> may already have
+            // copied content into the element this one refers to.
+            $size = 1 + $refDom->getElementsByTagName('*')->length;
+            if ($copied + $size > self::MAX_USE_COPIES) {
+                $refused[$refId] = true;
+
+                continue;
+            }
+            $copied += $size;
             $clone = $refDom->cloneNode(true);
             // Rename use → ref tag by replacing element.
             $newEl = $dom->ownerDocument->createElement($newName);
@@ -442,13 +480,20 @@ final class SvgRenderer
     private static array $currentGradients = [];
 
     /**
+     * The element whose ancestors $chain holds, nearest first. Held, so
+     * the object cannot be freed and its identity reused.
+     */
+    private static ?\SimpleXMLElement $chainOf = null;
+
+    /** @var list<\SimpleXMLElement> */
+    private static array $chain = [];
+
+    /**
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
-     * @param  array<string, array<string, mixed>>  $gradients
      */
-    private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY, array $gradients = []): void
+    private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY): void
     {
-        self::$currentGradients = $gradients;
         foreach ($el->children() as $child) {
             // Apply element-level transform (if present).
             $elTx = $tx;
@@ -473,12 +518,12 @@ final class SvgRenderer
             $tag = $child->getName();
             match ($tag) {
                 'rect' => self::renderRect($child, $page, $elTx, $elTy, $scaleX, $scaleY),
-                'line' => self::renderLine($child, $page, $elTx, $elTy, $scaleX),
+                'line' => self::withShapeOpacity($child, $page, static fn () => self::renderLine($child, $page, $elTx, $elTy, $scaleX)),
                 'circle' => self::renderCircle($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'ellipse' => self::renderEllipse($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'polygon' => self::renderPolygon($child, $page, $elTx, $elTy, true, $scaleX),
                 'polyline' => self::renderPolygon($child, $page, $elTx, $elTy, false, $scaleX),
-                'path' => self::renderPath($child, $page, $elTx, $elTy, $scaleX),
+                'path' => self::withShapeOpacity($child, $page, static fn () => self::renderPath($child, $page, $elTx, $elTy, $scaleX)),
                 'text' => self::renderText($child, $page, $elTx, $elTy, $scaleX),
                 'g' => self::walkElement($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'defs' => null, // <defs> children referenced by <use>, not rendered directly.
@@ -534,17 +579,33 @@ final class SvgRenderer
 
         $tag = $el->getName();
         match ($tag) {
-            'rect' => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY),
-            'line' => self::renderLineXY($el, $page, $px, $py, $effScale),
-            'circle' => self::renderEllipseXY($el, $page, $px, $py, $effScale, true),
-            'ellipse' => self::renderEllipseXY($el, $page, $px, $py, $effScale, false),
-            'polygon' => self::renderPolygonXY($el, $page, $px, $py, true, $effScale),
-            'polyline' => self::renderPolygonXY($el, $page, $px, $py, false, $effScale),
-            'path' => self::renderPathXY($el, $page, $px, $py, $effScale),
+            'rect' => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY)),
+            'line' => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $effScale)),
+            'circle' => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, true)),
+            'ellipse' => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, false)),
+            'polygon' => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, true, $effScale)),
+            'polyline' => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, false, $effScale)),
+            'path' => self::withShapeOpacity($el, $page, static fn () => self::renderPathXY($el, $page, $px, $py, $effScale)),
             'text' => self::renderTextXY($el, $page, $px, $py, $effScale),
             'g' => self::walkElementXY($el, $page, $px, $py, $effScale, $scaleY),
             default => null,
         };
+    }
+
+    /**
+     * Draws a shape inside its opacity, fill-opacity and stroke-opacity,
+     * for the renderers that do not apply them themselves.
+     *
+     * @param  \Closure(): mixed  $draw
+     */
+    private static function withShapeOpacity(\SimpleXMLElement $el, Page $page, \Closure $draw): void
+    {
+        $opacity = self::parseOpacity($el, 'opacity', 1.0);
+        $page->withOpacity(
+            self::parseOpacity($el, 'fill-opacity', $opacity),
+            self::parseOpacity($el, 'stroke-opacity', $opacity),
+            $draw,
+        );
     }
 
     /**
@@ -556,17 +617,28 @@ final class SvgRenderer
     private static function walkElementXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX, float $scaleY): void
     {
         foreach ($el->children() as $child) {
+            // A child's own transform applies inside its group's.
+            $cpx = $px;
+            $cpy = $py;
+            $cScale = $scaleX;
+            $matrix = isset($child['transform']) ? self::parseTransform((string) $child['transform']) : null;
+            if ($matrix !== null) {
+                [$a, $b, $c, $d, $e, $f] = $matrix;
+                $cpx = static fn (float $x, float $y): float => $px($a * $x + $c * $y + $e, $b * $x + $d * $y + $f);
+                $cpy = static fn (float $x, float $y): float => $py($a * $x + $c * $y + $e, $b * $x + $d * $y + $f);
+                $cScale = $scaleX * sqrt(max(abs($a * $d - $b * $c), 1e-9));
+            }
             $tag = $child->getName();
             match ($tag) {
-                'rect' => self::renderRectXY($child, $page, $px, $py, $scaleX, $scaleY),
-                'line' => self::renderLineXY($child, $page, $px, $py, $scaleX),
-                'circle' => self::renderEllipseXY($child, $page, $px, $py, $scaleX, true),
-                'ellipse' => self::renderEllipseXY($child, $page, $px, $py, $scaleX, false),
-                'polygon' => self::renderPolygonXY($child, $page, $px, $py, true, $scaleX),
-                'polyline' => self::renderPolygonXY($child, $page, $px, $py, false, $scaleX),
-                'path' => self::renderPathXY($child, $page, $px, $py, $scaleX),
-                'text' => self::renderTextXY($child, $page, $px, $py, $scaleX),
-                'g' => self::walkElementXY($child, $page, $px, $py, $scaleX, $scaleY),
+                'rect' => self::withShapeOpacity($child, $page, static fn () => self::renderRectXY($child, $page, $cpx, $cpy, $cScale, $scaleY)),
+                'line' => self::withShapeOpacity($child, $page, static fn () => self::renderLineXY($child, $page, $cpx, $cpy, $cScale)),
+                'circle' => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, true)),
+                'ellipse' => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, false)),
+                'polygon' => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, true, $cScale)),
+                'polyline' => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, false, $cScale)),
+                'path' => self::withShapeOpacity($child, $page, static fn () => self::renderPathXY($child, $page, $cpx, $cpy, $cScale)),
+                'text' => self::renderTextXY($child, $page, $cpx, $cpy, $cScale),
+                'g' => self::walkElementXY($child, $page, $cpx, $cpy, $cScale, $scaleY),
                 default => null,
             };
         }
@@ -674,9 +746,9 @@ final class SvgRenderer
         $y = (float) ($el['y'] ?? 0);
         $w = (float) ($el['width'] ?? 0);
         $h = (float) ($el['height'] ?? 0);
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(self::inheritedProperty($el, 'fill') ?? '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
 
         $corners = [
             [$px($x, $y), $py($x, $y)],
@@ -684,7 +756,8 @@ final class SvgRenderer
             [$px($x + $w, $y + $h), $py($x + $w, $y + $h)],
             [$px($x, $y + $h), $py($x, $y + $h)],
         ];
-        if ($hasFill) {
+        $user = static fn (): array => [[$x, $y], [$x + $w, $y], [$x + $w, $y + $h], [$x, $y + $h]];
+        if ($hasFill && ! self::fillGradient($el, $page, self::outline($corners), $user, self::affineXY($px, $py))) {
             $page->fillPolygon($corners, $fr, $fg, $fb);
         }
         if ($hasStroke) {
@@ -704,8 +777,8 @@ final class SvgRenderer
         $y1 = (float) ($el['y1'] ?? 0);
         $x2 = (float) ($el['x2'] ?? 0);
         $y2 = (float) ($el['y2'] ?? 0);
-        [$sr, $sg, $sb] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : '#000');
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$sr, $sg, $sb] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? '#000');
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
         $page->strokeLine($px($x1, $y1), $py($x1, $y1), $px($x2, $y2), $py($x2, $y2), $sw * $scaleX, $sr, $sg, $sb);
     }
 
@@ -723,26 +796,7 @@ final class SvgRenderer
             $rx = (float) ($el['rx'] ?? 0);
             $ry = (float) ($el['ry'] ?? 0);
         }
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
-
-        $segments = 36;
-        $points = [];
-        for ($i = 0; $i < $segments; $i++) {
-            $angle = 2 * M_PI * $i / $segments;
-            $sx = $cx + cos($angle) * $rx;
-            $sy = $cy + sin($angle) * $ry;
-            $points[] = [$px($sx, $sy), $py($sx, $sy)];
-        }
-        if ($hasFill) {
-            $page->fillPolygon($points, $fr, $fg, $fb);
-        }
-        if ($hasStroke) {
-            $closed = $points;
-            $closed[] = $points[0];
-            $page->strokePolyline($closed, $sw * $scaleX, $sr, $sg, $sb);
-        }
+        self::drawEllipse($el, $page, $cx, $cy, $rx, $ry, $px, $py, $scaleX);
     }
 
     /**
@@ -758,20 +812,22 @@ final class SvgRenderer
         }
         $tokens = array_values(array_filter($tokens, fn ($t) => $t !== ''));
         $pts = [];
+        $userPoints = [];
         for ($i = 0; $i + 1 < count($tokens); $i += 2) {
             $sx = (float) $tokens[$i];
             $sy = (float) $tokens[$i + 1];
+            $userPoints[] = [$sx, $sy];
             $pts[] = [$px($sx, $sy), $py($sx, $sy)];
         }
         if ($pts === []) {
             return;
         }
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : ($closed ? '#000' : null));
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(self::inheritedProperty($el, 'fill') ?? ($closed ? '#000' : null));
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
 
-        if ($closed && $hasFill) {
-            $page->fillPolygon($pts, $fr, $fg, $fb);
+        if ($closed && $hasFill && ! self::fillGradient($el, $page, self::outline($pts), static fn (): array => $userPoints, self::affineXY($px, $py))) {
+            self::fillPolygonByRule($el, $page, $pts, $fr, $fg, $fb);
         }
         if ($hasStroke) {
             $line = $pts;
@@ -795,46 +851,24 @@ final class SvgRenderer
         if ($d === '') {
             return;
         }
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(self::inheritedProperty($el, 'fill') ?? '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
 
-        // Wrap point transformers as (svg-x → pdf-x) / (svg-y → pdf-y)
-        // closures that we'd normally pass to parsePathD. parsePathD expects
-        // single-arg tx/ty, so we pass through identity closures and
-        // post-transform each emitted command:
         $idTx = static fn (float $x): float => $x;
         $idTy = static fn (float $y): float => $y;
-        $rawCommands = self::parsePathD($d, $idTx, $idTy);
-
-        // Transform raw SVG-space commands to PDF coords.
-        $commands = [];
-        foreach ($rawCommands as $cmd) {
-            if ($cmd === 'Z') {
-                $commands[] = 'Z';
-
-                continue;
+        if ($hasFill && self::gradientFor($el) !== null) {
+            // A gradient fill reads the path twice (fill, then stroke).
+            $rawCommands = self::parsePathD($d, $idTx, $idTy);
+            $commands = iterator_to_array(self::mapCommands($rawCommands, $px, $py), false);
+            if (self::fillGradient($el, $page, $commands, static fn (): array => self::commandPoints($rawCommands), self::affineXY($px, $py))) {
+                $hasFill = false;
             }
-            $type = $cmd[0];
-            if ($type === 'M' || $type === 'L') {
-                $commands[] = [$type, $px($cmd[1], $cmd[2]), $py($cmd[1], $cmd[2])];
-            } elseif ($type === 'C') {
-                $commands[] = [
-                    'C',
-                    $px($cmd[1], $cmd[2]), $py($cmd[1], $cmd[2]),
-                    $px($cmd[3], $cmd[4]), $py($cmd[3], $cmd[4]),
-                    $px($cmd[5], $cmd[6]), $py($cmd[5], $cmd[6]),
-                ];
-            }
-        }
-
-        if ($hasFill && $hasStroke) {
-            $mode = 'fillstroke';
-        } elseif ($hasFill) {
-            $mode = 'fill';
-        } elseif ($hasStroke) {
-            $mode = 'stroke';
         } else {
+            $commands = self::mapCommands(self::pathCommands($d, $idTx, $idTy), $px, $py);
+        }
+        $mode = self::pathMode($el, $hasFill, $hasStroke);
+        if ($mode === null) {
             return;
         }
         $page->emitPath(
@@ -844,6 +878,36 @@ final class SvgRenderer
             $hasStroke ? ['r' => $sr, 'g' => $sg, 'b' => $sb] : null,
             $sw * $scaleX,
         );
+    }
+
+    /**
+     * Path commands in SVG user units → page coordinates, one at a time.
+     *
+     * @param  iterable<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     * @return \Generator<int, array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>
+     */
+    private static function mapCommands(iterable $commands, callable $px, callable $py): \Generator
+    {
+        foreach ($commands as $cmd) {
+            if ($cmd === 'Z') {
+                yield 'Z';
+
+                continue;
+            }
+            $type = $cmd[0];
+            if ($type === 'M' || $type === 'L') {
+                yield [$type, $px($cmd[1], $cmd[2]), $py($cmd[1], $cmd[2])];
+            } elseif ($type === 'C') {
+                yield [
+                    'C',
+                    $px($cmd[1], $cmd[2]), $py($cmd[1], $cmd[2]),
+                    $px($cmd[3], $cmd[4]), $py($cmd[3], $cmd[4]),
+                    $px($cmd[5], $cmd[6]), $py($cmd[5], $cmd[6]),
+                ];
+            }
+        }
     }
 
     /**
@@ -944,14 +1008,66 @@ final class SvgRenderer
     }
 
     /**
+     * `fill-rule="evenodd"` on the element, its inline `style`, a style
+     * sheet rule or an ancestor. SVG's default is nonzero.
+     */
+    private static function isEvenOdd(\SimpleXMLElement $el): bool
+    {
+        return strtolower(trim((string) self::inheritedProperty($el, 'fill-rule'))) === 'evenodd';
+    }
+
+    /**
+     * The emitPath() mode for a path with this fill and stroke, by its
+     * fill rule; null when there is nothing to draw.
+     */
+    private static function pathMode(\SimpleXMLElement $el, bool $hasFill, bool $hasStroke): ?string
+    {
+        if (! $hasFill) {
+            return $hasStroke ? 'stroke' : null;
+        }
+        $mode = $hasStroke ? 'fillstroke' : 'fill';
+
+        return self::isEvenOdd($el) ? $mode.'-evenodd' : $mode;
+    }
+
+    /**
+     * Fills a polygon by its fill rule. A self-intersecting polygon — a
+     * five-point star — has its centre empty under even-odd.
+     *
+     * @param  list<array{0: float, 1: float}>  $points  in PDF coordinates
+     */
+    private static function fillPolygonByRule(\SimpleXMLElement $el, Page $page, array $points, float $r, float $g, float $b): void
+    {
+        if (! self::isEvenOdd($el)) {
+            $page->fillPolygon($points, $r, $g, $b);
+
+            return;
+        }
+        if (count($points) < 3) {
+            return;
+        }
+        $commands = [['M', $points[0][0], $points[0][1]]];
+        for ($i = 1, $n = count($points); $i < $n; $i++) {
+            $commands[] = ['L', $points[$i][0], $points[$i][1]];
+        }
+        $commands[] = 'Z';
+        $page->emitPath($commands, 'fill-evenodd', ['r' => $r, 'g' => $g, 'b' => $b]);
+    }
+
+    /**
      * A presentation property as SVG resolves it: the element's inline
      * `style`, then its attribute, then the same on the nearest ancestor.
      */
     private static function inheritedProperty(\SimpleXMLElement $el, string $name): ?string
     {
-        // xpath() gives document order, root first: the nearest is the last.
-        $chain = array_reverse($el->xpath('ancestor-or-self::*') ?: []);
-        foreach ($chain as $node) {
+        // A shape asks for several properties in a row, through the same
+        // object: find its ancestors once. xpath() gives document order,
+        // root first, so the nearest is the last.
+        if ($el !== self::$chainOf) {
+            self::$chain = array_reverse($el->xpath('ancestor-or-self::*') ?: []);
+            self::$chainOf = $el;
+        }
+        foreach (self::$chain as $node) {
             $style = (string) ($node['style'] ?? '');
             if ($style !== '' && preg_match('/(?:^|;)\s*'.preg_quote($name, '/').'\s*:\s*([^;]+)/i', $style, $m) === 1) {
                 return trim($m[1]);
@@ -975,22 +1091,17 @@ final class SvgRenderer
         $w = (float) ($el['width'] ?? 0);
         $h = (float) ($el['height'] ?? 0);
 
-        // Detect fill="url(#id)" → use shading pattern.
-        $fillAttr = (string) ($el['fill'] ?? '#000');
-        $patternName = null;
-        if (preg_match('@^url\(#([^)]+)\)$@', trim($fillAttr), $m)) {
-            $gradId = $m[1];
-            if (isset(self::$currentGradients[$gradId])) {
-                $patternName = self::createPatternFromGradient(
-                    $page, self::$currentGradients[$gradId],
-                    $tx($x), $ty($y + $h), $w * $scaleX, $h * $scaleY,
-                );
-            }
-        }
+        // fill="url(#id)" naming a gradient → shading pattern.
+        $fillAttr = (string) (self::inheritedProperty($el, 'fill') ?? '#000');
+        $gradient = self::gradientFor($el);
+        $patternName = $gradient === null ? null : self::createPatternFromGradient(
+            $page, $gradient,
+            $tx($x), $ty($y + $h), $w * $scaleX, $h * $scaleY,
+        );
 
         [$fr, $fg, $fb, $hasFill] = self::parseColor($fillAttr);
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
 
         $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
         $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
@@ -1020,6 +1131,224 @@ final class SvgRenderer
                     : $page->strokeRect($px, $py, $pw, $ph, $sw * $scaleX, $sr, $sg, $sb);
             }
         });
+    }
+
+    /**
+     * The gradient a shape's fill="url(#id)" names, when it is defined and
+     * has two or more stops; null otherwise.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function gradientFor(\SimpleXMLElement $el): ?array
+    {
+        $fill = trim((string) self::inheritedProperty($el, 'fill'));
+        if (preg_match('@^url\(\s*[\'"]?#([^)\'"\s]+)[\'"]?\s*\)@', $fill, $m) !== 1) {
+            return null;
+        }
+        $gradient = self::$currentGradients[$m[1]] ?? null;
+
+        return $gradient !== null && count($gradient['stops']) >= 2 ? $gradient : null;
+    }
+
+    /**
+     * Fills a shape with the gradient its fill names, through a shading
+     * pattern whose matrix maps gradient space onto the page: the shape's
+     * user space, its bounding box for objectBoundingBox units, then the
+     * gradientTransform. Returns false when the fill names no gradient, so
+     * the caller paints its flat colour.
+     *
+     * @param  list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands  the outline on the page
+     * @param  \Closure(): list<array{0: float, 1: float}>  $userPoints  the outline in user units, for the bounding box
+     * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $toPage  user space → page
+     */
+    private static function fillGradient(\SimpleXMLElement $el, Page $page, array $commands, \Closure $userPoints, array $toPage): bool
+    {
+        $gradient = self::gradientFor($el);
+        if ($gradient === null) {
+            return false;
+        }
+        if ($commands === []) {
+            return true; // Nothing to fill: no pattern left unused in the page's resources.
+        }
+        $matrix = $toPage;
+        if (! ($gradient['userSpace'] ?? false)) {
+            $points = $userPoints();
+            if ($points === []) {
+                return true;
+            }
+            $xs = array_column($points, 0);
+            $ys = array_column($points, 1);
+            $w = max($xs) - min($xs);
+            $h = max($ys) - min($ys);
+            if ($w <= 0 || $h <= 0) {
+                return true; // A bounding box gradient on a flat shape paints nothing, as in SVG.
+            }
+            $matrix = self::multiplyMatrix($matrix, [$w, 0.0, 0.0, $h, min($xs), min($ys)]);
+        }
+        if (is_array($gradient['transform'] ?? null)) {
+            $matrix = self::multiplyMatrix($matrix, $gradient['transform']);
+        }
+        // -0 would print as "-0".
+        $matrix = array_map(static fn (float $v): float => $v == 0.0 ? 0.0 : $v, $matrix);
+
+        $radial = ($gradient['type'] ?? 'linear') === 'radial';
+        $shading = new \Dskripchenko\PhpPdf\Pdf\PdfShading(
+            shadingType: $radial ? \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_RADIAL : \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL,
+            coords: $radial
+                ? [$gradient['fx'], $gradient['fy'], 0.0, $gradient['cx'], $gradient['cy'], $gradient['r']]
+                : [$gradient['x1'], $gradient['y1'], $gradient['x2'], $gradient['y2']],
+            function: self::shadingFunction($gradient['stops']),
+        );
+        $name = $page->registerShadingPattern(new \Dskripchenko\PhpPdf\Pdf\PdfPattern($shading, $matrix));
+        $page->fillPathWithPattern($commands, $name, self::isEvenOdd($el));
+
+        return true;
+    }
+
+    /**
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}
+     */
+    private static function affineXY(callable $px, callable $py): array
+    {
+        $e = $px(0.0, 0.0);
+        $f = $py(0.0, 0.0);
+
+        return [$px(1.0, 0.0) - $e, $py(1.0, 0.0) - $f, $px(0.0, 1.0) - $e, $py(0.0, 1.0) - $f, $e, $f];
+    }
+
+    /**
+     * @param  callable(float): float  $tx
+     * @param  callable(float): float  $ty
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}
+     */
+    private static function affineTxTy(callable $tx, callable $ty): array
+    {
+        return [$tx(1.0) - $tx(0.0), 0.0, 0.0, $ty(1.0) - $ty(0.0), $tx(0.0), $ty(0.0)];
+    }
+
+    /**
+     * @param  list<array{0: float, 1: float}>  $points
+     * @return list<array{0: string, 1: float, 2: float}|string>
+     */
+    private static function outline(array $points): array
+    {
+        $commands = [];
+        foreach ($points as $i => [$x, $y]) {
+            $commands[] = [$i === 0 ? 'M' : 'L', $x, $y];
+        }
+        $commands[] = 'Z';
+
+        return $commands;
+    }
+
+    /**
+     * The points that bound a path tightly, as SVG's objectBoundingBox
+     * takes it: every end point, and where a cubic curve turns in x or y.
+     * Control points are left out; a curve rarely reaches them.
+     *
+     * @param  list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
+     * @return list<array{0: float, 1: float}>
+     */
+    private static function commandPoints(array $commands): array
+    {
+        $points = [];
+        $x = $y = $startX = $startY = 0.0;
+        foreach ($commands as $cmd) {
+            if (! is_array($cmd)) {
+                [$x, $y] = [$startX, $startY]; // Z returns to the subpath's start.
+
+                continue;
+            }
+            if ($cmd[0] === 'C' && count($cmd) >= 7) {
+                $xs = [$x, (float) $cmd[1], (float) $cmd[3], (float) $cmd[5]];
+                $ys = [$y, (float) $cmd[2], (float) $cmd[4], (float) $cmd[6]];
+                foreach ([...self::cubicTurns($xs), ...self::cubicTurns($ys)] as $t) {
+                    $points[] = [self::cubicAt($xs, $t), self::cubicAt($ys, $t)];
+                }
+                [$x, $y] = [$xs[3], $ys[3]];
+            } else {
+                [$x, $y] = [(float) $cmd[1], (float) $cmd[2]];
+                if ($cmd[0] === 'M') {
+                    [$startX, $startY] = [$x, $y];
+                }
+            }
+            $points[] = [$x, $y];
+        }
+
+        return $points;
+    }
+
+    /**
+     * The parameters in (0, 1) where one coordinate of a cubic Bézier
+     * turns: the roots of its derivative, a quadratic.
+     *
+     * @param  array{0: float, 1: float, 2: float, 3: float}  $p
+     * @return list<float>
+     */
+    private static function cubicTurns(array $p): array
+    {
+        $a = -$p[0] + 3 * $p[1] - 3 * $p[2] + $p[3];
+        $b = 2 * ($p[0] - 2 * $p[1] + $p[2]);
+        $c = $p[1] - $p[0];
+        if (abs($a) < 1e-12) {
+            $roots = abs($b) < 1e-12 ? [] : [-$c / $b];
+        } else {
+            $disc = $b * $b - 4 * $a * $c;
+            $roots = $disc < 0 ? [] : [(-$b + sqrt($disc)) / (2 * $a), (-$b - sqrt($disc)) / (2 * $a)];
+        }
+
+        return array_values(array_filter($roots, static fn (float $t): bool => $t > 0 && $t < 1));
+    }
+
+    /**
+     * @param  array{0: float, 1: float, 2: float, 3: float}  $p
+     */
+    private static function cubicAt(array $p, float $t): float
+    {
+        $u = 1 - $t;
+
+        return $u * $u * $u * $p[0] + 3 * $u * $u * $t * $p[1] + 3 * $u * $t * $t * $p[2] + $t * $t * $t * $p[3];
+    }
+
+    /**
+     * The colour function of a gradient: one Type 2 function for two
+     * stops, a Type 3 stitching of them for more.
+     *
+     * @param  list<array{offset: float, color: array{0: float, 1: float, 2: float}}>  $stops
+     */
+    private static function shadingFunction(array $stops): \Dskripchenko\PhpPdf\Pdf\PdfFunction|\Dskripchenko\PhpPdf\Pdf\PdfStitchingFunction
+    {
+        // 2 stops — single Type 2 function.
+        // >2 stops — Type 3 stitching of multiple Type 2 sub-functions.
+        if (count($stops) === 2) {
+            return new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
+                c0: $stops[0]['color'],
+                c1: $stops[1]['color'],
+            );
+        }
+
+        $subFunctions = [];
+        $bounds = [];
+        $encode = [];
+        for ($i = 0; $i < count($stops) - 1; $i++) {
+            $subFunctions[] = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
+                c0: $stops[$i]['color'],
+                c1: $stops[$i + 1]['color'],
+            );
+            if ($i < count($stops) - 2) {
+                $bounds[] = $stops[$i + 1]['offset'];
+            }
+            $encode[] = 0;
+            $encode[] = 1;
+        }
+
+        return new \Dskripchenko\PhpPdf\Pdf\PdfStitchingFunction(
+            subFunctions: $subFunctions,
+            bounds: $bounds,
+            encode: $encode,
+        );
     }
 
     /**
@@ -1055,34 +1384,7 @@ final class SvgRenderer
             $shadingType = \Dskripchenko\PhpPdf\Pdf\PdfShading::TYPE_AXIAL;
         }
 
-        // 2 stops — single Type 2 function.
-        // >2 stops — Type 3 stitching of multiple Type 2 sub-functions.
-        if (count($stops) === 2) {
-            $function = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
-                c0: $stops[0]['color'],
-                c1: $stops[1]['color'],
-            );
-        } else {
-            $subFunctions = [];
-            $bounds = [];
-            $encode = [];
-            for ($i = 0; $i < count($stops) - 1; $i++) {
-                $subFunctions[] = new \Dskripchenko\PhpPdf\Pdf\PdfFunction(
-                    c0: $stops[$i]['color'],
-                    c1: $stops[$i + 1]['color'],
-                );
-                if ($i < count($stops) - 2) {
-                    $bounds[] = $stops[$i + 1]['offset'];
-                }
-                $encode[] = 0;
-                $encode[] = 1;
-            }
-            $function = new \Dskripchenko\PhpPdf\Pdf\PdfStitchingFunction(
-                subFunctions: $subFunctions,
-                bounds: $bounds,
-                encode: $encode,
-            );
-        }
+        $function = self::shadingFunction($stops);
         $shading = new \Dskripchenko\PhpPdf\Pdf\PdfShading(
             shadingType: $shadingType,
             coords: $coords,
@@ -1105,8 +1407,8 @@ final class SvgRenderer
         $y1 = (float) ($el['y1'] ?? 0);
         $x2 = (float) ($el['x2'] ?? 0);
         $y2 = (float) ($el['y2'] ?? 0);
-        [$sr, $sg, $sb] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : '#000');
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$sr, $sg, $sb] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? '#000');
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
         $page->strokeLine($tx($x1), $ty($y1), $tx($x2), $ty($y2), $sw * $scaleX, $sr, $sg, $sb);
     }
 
@@ -1136,38 +1438,70 @@ final class SvgRenderer
     }
 
     /**
-     * Ellipse → polygon approximation (36 segments).
+     * Ellipse with its opacity; drawn by drawEllipse().
      *
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
      */
     private static function renderEllipseAt(float $cx, float $cy, float $rx, float $ry, \SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY): void
     {
-        $segments = 36;
-        $points = [];
-        for ($i = 0; $i < $segments; $i++) {
-            $angle = 2 * M_PI * $i / $segments;
-            $points[] = [$tx($cx + cos($angle) * $rx), $ty($cy + sin($angle) * $ry)];
-        }
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        $px = static fn (float $x, float $y): float => $tx($x);
+        $py = static fn (float $x, float $y): float => $ty($y);
 
-        // Opacity.
         $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
         $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
         $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
 
-        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $hasFill, $hasStroke, $points, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
-            if ($hasFill) {
-                $page->fillPolygon($points, $fr, $fg, $fb);
-            }
-            if ($hasStroke) {
-                $closed = $points;
-                $closed[] = $points[0];
-                $page->strokePolyline($closed, $sw * $scaleX, $sr, $sg, $sb);
-            }
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($el, $page, $cx, $cy, $rx, $ry, $px, $py, $scaleX): void {
+            self::drawEllipse($el, $page, $cx, $cy, $rx, $ry, $px, $py, $scaleX);
         });
+    }
+
+    /**
+     * A circle or ellipse as four cubic Béziers, filled and stroked as one
+     * path. The curves are within 0.03% of the true outline, so they stay
+     * round at any size, and the path is a fraction of a polygon's size.
+     * A zero radius draws nothing, as SVG defines.
+     *
+     * @param  callable(float, float): float  $px
+     * @param  callable(float, float): float  $py
+     */
+    private static function drawEllipse(\SimpleXMLElement $el, Page $page, float $cx, float $cy, float $rx, float $ry, callable $px, callable $py, float $scaleX): void
+    {
+        if ($rx <= 0 || $ry <= 0) {
+            return;
+        }
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(self::inheritedProperty($el, 'fill') ?? '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
+
+        // 4/3 (sqrt 2 - 1): the control distance of a quarter-circle Bézier.
+        $kx = $rx * 0.5522847498;
+        $ky = $ry * 0.5522847498;
+        $user = [
+            ['M', $cx + $rx, $cy],
+            ['C', $cx + $rx, $cy + $ky, $cx + $kx, $cy + $ry, $cx, $cy + $ry],
+            ['C', $cx - $kx, $cy + $ry, $cx - $rx, $cy + $ky, $cx - $rx, $cy],
+            ['C', $cx - $rx, $cy - $ky, $cx - $kx, $cy - $ry, $cx, $cy - $ry],
+            ['C', $cx + $kx, $cy - $ry, $cx + $rx, $cy - $ky, $cx + $rx, $cy],
+            'Z',
+        ];
+        $commands = iterator_to_array(self::mapCommands($user, $px, $py), false);
+
+        if ($hasFill && self::fillGradient($el, $page, $commands, static fn (): array => self::commandPoints($user), self::affineXY($px, $py))) {
+            $hasFill = false;
+        }
+        $mode = self::pathMode($el, $hasFill, $hasStroke);
+        if ($mode === null) {
+            return;
+        }
+        $page->emitPath(
+            $commands,
+            $mode,
+            $hasFill ? ['r' => $fr, 'g' => $fg, 'b' => $fb] : null,
+            $hasStroke ? ['r' => $sr, 'g' => $sg, 'b' => $sb] : null,
+            $sw * $scaleX,
+        );
     }
 
     /**
@@ -1181,17 +1515,19 @@ final class SvgRenderer
         if ($points === []) {
             return;
         }
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : ($closed ? '#000' : null));
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        $userPoints = self::parsePoints($pointsAttr, static fn (float $x): float => $x, static fn (float $y): float => $y);
+        $toPage = self::affineTxTy($tx, $ty);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(self::inheritedProperty($el, 'fill') ?? ($closed ? '#000' : null));
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
 
         $globalOpacity = self::parseOpacity($el, 'opacity', 1.0);
         $fillOpacity = self::parseOpacity($el, 'fill-opacity', $globalOpacity);
         $strokeOpacity = self::parseOpacity($el, 'stroke-opacity', $globalOpacity);
 
-        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($page, $closed, $hasFill, $hasStroke, $points, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
-            if ($closed && $hasFill) {
-                $page->fillPolygon($points, $fr, $fg, $fb);
+        $page->withOpacity($fillOpacity, $strokeOpacity, static function () use ($el, $page, $closed, $hasFill, $hasStroke, $points, $userPoints, $toPage, $fr, $fg, $fb, $sr, $sg, $sb, $sw, $scaleX): void {
+            if ($closed && $hasFill && ! self::fillGradient($el, $page, self::outline($points), static fn (): array => $userPoints, $toPage)) {
+                self::fillPolygonByRule($el, $page, $points, $fr, $fg, $fb);
             }
             if ($hasStroke) {
                 $line = $points;
@@ -1238,23 +1574,26 @@ final class SvgRenderer
         if ($d === '') {
             return;
         }
-        [$fr, $fg, $fb, $hasFill] = self::parseColor(isset($el['fill']) ? (string) $el['fill'] : '#000');
-        [$sr, $sg, $sb, $hasStroke] = self::parseColor(isset($el['stroke']) ? (string) $el['stroke'] : null);
-        $sw = (float) ($el['stroke-width'] ?? 1);
+        [$fr, $fg, $fb, $hasFill] = self::parseColor(self::inheritedProperty($el, 'fill') ?? '#000');
+        [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
+        $sw = (float) (self::inheritedProperty($el, 'stroke-width') ?? 1);
 
-        $commands = self::parsePathD($d, $tx, $ty);
-        if ($commands === []) {
-            return;
-        }
-
-        // Determine fill/stroke mode.
-        if ($hasFill && $hasStroke) {
-            $mode = 'fillstroke';
-        } elseif ($hasFill) {
-            $mode = 'fill';
-        } elseif ($hasStroke) {
-            $mode = 'stroke';
+        // A gradient fill reads the path twice (fill, then stroke); a flat
+        // one streams it into the page as it is parsed.
+        if ($hasFill && self::gradientFor($el) !== null) {
+            $commands = self::parsePathD($d, $tx, $ty);
+            if ($commands === []) {
+                return;
+            }
+            $user = static fn (): array => self::commandPoints(self::parsePathD($d, static fn (float $x): float => $x, static fn (float $y): float => $y));
+            if (self::fillGradient($el, $page, $commands, $user, self::affineTxTy($tx, $ty))) {
+                $hasFill = false;
+            }
         } else {
+            $commands = self::pathCommands($d, $tx, $ty);
+        }
+        $mode = self::pathMode($el, $hasFill, $hasStroke);
+        if ($mode === null) {
             return; // Nothing to draw.
         }
 
@@ -1276,16 +1615,16 @@ final class SvgRenderer
      *
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
-     * @return list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>
+     * @return \Generator<int, array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>
      */
-    private static function parsePathD(string $d, callable $tx, callable $ty): array
+    private static function pathCommands(string $d, callable $tx, callable $ty): \Generator
     {
-        // Tokenize: split on each command letter (preserve command letters as separators).
-        $regex = '@([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)@';
-        if (! preg_match_all($regex, $d, $matches, PREG_SET_ORDER)) {
-            return [];
-        }
-        $commands = [];
+        // Each command is its letter and the arguments up to the next one,
+        // read in place: a PHP array per command for a path with a million
+        // points would take hundreds of megabytes.
+        $letters = 'MmLlHhVvCcSsQqTtAaZz';
+        $length = strlen($d);
+        $pos = strcspn($d, $letters);
         $cx = 0;
         $cy = 0; // current point (SVG units, NOT transformed)
         $startX = 0;
@@ -1295,9 +1634,11 @@ final class SvgRenderer
         $lastQuadCtrlX = null;
         $lastQuadCtrlY = null;
 
-        foreach ($matches as $m) {
-            $op = $m[1];
-            $args = trim($m[2]);
+        while ($pos < $length) {
+            $op = $d[$pos];
+            $argLength = strcspn($d, $letters, $pos + 1);
+            $args = trim(substr($d, $pos + 1, $argLength));
+            $pos += 1 + $argLength;
             $nums = $args === '' ? [] : preg_split('@[\s,]+|(?<=[0-9.])-@', $args);
             if ($nums === false) {
                 $nums = [];
@@ -1313,14 +1654,14 @@ final class SvgRenderer
                     }
                     $x = $isRel ? $cx + $nums[0] : $nums[0];
                     $y = $isRel ? $cy + $nums[1] : $nums[1];
-                    $commands[] = ['M', $tx($x), $ty($y)];
+                    yield ['M', $tx($x), $ty($y)];
                     $cx = $x; $cy = $y;
                     $startX = $x; $startY = $y;
                     // Subsequent pairs treated as L.
                     for ($i = 2; $i + 1 < count($nums); $i += 2) {
                         $x = $isRel ? $cx + $nums[$i] : $nums[$i];
                         $y = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
-                        $commands[] = ['L', $tx($x), $ty($y)];
+                        yield ['L', $tx($x), $ty($y)];
                         $cx = $x; $cy = $y;
                     }
                     $lastCubicCtrlX = $lastCubicCtrlY = null;
@@ -1331,7 +1672,7 @@ final class SvgRenderer
                     for ($i = 0; $i + 1 < count($nums); $i += 2) {
                         $x = $isRel ? $cx + $nums[$i] : $nums[$i];
                         $y = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
-                        $commands[] = ['L', $tx($x), $ty($y)];
+                        yield ['L', $tx($x), $ty($y)];
                         $cx = $x; $cy = $y;
                     }
                     $lastCubicCtrlX = $lastCubicCtrlY = null;
@@ -1341,7 +1682,7 @@ final class SvgRenderer
                 case 'H':
                     foreach ($nums as $n) {
                         $x = $isRel ? $cx + $n : $n;
-                        $commands[] = ['L', $tx($x), $ty($cy)];
+                        yield ['L', $tx($x), $ty($cy)];
                         $cx = $x;
                     }
                     $lastCubicCtrlX = $lastCubicCtrlY = null;
@@ -1351,7 +1692,7 @@ final class SvgRenderer
                 case 'V':
                     foreach ($nums as $n) {
                         $y = $isRel ? $cy + $n : $n;
-                        $commands[] = ['L', $tx($cx), $ty($y)];
+                        yield ['L', $tx($cx), $ty($y)];
                         $cy = $y;
                     }
                     $lastCubicCtrlX = $lastCubicCtrlY = null;
@@ -1366,7 +1707,7 @@ final class SvgRenderer
                         $y2 = $isRel ? $cy + $nums[$i + 3] : $nums[$i + 3];
                         $x3 = $isRel ? $cx + $nums[$i + 4] : $nums[$i + 4];
                         $y3 = $isRel ? $cy + $nums[$i + 5] : $nums[$i + 5];
-                        $commands[] = ['C', $tx($x1), $ty($y1), $tx($x2), $ty($y2), $tx($x3), $ty($y3)];
+                        yield ['C', $tx($x1), $ty($y1), $tx($x2), $ty($y2), $tx($x3), $ty($y3)];
                         $cx = $x3; $cy = $y3;
                         $lastCubicCtrlX = $x2;
                         $lastCubicCtrlY = $y2;
@@ -1387,7 +1728,7 @@ final class SvgRenderer
                         $y2 = $isRel ? $cy + $nums[$i + 1] : $nums[$i + 1];
                         $x3 = $isRel ? $cx + $nums[$i + 2] : $nums[$i + 2];
                         $y3 = $isRel ? $cy + $nums[$i + 3] : $nums[$i + 3];
-                        $commands[] = ['C', $tx($x1), $ty($y1), $tx($x2), $ty($y2), $tx($x3), $ty($y3)];
+                        yield ['C', $tx($x1), $ty($y1), $tx($x2), $ty($y2), $tx($x3), $ty($y3)];
                         $cx = $x3; $cy = $y3;
                         $lastCubicCtrlX = $x2;
                         $lastCubicCtrlY = $y2;
@@ -1406,7 +1747,7 @@ final class SvgRenderer
                         $c1y = $cy + 2 / 3 * ($qy - $cy);
                         $c2x = $ex + 2 / 3 * ($qx - $ex);
                         $c2y = $ey + 2 / 3 * ($qy - $ey);
-                        $commands[] = ['C', $tx($c1x), $ty($c1y), $tx($c2x), $ty($c2y), $tx($ex), $ty($ey)];
+                        yield ['C', $tx($c1x), $ty($c1y), $tx($c2x), $ty($c2y), $tx($ex), $ty($ey)];
                         $cx = $ex; $cy = $ey;
                         $lastQuadCtrlX = $qx;
                         $lastQuadCtrlY = $qy;
@@ -1428,7 +1769,7 @@ final class SvgRenderer
                         $c1y = $cy + 2 / 3 * ($qy - $cy);
                         $c2x = $ex + 2 / 3 * ($qx - $ex);
                         $c2y = $ey + 2 / 3 * ($qy - $ey);
-                        $commands[] = ['C', $tx($c1x), $ty($c1y), $tx($c2x), $ty($c2y), $tx($ex), $ty($ey)];
+                        yield ['C', $tx($c1x), $ty($c1y), $tx($c2x), $ty($c2y), $tx($ex), $ty($ey)];
                         $cx = $ex; $cy = $ey;
                         $lastQuadCtrlX = $qx;
                         $lastQuadCtrlY = $qy;
@@ -1437,7 +1778,7 @@ final class SvgRenderer
                     break;
 
                 case 'Z':
-                    $commands[] = 'Z';
+                    yield 'Z';
                     $cx = $startX;
                     $cy = $startY;
                     $lastCubicCtrlX = $lastCubicCtrlY = null;
@@ -1457,7 +1798,7 @@ final class SvgRenderer
                         $ey = $isRel ? $cy + $nums[$i + 6] : $nums[$i + 6];
                         $arcCubics = self::arcToCubics($cx, $cy, $arcRx, $arcRy, $xRot, $largeArc, $sweep, $ex, $ey);
                         foreach ($arcCubics as $cu) {
-                            $commands[] = [
+                            yield [
                                 'C',
                                 $tx($cu[0]), $ty($cu[1]),
                                 $tx($cu[2]), $ty($cu[3]),
@@ -1471,8 +1812,18 @@ final class SvgRenderer
                     break;
             }
         }
+    }
 
-        return $commands;
+    /**
+     * pathCommands() as a list, for callers that read the path twice.
+     *
+     * @param  callable(float): float  $tx
+     * @param  callable(float): float  $ty
+     * @return list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>
+     */
+    private static function parsePathD(string $d, callable $tx, callable $ty): array
+    {
+        return iterator_to_array(self::pathCommands($d, $tx, $ty), false);
     }
 
     /**

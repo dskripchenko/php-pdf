@@ -696,6 +696,12 @@ shapes (`<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`,
 (`translate`, `scale`, `rotate`, `skewX`, `skewY`, `matrix`),
 `<use>` / `<defs>`, CSS class styling.
 
+`fill-rule="evenodd"` — on the element, in its `style`, in a style sheet or
+on a group — fills paths and polygons by the even-odd rule, so a hole drawn
+the same way round as its outline (a ring, the letter O) stays empty.
+Gradients fill any shape, in either `gradientUnits`; `fill`, `stroke` and
+their opacities are inherited from groups, and nested transforms compose.
+
 `<text>` is set in the document's fonts — the same family chain, fallbacks
 and bold/italic faces as a paragraph — so Cyrillic and other non-Latin text
 prints as it does in the body; without an embedded font it falls back to a
