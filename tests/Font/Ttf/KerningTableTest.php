@@ -165,4 +165,18 @@ final class KerningTableTest extends TestCase
         $kt->addClasses(self::perGlyph([10 => 1], 'C'), self::perGlyph([10 => 0]), self::perGlyph([20 => 1]), 2, pack('n*', 0, 0));
         self::assertTrue($kt->isEmpty());
     }
+
+    #[Test]
+    public function a_pair_set_of_zero_adjustments_is_not_kept(): void
+    {
+        $kt = new KerningTable;
+        // glyph ids are non-zero, every value is zero: nothing to answer
+        $kt->addPairs(1, self::pairs(2, 0, 0xFF00, 0, 3, 0));
+        self::assertTrue($kt->isEmpty());
+        self::assertSame(0, $kt->pairCount());
+
+        $kt->addPairs(1, self::pairs(2, 0, 3, -1));
+        self::assertFalse($kt->isEmpty());
+        self::assertSame(-1, $kt->lookup(1, 3));
+    }
 }

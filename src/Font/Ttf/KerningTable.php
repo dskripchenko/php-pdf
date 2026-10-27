@@ -69,6 +69,12 @@ final class KerningTable
         if ($packed === '' || strlen($packed) % 4 !== 0) {
             return;
         }
+        // A set of zero adjustments only adds nothing a lookup could answer;
+        // skipped, so that isEmpty() still means "no pairs". The values are
+        // masked out in one string operation, not pair by pair.
+        if (trim($packed & str_repeat("\0\0\xFF\xFF", strlen($packed) >> 2), "\0") === '') {
+            return;
+        }
         $last = array_key_last($this->layers);
         if ($last === null || $this->layers[$last][0] !== 'pairs') {
             $this->layers[] = ['pairs', []];
