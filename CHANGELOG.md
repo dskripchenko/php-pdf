@@ -14,12 +14,13 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Page::fillPathWithPattern()` and `ContentStream::fillPathWithPattern()`
   fill any path with a registered shading pattern.
 - `emitPath()` and `fillPathWithPattern()` take any iterable of commands,
-  so a generator is written as it is read.
+  so a generator is written as it is read. A generator is consumed once.
 - SVG gradients fill paths, polygons, circles, ellipses and transformed
   rectangles, not only plain rectangles, and honour
   `gradientUnits="userSpaceOnUse"`. The pattern follows the shape's
   transforms, its bounding box and `gradientTransform`. Before, those
-  shapes printed black.
+  shapes printed black. The `objectBoundingBox` of a curved path is the
+  curve's own extent, not the box of its control points, as in a browser.
 
 ### Fixed
 - SVG ignored `fill-rule`, so every path and polygon filled by the nonzero
@@ -50,7 +51,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   elements per document. `<use>` elements that refer to groups of
   `<use>` elements, or a group with `<use>` references to itself, could
   make a small file expand into millions of shapes and take minutes to
-  draw. A `<use>` that would pass the cap is left out.
+  draw. A `<use>` that would pass the cap is left out, and later
+  references to the same element are refused without counting it again,
+  so thousands of `<use>` elements on one oversized group stay fast.
+- `fill="url('#g')"` — a gradient reference in quotes or with spaces —
+  filled paths and other shapes but printed a plain `<rect>` black.
+- `opacity`, `fill-opacity` and `stroke-opacity` were applied only to
+  untransformed rectangles, circles, ellipses and polygons: shapes under a
+  `transform`, and every `<path>` and `<line>`, printed opaque.
 
 ## [1.25.0] — 2026-10-19
 
