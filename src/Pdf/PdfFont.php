@@ -153,11 +153,12 @@ final class PdfFont
     public static int $compressedCacheLimit = 24;
 
     /**
-     * zlib level (0-9) for embedded font bodies.
+     * zlib level for embedded font bodies: 0-9, or -1 for zlib's own default.
      *
      * Level 6 is the default. Level 1 compresses a typical subset two to five
      * times faster and the stream comes out within a few percent of the
      * level-6 size: worth it where documents are rendered per request.
+     * Any other value makes embedding throw an InvalidArgumentException.
      */
     public static int $compressionLevel = 6;
 
@@ -175,6 +176,15 @@ final class PdfFont
      */
     private static function compress(string $fontBytes): string
     {
+        // Checked here, as a static property cannot validate its assignment;
+        // gzcompress() would otherwise fail with a bare ValueError.
+        if (self::$compressionLevel < -1 || self::$compressionLevel > 9) {
+            throw new \InvalidArgumentException(sprintf(
+                'PdfFont::$compressionLevel must be between -1 and 9, %d given.',
+                self::$compressionLevel,
+            ));
+        }
+
         $key = self::$compressionLevel.':'.hash('xxh3', $fontBytes);
 
         if (isset(self::$compressedCache[$key])) {

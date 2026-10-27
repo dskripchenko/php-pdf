@@ -98,4 +98,21 @@ final class PdfFontCompressionCacheTest extends TestCase
         self::assertNotSame($atSix, $atOne);
         self::assertSame($bytes, gzuncompress($atOne));
     }
+
+    #[Test]
+    public function a_level_outside_zlib_range_is_refused(): void
+    {
+        foreach ([-2, 10] as $level) {
+            PdfFont::$compressionLevel = $level;
+            try {
+                $this->compress('font body');
+                self::fail("level $level: accepted");
+            } catch (\InvalidArgumentException $e) {
+                self::assertStringContainsString('compressionLevel', $e->getMessage());
+            }
+        }
+
+        PdfFont::$compressionLevel = -1;
+        self::assertSame(gzcompress('font body', -1), $this->compress('font body'), 'zlib default is allowed');
+    }
 }
