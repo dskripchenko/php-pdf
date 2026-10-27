@@ -258,7 +258,8 @@ final class ContentStream
      * rule). An unknown mode emits f.
      *
      * The commands can be any iterable: a generator is written as it is
-     * read, so a long path need not be held in memory.
+     * read, so a long path need not be held in memory. A generator is
+     * consumed once; pass a fresh one, or an array, to draw a path again.
      *
      * @param  iterable<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
      * @param  array{r: float, g: float, b: float}|null  $fillRgb
@@ -310,7 +311,8 @@ final class ContentStream
     /**
      * Fills a path with a shading pattern registered on the page, by the
      * nonzero or (with $evenOdd) the even-odd rule. The pattern's matrix
-     * maps its space onto the page's default coordinates.
+     * maps its space onto the page's default coordinates. A generator of
+     * commands is consumed once, as in emitPath().
      *
      * @param  iterable<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands  as for emitPath()
      */

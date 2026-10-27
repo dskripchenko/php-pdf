@@ -136,6 +136,17 @@ final class SvgGradientShapesTest extends TestCase
         self::assertStringContainsString('/Matrix [80 0 0 -40 10 90]', $arc);
     }
 
+    #[Test]
+    public function a_path_with_no_commands_registers_no_pattern(): void
+    {
+        // userSpaceOnUse: no bounding box to find empty first.
+        [$stream, $bytes] = self::render('<defs><linearGradient id="g" gradientUnits="userSpaceOnUse">'.self::STOPS.'</linearGradient></defs>'
+            .'<g transform="translate(1 1)"><path d="10 10" fill="url(#g)"/></g>');
+
+        self::assertStringNotContainsString('/Pattern', $stream);
+        self::assertStringNotContainsString('/PatternType', $bytes);
+    }
+
     private static function render(string $body): array
     {
         $doc = PdfDocument::new();

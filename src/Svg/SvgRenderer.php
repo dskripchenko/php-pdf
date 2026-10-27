@@ -1151,6 +1151,9 @@ final class SvgRenderer
         if ($gradient === null) {
             return false;
         }
+        if ($commands === []) {
+            return true; // Nothing to fill: no pattern left unused in the page's resources.
+        }
         $matrix = $toPage;
         if (! ($gradient['userSpace'] ?? false)) {
             $points = $userPoints();
@@ -1419,7 +1422,7 @@ final class SvgRenderer
     }
 
     /**
-     * Ellipse → polygon approximation (36 segments).
+     * Ellipse with its opacity; drawn by drawEllipse().
      *
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
@@ -1806,7 +1809,6 @@ final class SvgRenderer
     {
         return iterator_to_array(self::pathCommands($d, $tx, $ty), false);
     }
-
 
     /**
      * Convert elliptical arc to a sequence of cubic Beziers.

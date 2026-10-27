@@ -992,7 +992,8 @@ final class Page implements AppearanceResources
     /**
      * Fills a path with a shading pattern from registerShadingPattern(), by
      * the nonzero or (with $evenOdd) the even-odd rule. The pattern's
-     * matrix maps its space onto the page's default coordinates.
+     * matrix maps its space onto the page's default coordinates. A
+     * generator of commands is consumed once, as in emitPath().
      *
      * @param  iterable<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands  as for emitPath()
      */
@@ -1012,7 +1013,7 @@ final class Page implements AppearanceResources
      *    subpath inside another is a hole whichever way round it is drawn,
      *    as SVG `fill-rule="evenodd"` asks for.
      * An unknown mode fills by the nonzero rule. `$commands` can be a
-     * generator, which is written as it is read.
+     * generator, which is written as it is read and consumed once.
      *
      * @param  iterable<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
      * @param  array{r: float, g: float, b: float}|null  $fillRgb
