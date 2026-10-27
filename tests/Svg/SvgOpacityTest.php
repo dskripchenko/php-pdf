@@ -96,4 +96,34 @@ final class SvgOpacityTest extends TestCase
 
         self::assertStringNotContainsString('/Type /ExtGState', $bytes);
     }
+
+    #[Test]
+    public function transformed_shapes_and_paths_take_their_opacity(): void
+    {
+        $shapes = [
+            '<g transform="rotate(10)"><rect width="50" height="50" fill="#f00" fill-opacity="0.5"/></g>',
+            '<g transform="scale(2)"><circle cx="20" cy="20" r="10" fill="#f00" fill-opacity="0.5"/></g>',
+            '<g transform="translate(5 5)"><path d="M0 0 H10 V10 Z" fill="#f00" fill-opacity="0.5"/></g>',
+            '<g fill-opacity="0.5" transform="translate(5 5)"><polygon points="0,0 10,0 10,10"/></g>',
+            '<path d="M0 0 H10 V10 Z" fill="#f00" opacity="0.5"/>',
+            '<line x1="0" y1="0" x2="10" y2="10" stroke="#000" stroke-opacity="0.5"/>',
+        ];
+        foreach ($shapes as $shape) {
+            $bytes = (new Document(new Section([new SvgElement('<svg width="100" height="100">'.$shape.'</svg>')])))
+                ->toBytes(new Engine(compressStreams: false));
+
+            self::assertMatchesRegularExpression('@/(ca|CA) 0\.5@', $bytes, $shape);
+            self::assertMatchesRegularExpression('@/Gs\d+ gs@', $bytes, $shape);
+        }
+    }
+
+    #[Test]
+    public function opaque_transformed_shapes_add_no_extgstate(): void
+    {
+        $svg = '<svg width="100" height="100"><g transform="rotate(10)"><rect width="50" height="50" fill="#f00"/><path d="M0 0 H10 V10 Z"/></g></svg>';
+        $bytes = (new Document(new Section([new SvgElement($svg)])))
+            ->toBytes(new Engine(compressStreams: false));
+
+        self::assertStringNotContainsString('/Type /ExtGState', $bytes);
+    }
 }

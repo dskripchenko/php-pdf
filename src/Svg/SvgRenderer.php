@@ -518,12 +518,12 @@ final class SvgRenderer
             $tag = $child->getName();
             match ($tag) {
                 'rect' => self::renderRect($child, $page, $elTx, $elTy, $scaleX, $scaleY),
-                'line' => self::renderLine($child, $page, $elTx, $elTy, $scaleX),
+                'line' => self::withShapeOpacity($child, $page, static fn () => self::renderLine($child, $page, $elTx, $elTy, $scaleX)),
                 'circle' => self::renderCircle($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'ellipse' => self::renderEllipse($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'polygon' => self::renderPolygon($child, $page, $elTx, $elTy, true, $scaleX),
                 'polyline' => self::renderPolygon($child, $page, $elTx, $elTy, false, $scaleX),
-                'path' => self::renderPath($child, $page, $elTx, $elTy, $scaleX),
+                'path' => self::withShapeOpacity($child, $page, static fn () => self::renderPath($child, $page, $elTx, $elTy, $scaleX)),
                 'text' => self::renderText($child, $page, $elTx, $elTy, $scaleX),
                 'g' => self::walkElement($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'defs' => null, // <defs> children referenced by <use>, not rendered directly.
@@ -579,17 +579,33 @@ final class SvgRenderer
 
         $tag = $el->getName();
         match ($tag) {
-            'rect' => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY),
-            'line' => self::renderLineXY($el, $page, $px, $py, $effScale),
-            'circle' => self::renderEllipseXY($el, $page, $px, $py, $effScale, true),
-            'ellipse' => self::renderEllipseXY($el, $page, $px, $py, $effScale, false),
-            'polygon' => self::renderPolygonXY($el, $page, $px, $py, true, $effScale),
-            'polyline' => self::renderPolygonXY($el, $page, $px, $py, false, $effScale),
-            'path' => self::renderPathXY($el, $page, $px, $py, $effScale),
+            'rect' => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY)),
+            'line' => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $effScale)),
+            'circle' => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, true)),
+            'ellipse' => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, false)),
+            'polygon' => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, true, $effScale)),
+            'polyline' => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, false, $effScale)),
+            'path' => self::withShapeOpacity($el, $page, static fn () => self::renderPathXY($el, $page, $px, $py, $effScale)),
             'text' => self::renderTextXY($el, $page, $px, $py, $effScale),
             'g' => self::walkElementXY($el, $page, $px, $py, $effScale, $scaleY),
             default => null,
         };
+    }
+
+    /**
+     * Draws a shape inside its opacity, fill-opacity and stroke-opacity,
+     * for the renderers that do not apply them themselves.
+     *
+     * @param  \Closure(): mixed  $draw
+     */
+    private static function withShapeOpacity(\SimpleXMLElement $el, Page $page, \Closure $draw): void
+    {
+        $opacity = self::parseOpacity($el, 'opacity', 1.0);
+        $page->withOpacity(
+            self::parseOpacity($el, 'fill-opacity', $opacity),
+            self::parseOpacity($el, 'stroke-opacity', $opacity),
+            $draw,
+        );
     }
 
     /**
@@ -614,13 +630,13 @@ final class SvgRenderer
             }
             $tag = $child->getName();
             match ($tag) {
-                'rect' => self::renderRectXY($child, $page, $cpx, $cpy, $cScale, $scaleY),
-                'line' => self::renderLineXY($child, $page, $cpx, $cpy, $cScale),
-                'circle' => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, true),
-                'ellipse' => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, false),
-                'polygon' => self::renderPolygonXY($child, $page, $cpx, $cpy, true, $cScale),
-                'polyline' => self::renderPolygonXY($child, $page, $cpx, $cpy, false, $cScale),
-                'path' => self::renderPathXY($child, $page, $cpx, $cpy, $cScale),
+                'rect' => self::withShapeOpacity($child, $page, static fn () => self::renderRectXY($child, $page, $cpx, $cpy, $cScale, $scaleY)),
+                'line' => self::withShapeOpacity($child, $page, static fn () => self::renderLineXY($child, $page, $cpx, $cpy, $cScale)),
+                'circle' => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, true)),
+                'ellipse' => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, false)),
+                'polygon' => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, true, $cScale)),
+                'polyline' => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, false, $cScale)),
+                'path' => self::withShapeOpacity($child, $page, static fn () => self::renderPathXY($child, $page, $cpx, $cpy, $cScale)),
                 'text' => self::renderTextXY($child, $page, $cpx, $cpy, $cScale),
                 'g' => self::walkElementXY($child, $page, $cpx, $cpy, $cScale, $scaleY),
                 default => null,
