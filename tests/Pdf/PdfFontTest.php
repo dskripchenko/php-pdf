@@ -86,7 +86,7 @@ final class PdfFontTest extends TestCase
         self::assertStringContainsString('/FontFile2', $pdf);
         self::assertStringContainsString('/Encoding /Identity-H', $pdf);
         self::assertStringContainsString('/ToUnicode', $pdf);
-        self::assertStringContainsString('/BaseFont /LiberationSans', $pdf);
+        self::assertMatchesRegularExpression('~/BaseFont /[A-Z]{6}\+LiberationSans ~', $pdf);
         // The ToUnicode CMap has to hold bfchar entries for the glyphs used
         self::assertStringContainsString('beginbfchar', $pdf);
     }
@@ -128,5 +128,128 @@ final class PdfFontTest extends TestCase
         // 😀 (U+1F600) is not covered by Liberation; the glyph ID is 0 (.notdef).
         $hex = $font->encodeText('😀');
         self::assertSame('<0000>', $hex);
+    }
+
+    #[Test]
+    public function a_subset_font_is_named_with_a_six_letter_tag(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath));
+        $font->encodeText('Hello');
+        $pdf = $this->embed($font);
+
+        // ISO 32000-1 §9.6.4: the same tag on both /BaseFont entries and /FontName.
+        self::assertSame(1, preg_match('~/Subtype /Type0 /BaseFont /([A-Z]{6})\+LiberationSans ~', $pdf, $m));
+        self::assertStringContainsString('/Subtype /CIDFontType2 /BaseFont /'.$m[1].'+LiberationSans ', $pdf);
+        self::assertStringContainsString('/FontName /'.$m[1].'+LiberationSans ', $pdf);
+    }
+
+    #[Test]
+    public function different_subsets_of_one_font_get_different_tags(): void
+    {
+        $tag = function (string $text): string {
+            $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath));
+            $font->encodeText($text);
+            preg_match('~/FontName /([A-Z]{6})\+~', $this->embed($font), $m);
+
+            return $m[1];
+        };
+
+        self::assertNotSame($tag('Hello'), $tag('World'));
+        self::assertSame($tag('Hello'), $tag('Hello'), 'the same subset must get the same tag');
+    }
+
+    #[Test]
+    public function a_font_embedded_whole_has_no_tag(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath), subset: false);
+        $font->encodeText('Hello');
+        $pdf = $this->embed($font);
+
+        self::assertStringContainsString('/BaseFont /LiberationSans ', $pdf);
+        self::assertStringContainsString('/FontName /LiberationSans ', $pdf);
+        self::assertDoesNotMatchRegularExpression('~/[A-Z]{6}\+LiberationSans~', $pdf);
+    }
+
+    #[Test]
+    public function delimiters_in_a_font_name_are_escaped(): void
+    {
+        // Same-length swap of the PostScript name in both name-table encodings.
+        $bytes = (string) file_get_contents($this->liberationSansPath);
+        $bytes = str_replace('LiberationSans', 'Liberation(S/s', $bytes);
+        $bytes = str_replace(
+            mb_convert_encoding('LiberationSans', 'UTF-16BE', 'UTF-8'),
+            mb_convert_encoding('Liberation(S/s', 'UTF-16BE', 'UTF-8'),
+            $bytes,
+        );
+        $ttf = new TtfFile($bytes);
+        self::assertSame('Liberation(S/s', $ttf->postScriptName());
+
+        $font = new PdfFont($ttf, subset: false);
+        $font->encodeText('Hi');
+        $pdf = $this->embed($font);
+
+        self::assertStringContainsString('/BaseFont /Liberation#28S#2Fs ', $pdf);
+        self::assertStringContainsString('/FontName /Liberation#28S#2Fs ', $pdf);
+    }
+
+    #[Test]
+    public function a_subset_font_lists_every_glyph_of_the_subset_in_a_cid_set(): void
+    {
+        $ttf = TtfFile::fromFile($this->liberationSansPath);
+        $font = new PdfFont($ttf);
+        // "é" is a composite glyph in Liberation Sans; its components come in
+        // the subset too.
+        $font->encodeText('Hé');
+        $pdf = $this->embed($font, compress: false);
+
+        self::assertSame(1, preg_match('~/FontDescriptor .*?/CIDSet (\d+) 0 R~', $pdf, $m));
+        self::assertSame(1, preg_match('~\b'.$m[1].' 0 obj\s*<< /Length (\d+) >>\nstream\n~', $pdf, $s, PREG_OFFSET_CAPTURE));
+        $cidSet = substr($pdf, $s[0][1] + strlen($s[0][0]), (int) $s[1][0]);
+
+        // The subset keeps the glyph numbering, so every GID below numGlyphs
+        // is in the font program (ISO 19005-2 §6.2.11.4.2) — and nothing past it.
+        $numGlyphs = $ttf->numGlyphs();
+        self::assertSame(intdiv($numGlyphs + 7, 8), strlen($cidSet));
+        for ($gid = 0; $gid < strlen($cidSet) * 8; $gid++) {
+            $set = (ord($cidSet[$gid >> 3]) & (0x80 >> ($gid & 7))) !== 0;
+            self::assertSame($gid < $numGlyphs, $set, "CID $gid");
+        }
+        self::assertSame($numGlyphs, $this->subsetNumGlyphs($pdf));
+    }
+
+    #[Test]
+    public function a_font_embedded_whole_has_no_cid_set(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath), subset: false);
+        $font->encodeText('Hello');
+
+        self::assertStringNotContainsString('/CIDSet', $this->embed($font));
+    }
+
+    #[Test]
+    public function a_cff_font_has_no_cid_set(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile(__DIR__.'/../fixtures/fonts/MiniCff-Regular.otf'));
+        $font->encodeText('A');
+
+        self::assertStringNotContainsString('/CIDSet', $this->embed($font));
+    }
+
+    /** numGlyphs in the `maxp` table of the embedded (uncompressed) FontFile2. */
+    private function subsetNumGlyphs(string $pdf): int
+    {
+        self::assertSame(1, preg_match('~<< /Length (\d+) /Length1 \d+ >>\nstream\n~', $pdf, $m, PREG_OFFSET_CAPTURE));
+        $ttf = new TtfFile(substr($pdf, $m[0][1] + strlen($m[0][0]), (int) $m[1][0]));
+
+        return $ttf->numGlyphs();
+    }
+
+    private function embed(PdfFont $font, bool $compress = true): string
+    {
+        $writer = new Writer;
+        $fontId = $font->registerWith($writer, $compress);
+        $writer->setRoot($writer->addObject("<< /Type /Catalog /Pages $fontId 0 R >>"));
+
+        return $writer->toBytes();
     }
 }
