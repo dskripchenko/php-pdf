@@ -192,10 +192,62 @@ final class PdfFontTest extends TestCase
         self::assertStringContainsString('/FontName /Liberation#28S#2Fs ', $pdf);
     }
 
-    private function embed(PdfFont $font): string
+    #[Test]
+    public function a_subset_font_lists_every_glyph_of_the_subset_in_a_cid_set(): void
+    {
+        $ttf = TtfFile::fromFile($this->liberationSansPath);
+        $font = new PdfFont($ttf);
+        // "é" is a composite glyph in Liberation Sans; its components come in
+        // the subset too.
+        $font->encodeText('Hé');
+        $pdf = $this->embed($font, compress: false);
+
+        self::assertSame(1, preg_match('~/FontDescriptor .*?/CIDSet (\d+) 0 R~', $pdf, $m));
+        self::assertSame(1, preg_match('~\b'.$m[1].' 0 obj\s*<< /Length (\d+) >>\nstream\n~', $pdf, $s, PREG_OFFSET_CAPTURE));
+        $cidSet = substr($pdf, $s[0][1] + strlen($s[0][0]), (int) $s[1][0]);
+
+        // The subset keeps the glyph numbering, so every GID below numGlyphs
+        // is in the font program (ISO 19005-2 §6.2.11.4.2) — and nothing past it.
+        $numGlyphs = $ttf->numGlyphs();
+        self::assertSame(intdiv($numGlyphs + 7, 8), strlen($cidSet));
+        for ($gid = 0; $gid < strlen($cidSet) * 8; $gid++) {
+            $set = (ord($cidSet[$gid >> 3]) & (0x80 >> ($gid & 7))) !== 0;
+            self::assertSame($gid < $numGlyphs, $set, "CID $gid");
+        }
+        self::assertSame($numGlyphs, $this->subsetNumGlyphs($pdf));
+    }
+
+    #[Test]
+    public function a_font_embedded_whole_has_no_cid_set(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile($this->liberationSansPath), subset: false);
+        $font->encodeText('Hello');
+
+        self::assertStringNotContainsString('/CIDSet', $this->embed($font));
+    }
+
+    #[Test]
+    public function a_cff_font_has_no_cid_set(): void
+    {
+        $font = new PdfFont(TtfFile::fromFile(__DIR__.'/../fixtures/fonts/MiniCff-Regular.otf'));
+        $font->encodeText('A');
+
+        self::assertStringNotContainsString('/CIDSet', $this->embed($font));
+    }
+
+    /** numGlyphs in the `maxp` table of the embedded (uncompressed) FontFile2. */
+    private function subsetNumGlyphs(string $pdf): int
+    {
+        self::assertSame(1, preg_match('~<< /Length (\d+) /Length1 \d+ >>\nstream\n~', $pdf, $m, PREG_OFFSET_CAPTURE));
+        $ttf = new TtfFile(substr($pdf, $m[0][1] + strlen($m[0][0]), (int) $m[1][0]));
+
+        return $ttf->numGlyphs();
+    }
+
+    private function embed(PdfFont $font, bool $compress = true): string
     {
         $writer = new Writer;
-        $fontId = $font->registerWith($writer);
+        $fontId = $font->registerWith($writer, $compress);
         $writer->setRoot($writer->addObject("<< /Type /Catalog /Pages $fontId 0 R >>"));
 
         return $writer->toBytes();

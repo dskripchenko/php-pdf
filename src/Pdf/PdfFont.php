@@ -234,8 +234,21 @@ final class PdfFont
             ));
         }
 
-        // 2. FontDescriptor.
-        $descriptorBody = $this->buildFontDescriptor($fontFileObjId, $fontName);
+        // 2. FontDescriptor. A subset also gets a CIDSet (see buildCidSet).
+        $cidSetObjId = null;
+        if ($this->subset && ! $isCff) {
+            $cidSet = $this->buildCidSet();
+            if ($compressStreams) {
+                $cidSet = (string) gzcompress($cidSet, 6);
+            }
+            $cidSetObjId = $writer->addObject(sprintf(
+                "<< /Length %d%s >>\nstream\n%s\nendstream",
+                strlen($cidSet),
+                $compressStreams ? ' /Filter /FlateDecode' : '',
+                $cidSet,
+            ));
+        }
+        $descriptorBody = $this->buildFontDescriptor($fontFileObjId, $fontName, $cidSetObjId);
         $descriptorId = $writer->addObject($descriptorBody);
 
         // 3. CIDFontType2 / CIDFontType0 descendant.
@@ -777,7 +790,7 @@ final class PdfFont
     /**
      * FontDescriptor - contains metrics and reference to the embedded font file.
      */
-    private function buildFontDescriptor(int $fontFileObjId, string $fontName): string
+    private function buildFontDescriptor(int $fontFileObjId, string $fontName, ?int $cidSetObjId = null): string
     {
         $upem = $this->ttf->unitsPerEm();
         $toPdf = static fn (int $fu): int => (int) round($fu * 1000 / $upem);
@@ -813,7 +826,7 @@ final class PdfFont
             '<< /Type /FontDescriptor /FontName /%s /Flags %d '
             .'/FontBBox %s /ItalicAngle %d '
             .'/Ascent %d /Descent %d /CapHeight %d /StemV 80 '
-            .'/%s %d 0 R >>',
+            .'/%s %d 0 R%s >>',
             $fontName,
             $flags,
             $bboxStr,
@@ -823,7 +836,31 @@ final class PdfFont
             $toPdf($this->ttf->ascent()), // CapHeight ~ ascent for POC; refine later
             $this->ttf->isCff() ? 'FontFile3' : 'FontFile2',
             $fontFileObjId,
+            $cidSetObjId !== null ? sprintf(' /CIDSet %d 0 R', $cidSetObjId) : '',
         );
+    }
+
+    /**
+     * The CIDSet of a TrueType subset (ISO 32000-1 Table 124): a bitmap with
+     * one bit per CID, the high bit of the first byte for CID 0. With
+     * /CIDToGIDMap /Identity a CID is a GID.
+     *
+     * PDF/A-1 requires it for every subset CIDFont (ISO 19005-1 §6.3.5); later
+     * parts accept it as long as it lists every glyph present (ISO 19005-2
+     * §6.2.11.4.2). The subsetter keeps the glyph numbering and leaves unused
+     * glyphs empty rather than removing them, so every GID below numGlyphs is
+     * present in the font program, and all of them are set. A CIDSet of only
+     * the used glyphs fails veraPDF for PDF/A-2 and 3.
+     */
+    private function buildCidSet(): string
+    {
+        $numGlyphs = $this->ttf->numGlyphs();
+        $set = str_repeat("\xFF", intdiv($numGlyphs, 8));
+        if ($numGlyphs % 8 !== 0) {
+            $set .= chr((0xFF00 >> ($numGlyphs % 8)) & 0xFF);
+        }
+
+        return $set;
     }
 
     /**
