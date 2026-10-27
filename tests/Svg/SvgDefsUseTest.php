@@ -130,4 +130,22 @@ SVG;
 
         self::assertSame(1, substr_count($page->rawContentStream()->toString(), "1 0 0 rg\n"));
     }
+
+    #[Test]
+    public function many_uses_of_a_group_over_the_limit_are_refused_at_once(): void
+    {
+        // Each <use> of the oversized group is refused; counting its
+        // elements again for every one of them took seconds.
+        $big = '<g id="big">'.str_repeat('<a/>', \Dskripchenko\PhpPdf\Svg\SvgRenderer::MAX_USE_COPIES + 10_000).'</g>';
+        $svg = '<svg viewBox="0 0 100 100"><defs>'.$big.'<rect id="dot" width="1" height="1" fill="#f00"/></defs>'
+            .str_repeat('<use href="#big"/>', 20_000).'<use href="#dot"/></svg>';
+        $page = \Dskripchenko\PhpPdf\Pdf\Document::new()->addPage(customDimensionsPt: [100, 100]);
+
+        $start = microtime(true);
+        \Dskripchenko\PhpPdf\Svg\SvgRenderer::render($svg, $page, 0, 0, 100, 100);
+        $elapsed = microtime(true) - $start;
+
+        self::assertSame(1, substr_count($page->rawContentStream()->toString(), "1 0 0 rg\n"));
+        self::assertLessThan(1.0, $elapsed, sprintf('%.2fs', $elapsed));
+    }
 }

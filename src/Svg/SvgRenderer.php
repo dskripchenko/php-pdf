@@ -403,13 +403,19 @@ final class SvgRenderer
         // Find all use elements.
         $uses = $root->xpath('//use') ?: [];
         $copied = 0;
+        // Ids whose element was too big for what was left of the cap. It
+        // only grows and the room only shrinks, so they stay refused.
+        $refused = [];
         foreach ($uses as $use) {
+            if ($copied >= self::MAX_USE_COPIES) {
+                break; // Every copy takes at least one element.
+            }
             $href = (string) ($use['href'] ?? $use->attributes('xlink', true)?->href ?? '');
             if ($href === '' || ! str_starts_with($href, '#')) {
                 continue;
             }
             $refId = substr($href, 1);
-            if (! isset($idMap[$refId])) {
+            if (! isset($idMap[$refId]) || isset($refused[$refId])) {
                 continue;
             }
             $ref = $idMap[$refId];
@@ -421,6 +427,8 @@ final class SvgRenderer
             // copied content into the element this one refers to.
             $size = 1 + $refDom->getElementsByTagName('*')->length;
             if ($copied + $size > self::MAX_USE_COPIES) {
+                $refused[$refId] = true;
+
                 continue;
             }
             $copied += $size;
