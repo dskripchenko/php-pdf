@@ -1075,18 +1075,13 @@ final class SvgRenderer
         $w = (float) ($el['width'] ?? 0);
         $h = (float) ($el['height'] ?? 0);
 
-        // Detect fill="url(#id)" → use shading pattern.
+        // fill="url(#id)" naming a gradient → shading pattern.
         $fillAttr = (string) (self::inheritedProperty($el, 'fill') ?? '#000');
-        $patternName = null;
-        if (preg_match('@^url\(#([^)]+)\)$@', trim($fillAttr), $m)) {
-            $gradId = $m[1];
-            if (isset(self::$currentGradients[$gradId])) {
-                $patternName = self::createPatternFromGradient(
-                    $page, self::$currentGradients[$gradId],
-                    $tx($x), $ty($y + $h), $w * $scaleX, $h * $scaleY,
-                );
-            }
-        }
+        $gradient = self::gradientFor($el);
+        $patternName = $gradient === null ? null : self::createPatternFromGradient(
+            $page, $gradient,
+            $tx($x), $ty($y + $h), $w * $scaleX, $h * $scaleY,
+        );
 
         [$fr, $fg, $fb, $hasFill] = self::parseColor($fillAttr);
         [$sr, $sg, $sb, $hasStroke] = self::parseColor(self::inheritedProperty($el, 'stroke') ?? null);
