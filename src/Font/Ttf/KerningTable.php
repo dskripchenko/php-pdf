@@ -98,6 +98,8 @@ final class KerningTable
     /**
      * The table as plain data, for TtfFile::exportState(): its packed layers.
      *
+     * @experimental As TtfFile::exportState(); the layout follows TtfFile::STATE_FORMAT.
+     *
      * @return list<array{0: 'pairs', 1: array<int, string>}|array{0: 'classes', 1: string, 2: string, 3: string, 4: int, 5: string}>
      */
     public function exportState(): array
@@ -106,7 +108,9 @@ final class KerningTable
     }
 
     /**
-     * Restores a table from exportState().
+     * Restores a table from exportState() of a trusted cache.
+     *
+     * @experimental As TtfFile::fromState().
      *
      * @param  array<array-key, mixed>  $layers
      *

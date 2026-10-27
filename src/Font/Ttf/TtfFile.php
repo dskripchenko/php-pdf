@@ -153,19 +153,12 @@ final class TtfFile
      * Version of the exportState() layout. Bumped whenever what a state holds,
      * or how it holds it, changes: fromState() refuses any other version, so a
      * cache never restores a state written by a php-pdf that laid it out
-     * differently.
+     * differently. A bump is not a breaking change: the cache misses once and
+     * is filled again from a parse.
+     *
+     * @experimental
      */
     public const STATE_FORMAT = 1;
-
-    /** Properties fromState() rebuilds rather than reads from a state. */
-    public const STATE_REBUILT = ['reader', 'bytes', 'cff', 'kerningParsed'];
-
-    /** Properties a state leaves unparsed: they parse on first use, as after `new TtfFile()`. */
-    public const STATE_LAZY = [
-        'ligatures', 'ligaturesParsed', 'singleSubstByFeature', 'fvarParsed',
-        'avar', 'avarParsed', 'hvar', 'hvarParsed', 'mvar', 'mvarParsed',
-        'gvar', 'gvarParsed', 'advanceHeights',
-    ];
 
     /**
      * The parsed font as plain data — ints, strings, bools and arrays only — for
@@ -173,6 +166,14 @@ final class TtfFile
      * it. Kerning is parsed first, as a render always needs it.
      *
      * fromState() with the same font bytes restores the font without parsing.
+     *
+     * The state is meant for the application's own cache, and only a trusted
+     * one: it is checked for shape, not for integrity. Store it with
+     * var_export() or JSON, or read it back with
+     * unserialize($s, ['allowed_classes' => false]) — it never holds objects.
+     *
+     * @experimental The layout may change in any release, which bumps
+     *               STATE_FORMAT; a cache keyed by it just parses again.
      *
      * @return array<string, mixed>
      */
@@ -202,6 +203,12 @@ final class TtfFile
      * Restores a font from exportState() and the same font's bytes, without
      * parsing its tables.
      *
+     * The state must come from exportState() of a trusted cache (see there).
+     * Every value is checked for its type before use, so a damaged state is
+     * refused here rather than failing later in a render.
+     *
+     * @experimental See exportState().
+     *
      * @param  array<array-key, mixed>  $state
      *
      * @throws \InvalidArgumentException for a state of another format, of
@@ -225,19 +232,25 @@ final class TtfFile
         $font = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
         (new \ReflectionProperty(self::class, 'bytes'))->setValue($font, $bytes);
         (new \ReflectionProperty(self::class, 'reader'))->setValue($font, new BinaryReader($bytes));
-        $font->tables = self::stateArray($state, 'tables');
+        $font->tables = self::stateTables($state, strlen($bytes));
         $font->unitsPerEm = self::stateInt($state, 'unitsPerEm');
+        if ($font->unitsPerEm < 1) {
+            throw new \InvalidArgumentException('Font state is damaged: unitsPerEm.');
+        }
         $font->numGlyphs = self::stateInt($state, 'numGlyphs');
-        $font->bbox = self::stateArray($state, 'bbox');
+        $font->bbox = self::stateIntList($state, 'bbox');
+        if (count($font->bbox) !== 4) {
+            throw new \InvalidArgumentException('Font state is damaged: bbox.');
+        }
         $font->ascent = self::stateInt($state, 'ascent');
         $font->descent = self::stateInt($state, 'descent');
         $font->numHMetrics = self::stateInt($state, 'numHMetrics');
-        $font->advanceWidths = self::stateArray($state, 'advanceWidths');
-        $font->cmap = self::stateArray($state, 'cmap');
+        $font->advanceWidths = self::stateIntList($state, 'advanceWidths');
+        $font->cmap = self::stateIntMap($state, 'cmap');
         $font->postScriptName = self::stateString($state, 'postScriptName');
         $font->italicAngle = self::stateInt($state, 'italicAngle');
         $font->isFixedPitch = self::stateBool($state, 'isFixedPitch');
-        $font->namesById = self::stateArray($state, 'namesById');
+        $font->namesById = self::stateStringMap($state, 'namesById');
         $font->kerningTable = $kerning === null ? null : KerningTable::fromState($kerning);
         $font->kerningParsed = true;
         try {
@@ -285,6 +298,80 @@ final class TtfFile
     private static function stateArray(array $state, string $key): array
     {
         return is_array($state[$key] ?? null) ? $state[$key] : throw new \InvalidArgumentException("Font state is damaged: $key.");
+    }
+
+    /**
+     * The table directory, every entry inside a font of $size bytes.
+     *
+     * @param  array<array-key, mixed>  $state
+     * @return array<string, array{offset: int, length: int}>
+     */
+    private static function stateTables(array $state, int $size): array
+    {
+        $tables = [];
+        foreach (self::stateArray($state, 'tables') as $tag => $info) {
+            if (! is_string($tag) || ! is_array($info) || ! is_int($info['offset'] ?? null) || ! is_int($info['length'] ?? null)
+                || $info['offset'] < 0 || $info['length'] < 0 || $info['offset'] + $info['length'] > $size) {
+                throw new \InvalidArgumentException('Font state is damaged: tables.');
+            }
+            $tables[$tag] = ['offset' => $info['offset'], 'length' => $info['length']];
+        }
+
+        return $tables;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return list<int>
+     */
+    private static function stateIntList(array $state, string $key): array
+    {
+        $list = self::stateArray($state, $key);
+        if (! array_is_list($list)) {
+            throw new \InvalidArgumentException("Font state is damaged: $key.");
+        }
+        foreach ($list as $value) {
+            if (! is_int($value)) {
+                throw new \InvalidArgumentException("Font state is damaged: $key.");
+            }
+        }
+
+        /** @var list<int> $list */
+        return $list;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return array<int, int>
+     */
+    private static function stateIntMap(array $state, string $key): array
+    {
+        $map = self::stateArray($state, $key);
+        foreach ($map as $k => $value) {
+            if (! is_int($k) || ! is_int($value)) {
+                throw new \InvalidArgumentException("Font state is damaged: $key.");
+            }
+        }
+
+        /** @var array<int, int> $map */
+        return $map;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return array<int, string>
+     */
+    private static function stateStringMap(array $state, string $key): array
+    {
+        $map = self::stateArray($state, $key);
+        foreach ($map as $k => $value) {
+            if (! is_int($k) || ! is_string($value)) {
+                throw new \InvalidArgumentException("Font state is damaged: $key.");
+            }
+        }
+
+        /** @var array<int, string> $map */
+        return $map;
     }
 
     public function rawBytes(): string

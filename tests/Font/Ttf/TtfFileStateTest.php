@@ -129,6 +129,15 @@ final class TtfFileStateTest extends TestCase
             'wrong type' => ['unitsPerEm' => 'many'] + $good,
             'bad kerning' => ['kerningTable' => [['pairs', 'not an array']]] + $good,
             'not an array' => ['cmap' => 'x'] + $good,
+            'cmap value' => ['cmap' => [65 => 'A']] + $good,
+            'cmap key' => ['cmap' => ['A' => 36]] + $good,
+            'advance widths not a list' => ['advanceWidths' => [5 => 500]] + $good,
+            'advance width type' => ['advanceWidths' => [500, '500']] + $good,
+            'bbox size' => ['bbox' => [0, 0, 100]] + $good,
+            'zero units per em' => ['unitsPerEm' => 0] + $good,
+            'table past the end' => ['tables' => ['head' => ['offset' => strlen($bytes), 'length' => 54]]] + $good,
+            'table entry' => ['tables' => ['head' => ['offset' => '0', 'length' => 54]]] + $good,
+            'name value' => ['namesById' => [1 => 42]] + $good,
         ];
         foreach ($damaged as $case => $state) {
             try {
@@ -144,9 +153,17 @@ final class TtfFileStateTest extends TestCase
     public function every_property_is_saved_rebuilt_or_left_lazy(): void
     {
         // When this fails, TtfFile gained a property: add it to exportState()/fromState()
-        // or to the lazy list there, and bump STATE_FORMAT.
+        // or to one of the lists below, and bump STATE_FORMAT.
         $state = (new TtfFile($this->font('liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf')))->exportState();
-        $covered = [...array_keys($state), ...TtfFile::STATE_REBUILT, ...TtfFile::STATE_LAZY];
+        // fromState() rebuilds these from the font bytes rather than reading them from a state.
+        $rebuilt = ['reader', 'bytes', 'cff', 'kerningParsed'];
+        // A state leaves these unparsed: they parse on first use, as after `new TtfFile()`.
+        $lazy = [
+            'ligatures', 'ligaturesParsed', 'singleSubstByFeature', 'fvarParsed',
+            'avar', 'avarParsed', 'hvar', 'hvarParsed', 'mvar', 'mvarParsed',
+            'gvar', 'gvarParsed', 'advanceHeights',
+        ];
+        $covered = [...array_keys($state), ...$rebuilt, ...$lazy];
 
         $properties = [];
         foreach ((new \ReflectionClass(TtfFile::class))->getProperties() as $p) {
