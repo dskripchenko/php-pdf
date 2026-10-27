@@ -162,4 +162,20 @@ final class TtfFileTest extends TestCase
         // Italic typically has a negative italicAngle (-12, for instance).
         self::assertLessThan(0, $ttf->italicAngle());
     }
+
+    #[Test]
+    public function glyphs_past_the_long_metrics_take_the_last_advance_width(): void
+    {
+        // Liberation Mono Italic: 2425 glyphs, 2423 long metrics in hmtx.
+        $path = dirname($this->liberationSansPath).'/LiberationMono-Italic.ttf';
+        if (! is_readable($path)) {
+            self::markTestSkipped('Liberation Mono Italic not cached.');
+        }
+        $ttf = TtfFile::fromFile($path);
+
+        self::assertSame(2425, $ttf->numGlyphs());
+        self::assertSame(1229, $ttf->advanceWidth(2422));
+        self::assertSame(1229, $ttf->advanceWidth(2423));
+        self::assertSame(1229, $ttf->advanceWidth(2424));
+    }
 }

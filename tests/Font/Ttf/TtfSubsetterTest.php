@@ -141,6 +141,34 @@ final class TtfSubsetterTest extends TestCase
         self::assertGreaterThan(380_000, strlen($bytes));
     }
 
+    #[Test]
+    public function table_checksums_and_the_font_checksum_are_valid(): void
+    {
+        $subset = (new TtfSubsetter)->subset($this->ttf, [3, 43, 72, 79, 82, 1000]);
+        $sum = static function (string $bytes): int {
+            $bytes .= str_repeat("\0", (4 - strlen($bytes) % 4) % 4);
+            $total = 0;
+            for ($i = 0, $n = strlen($bytes); $i < $n; $i += 4) {
+                $total = ($total + unpack('N', $bytes, $i)[1]) & 0xFFFFFFFF;
+            }
+
+            return $total;
+        };
+
+        $numTables = unpack('n', $subset, 4)[1];
+        self::assertGreaterThan(5, $numTables);
+        for ($i = 0; $i < $numTables; $i++) {
+            ['tag' => $tag, 'sum' => $stored, 'offset' => $offset, 'length' => $length]
+                = unpack('a4tag/Nsum/Noffset/Nlength', $subset, 12 + $i * 16);
+            $table = substr($subset, $offset, $length);
+            if ($tag === 'head') {
+                $table = substr_replace($table, "\0\0\0\0", 8, 4); // checkSumAdjustment counts as 0
+            }
+            self::assertSame($stored, $sum($table), "checksum of $tag");
+        }
+        self::assertSame(0xB1B0AFBA, $sum($subset), 'whole-font checksum');
+    }
+
     private function commandExists(string $cmd): bool
     {
         $out = shell_exec('which '.escapeshellarg($cmd).' 2>/dev/null');

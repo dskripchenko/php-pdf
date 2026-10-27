@@ -149,6 +149,231 @@ final class TtfFile
         self::$cache = [];
     }
 
+    /**
+     * Version of the exportState() layout. Bumped whenever what a state holds,
+     * or how it holds it, changes: fromState() refuses any other version, so a
+     * cache never restores a state written by a php-pdf that laid it out
+     * differently. A bump is not a breaking change: the cache misses once and
+     * is filled again from a parse.
+     *
+     * @experimental
+     */
+    public const STATE_FORMAT = 1;
+
+    /**
+     * The parsed font as plain data — ints, strings, bools and arrays only — for
+     * a cache across processes: serialize(), var_export() and JSON round-trip
+     * it. Kerning is parsed first, as a render always needs it.
+     *
+     * fromState() with the same font bytes restores the font without parsing.
+     *
+     * The state is meant for the application's own cache, and only a trusted
+     * one: it is checked for shape, not for integrity. Store it with
+     * var_export() or JSON, or read it back with
+     * unserialize($s, ['allowed_classes' => false]) — it never holds objects.
+     *
+     * @experimental The layout may change in any release, which bumps
+     *               STATE_FORMAT; a cache keyed by it just parses again.
+     *
+     * @return array<string, mixed>
+     */
+    public function exportState(): array
+    {
+        return [
+            'format' => self::STATE_FORMAT,
+            'font' => self::fingerprint($this->bytes),
+            'tables' => $this->tables,
+            'unitsPerEm' => $this->unitsPerEm,
+            'numGlyphs' => $this->numGlyphs,
+            'bbox' => $this->bbox,
+            'ascent' => $this->ascent,
+            'descent' => $this->descent,
+            'numHMetrics' => $this->numHMetrics,
+            'advanceWidths' => $this->advanceWidths,
+            'cmap' => $this->cmap,
+            'postScriptName' => $this->postScriptName,
+            'italicAngle' => $this->italicAngle,
+            'isFixedPitch' => $this->isFixedPitch,
+            'namesById' => $this->namesById,
+            'kerningTable' => $this->kerningTable()?->exportState(),
+        ];
+    }
+
+    /**
+     * Restores a font from exportState() and the same font's bytes, without
+     * parsing its tables.
+     *
+     * The state must come from exportState() of a trusted cache (see there).
+     * Every value is checked for its type before use, so a damaged state is
+     * refused here rather than failing later in a render.
+     *
+     * @experimental See exportState().
+     *
+     * @param  array<array-key, mixed>  $state
+     *
+     * @throws \InvalidArgumentException for a state of another format, of
+     *                                   another font, or damaged — parse the font instead
+     */
+    public static function fromState(array $state, string $bytes): self
+    {
+        if (($state['format'] ?? null) !== self::STATE_FORMAT) {
+            throw new \InvalidArgumentException('Font state is of another format than '.self::STATE_FORMAT.'.');
+        }
+        if (($state['font'] ?? null) !== self::fingerprint($bytes)) {
+            throw new \InvalidArgumentException('Font state is of another font file.');
+        }
+        $kerning = $state['kerningTable'] ?? null;
+        if (! array_key_exists('kerningTable', $state) || ($kerning !== null && ! is_array($kerning))) {
+            throw new \InvalidArgumentException('Font state is damaged: kerningTable.');
+        }
+
+        // The constructor parses; a restored font skips it. Its two readonly
+        // properties are initialized as the constructor would set them.
+        $font = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty(self::class, 'bytes'))->setValue($font, $bytes);
+        (new \ReflectionProperty(self::class, 'reader'))->setValue($font, new BinaryReader($bytes));
+        $font->tables = self::stateTables($state, strlen($bytes));
+        $font->unitsPerEm = self::stateInt($state, 'unitsPerEm');
+        if ($font->unitsPerEm < 1) {
+            throw new \InvalidArgumentException('Font state is damaged: unitsPerEm.');
+        }
+        $font->numGlyphs = self::stateInt($state, 'numGlyphs');
+        $font->bbox = self::stateIntList($state, 'bbox');
+        if (count($font->bbox) !== 4) {
+            throw new \InvalidArgumentException('Font state is damaged: bbox.');
+        }
+        $font->ascent = self::stateInt($state, 'ascent');
+        $font->descent = self::stateInt($state, 'descent');
+        $font->numHMetrics = self::stateInt($state, 'numHMetrics');
+        $font->advanceWidths = self::stateIntList($state, 'advanceWidths');
+        $font->cmap = self::stateIntMap($state, 'cmap');
+        $font->postScriptName = self::stateString($state, 'postScriptName');
+        $font->italicAngle = self::stateInt($state, 'italicAngle');
+        $font->isFixedPitch = self::stateBool($state, 'isFixedPitch');
+        $font->namesById = self::stateStringMap($state, 'namesById');
+        $font->kerningTable = $kerning === null ? null : KerningTable::fromState($kerning);
+        $font->kerningParsed = true;
+        try {
+            $font->parseCff();
+        } catch (\RuntimeException $e) {
+            throw new \InvalidArgumentException('Font state does not fit the font: '.$e->getMessage(), 0, $e);
+        }
+
+        return $font;
+    }
+
+    /**
+     * Identifies a font file cheaply: the hash of its table directory, which
+     * holds every table's checksum, offset and length.
+     */
+    private static function fingerprint(string $bytes): string
+    {
+        $numTables = strlen($bytes) >= 6 ? unpack('n', $bytes, 4)[1] : 0;
+
+        return hash('xxh3', substr($bytes, 0, 12 + 16 * $numTables));
+    }
+
+    /** @param  array<array-key, mixed>  $state */
+    private static function stateInt(array $state, string $key): int
+    {
+        return is_int($state[$key] ?? null) ? $state[$key] : throw new \InvalidArgumentException("Font state is damaged: $key.");
+    }
+
+    /** @param  array<array-key, mixed>  $state */
+    private static function stateString(array $state, string $key): string
+    {
+        return is_string($state[$key] ?? null) ? $state[$key] : throw new \InvalidArgumentException("Font state is damaged: $key.");
+    }
+
+    /** @param  array<array-key, mixed>  $state */
+    private static function stateBool(array $state, string $key): bool
+    {
+        return is_bool($state[$key] ?? null) ? $state[$key] : throw new \InvalidArgumentException("Font state is damaged: $key.");
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return array<mixed>
+     */
+    private static function stateArray(array $state, string $key): array
+    {
+        return is_array($state[$key] ?? null) ? $state[$key] : throw new \InvalidArgumentException("Font state is damaged: $key.");
+    }
+
+    /**
+     * The table directory, every entry inside a font of $size bytes.
+     *
+     * @param  array<array-key, mixed>  $state
+     * @return array<string, array{offset: int, length: int}>
+     */
+    private static function stateTables(array $state, int $size): array
+    {
+        $tables = [];
+        foreach (self::stateArray($state, 'tables') as $tag => $info) {
+            if (! is_string($tag) || ! is_array($info) || ! is_int($info['offset'] ?? null) || ! is_int($info['length'] ?? null)
+                || $info['offset'] < 0 || $info['length'] < 0 || $info['offset'] + $info['length'] > $size) {
+                throw new \InvalidArgumentException('Font state is damaged: tables.');
+            }
+            $tables[$tag] = ['offset' => $info['offset'], 'length' => $info['length']];
+        }
+
+        return $tables;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return list<int>
+     */
+    private static function stateIntList(array $state, string $key): array
+    {
+        $list = self::stateArray($state, $key);
+        if (! array_is_list($list)) {
+            throw new \InvalidArgumentException("Font state is damaged: $key.");
+        }
+        foreach ($list as $value) {
+            if (! is_int($value)) {
+                throw new \InvalidArgumentException("Font state is damaged: $key.");
+            }
+        }
+
+        /** @var list<int> $list */
+        return $list;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return array<int, int>
+     */
+    private static function stateIntMap(array $state, string $key): array
+    {
+        $map = self::stateArray($state, $key);
+        foreach ($map as $k => $value) {
+            if (! is_int($k) || ! is_int($value)) {
+                throw new \InvalidArgumentException("Font state is damaged: $key.");
+            }
+        }
+
+        /** @var array<int, int> $map */
+        return $map;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $state
+     * @return array<int, string>
+     */
+    private static function stateStringMap(array $state, string $key): array
+    {
+        $map = self::stateArray($state, $key);
+        foreach ($map as $k => $value) {
+            if (! is_int($k) || ! is_string($value)) {
+                throw new \InvalidArgumentException("Font state is damaged: $key.");
+            }
+        }
+
+        /** @var array<int, string> $map */
+        return $map;
+    }
+
     public function rawBytes(): string
     {
         return $this->bytes;
@@ -657,16 +882,22 @@ final class TtfFile
     private function parseHmtx(): void
     {
         $offset = $this->requireTable('hmtx');
-        $this->reader->seek($offset);
         $this->advanceWidths = [];
+        if ($this->numHMetrics === 0) {
+            $this->advanceWidths = $this->numGlyphs > 0 ? array_fill(0, $this->numGlyphs, 0) : [];
 
-        $lastWidth = 0;
-        for ($i = 0; $i < $this->numHMetrics; $i++) {
-            $lastWidth = $this->reader->readUInt16();
-            $this->reader->skip(2); // lsb (signed, not used)
-            $this->advanceWidths[$i] = $lastWidth;
+            return;
+        }
+        // longHorMetric: uint16 advanceWidth, int16 lsb — read in one unpack.
+        $words = unpack('n*', substr($this->bytes, $offset, $this->numHMetrics * 4));
+        if ($words === false || count($words) < $this->numHMetrics * 2) {
+            throw new \OutOfBoundsException('hmtx table is truncated');
+        }
+        for ($i = 0, $w = 1; $i < $this->numHMetrics; $i++, $w += 2) {
+            $this->advanceWidths[$i] = $words[$w];
         }
         // Remaining glyphs — lsb only, width = lastWidth.
+        $lastWidth = $this->advanceWidths[$this->numHMetrics - 1];
         for ($i = $this->numHMetrics; $i < $this->numGlyphs; $i++) {
             $this->advanceWidths[$i] = $lastWidth;
         }
@@ -834,52 +1065,51 @@ final class TtfFile
      */
     private function parseCmapFormat4(int $subtableOffset): array
     {
-        $this->reader->seek($subtableOffset + 6);
-        $segCountX2 = $this->reader->readUInt16();
-        $segCount = $segCountX2 / 2;
-        $this->reader->skip(6); // searchRange + entrySelector + rangeShift
-
-        $endCode = [];
-        for ($i = 0; $i < $segCount; $i++) {
-            $endCode[$i] = $this->reader->readUInt16();
+        $segCount = $this->reader->peekUInt16($subtableOffset + 6) >> 1;
+        if ($segCount === 0) {
+            return [];
         }
-        $this->reader->skip(2); // reservedPad
-
-        $startCode = [];
-        for ($i = 0; $i < $segCount; $i++) {
-            $startCode[$i] = $this->reader->readUInt16();
+        // endCode[segCount], reservedPad, startCode[], idDelta[], idRangeOffset[]:
+        // all uint16 words, read in one unpack.
+        $arrays = $subtableOffset + 14;
+        $words = unpack('n*', substr($this->bytes, $arrays, ($segCount * 4 + 1) * 2));
+        if ($words === false || count($words) < $segCount * 4 + 1) {
+            throw new \OutOfBoundsException('cmap format 4 subtable is truncated');
         }
-
-        $idDelta = [];
-        for ($i = 0; $i < $segCount; $i++) {
-            $idDelta[$i] = $this->reader->readInt16();
-        }
-
-        $idRangeOffsetStart = $this->reader->tell();
-        $idRangeOffset = [];
-        for ($i = 0; $i < $segCount; $i++) {
-            $idRangeOffset[$i] = $this->reader->readUInt16();
-        }
+        $startAt = $segCount + 2;            // 1-based index of startCode[0]
+        $deltaAt = $segCount * 2 + 2;        // idDelta[0]
+        $rangeAt = $segCount * 3 + 2;        // idRangeOffset[0]
+        $idRangeOffsetStart = $arrays + ($segCount * 3 + 1) * 2;
 
         $cmap = [];
         for ($i = 0; $i < $segCount; $i++) {
-            $start = $startCode[$i];
-            $end = $endCode[$i];
+            $end = $words[1 + $i];
+            $start = $words[$startAt + $i];
             // Last segment is always 0xFFFF..0xFFFF mapping to 0. Skip.
-            if ($start === 0xFFFF && $end === 0xFFFF) {
+            if (($start === 0xFFFF && $end === 0xFFFF) || $end < $start) {
                 continue;
             }
-            for ($c = $start; $c <= $end; $c++) {
-                if ($idRangeOffset[$i] === 0) {
-                    $glyphId = ($c + $idDelta[$i]) & 0xFFFF;
-                } else {
-                    $glyphIndexPos = $idRangeOffsetStart + $i * 2
-                        + $idRangeOffset[$i]
-                        + ($c - $start) * 2;
-                    $glyphId = $this->reader->peekUInt16($glyphIndexPos);
+            $delta = $words[$deltaAt + $i];
+            $rangeOffset = $words[$rangeAt + $i];
+            if ($rangeOffset === 0) {
+                for ($c = $start; $c <= $end; $c++) {
+                    $glyphId = ($c + $delta) & 0xFFFF;
                     if ($glyphId !== 0) {
-                        $glyphId = ($glyphId + $idDelta[$i]) & 0xFFFF;
+                        $cmap[$c] = $glyphId;
                     }
+                }
+
+                continue;
+            }
+            // glyphIdArray slice for this segment, read in one unpack
+            $from = $idRangeOffsetStart + $i * 2 + $rangeOffset;
+            $count = $end - $start + 1;
+            $slice = substr($this->bytes, $from, $count * 2);
+            $glyphs = strlen($slice) === $count * 2 ? unpack('n*', $slice) : false;
+            for ($c = $start, $k = 1; $c <= $end; $c++, $k++) {
+                $glyphId = $glyphs === false ? $this->reader->peekUInt16($from + ($c - $start) * 2) : $glyphs[$k];
+                if ($glyphId !== 0) {
+                    $glyphId = ($glyphId + $delta) & 0xFFFF;
                 }
                 if ($glyphId !== 0) {
                     $cmap[$c] = $glyphId;
@@ -907,15 +1137,19 @@ final class TtfFile
      */
     private function parseCmapFormat12(int $subtableOffset): array
     {
-        $this->reader->seek($subtableOffset + 12);
-        $numGroups = $this->reader->readUInt32();
+        $numGroups = $this->reader->peekUInt32($subtableOffset + 12);
+        if ($numGroups === 0) {
+            return [];
+        }
+        // SequentialMapGroup: uint32 startCharCode, endCharCode, startGlyphID — one unpack.
+        $groups = unpack('N*', substr($this->bytes, $subtableOffset + 16, $numGroups * 12));
+        if ($groups === false || count($groups) < $numGroups * 3) {
+            throw new \OutOfBoundsException('cmap format 12 subtable is truncated');
+        }
 
         $cmap = [];
-        for ($g = 0; $g < $numGroups; $g++) {
-            $start = $this->reader->readUInt32();
-            $end = $this->reader->readUInt32();
-            $startGlyph = $this->reader->readUInt32();
-            for ($c = $start, $glyph = $startGlyph; $c <= $end; $c++, $glyph++) {
+        for ($g = 1, $n = $numGroups * 3; $g <= $n; $g += 3) {
+            for ($c = $groups[$g], $end = $groups[$g + 1], $glyph = $groups[$g + 2]; $c <= $end; $c++, $glyph++) {
                 $cmap[$c] = $glyph;
             }
         }
