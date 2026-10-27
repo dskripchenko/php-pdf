@@ -442,6 +442,11 @@ final class TtfSubsetter
                 ),
                 default => substr($sourceBytes, $info['offset'], $info['length']),
             };
+            if ($tag === 'head' && strlen($bytes) >= 12) {
+                // checkSumAdjustment counts as 0 in the checksums; it is set
+                // once the whole font is assembled.
+                $bytes = substr_replace($bytes, "\0\0\0\0", 8, 4);
+            }
             $newTableData[$tag] = $bytes;
         }
 
@@ -463,7 +468,11 @@ final class TtfSubsetter
         $directory = '';
         $tableData = '';
         $currentOffset = $tableDataOffset;
+        $headOffset = null;
         foreach ($newTableData as $tag => $bytes) {
+            if ($tag === 'head' && strlen($bytes) >= 12) {
+                $headOffset = $currentOffset;
+            }
             $length = strlen($bytes);
             // Checksum: sum of 32-bit big-endian dwords.
             $checksum = $this->tableChecksum($bytes);
@@ -479,7 +488,14 @@ final class TtfSubsetter
             $currentOffset += $length + $pad;
         }
 
-        return $header.$directory.$tableData;
+        $font = $header.$directory.$tableData;
+        if ($headOffset !== null) {
+            // OpenType: the whole font, checkSumAdjustment included, sums to 0xB1B0AFBA.
+            $adjustment = (0xB1B0AFBA - $this->tableChecksum($font)) & 0xFFFFFFFF;
+            $font = substr_replace($font, pack('N', $adjustment), $headOffset + 8, 4);
+        }
+
+        return $font;
     }
 
     /**
@@ -491,12 +507,13 @@ final class TtfSubsetter
         if ($pad > 0) {
             $bytes .= str_repeat("\x00", $pad);
         }
-        $sum = 0;
-        $numDwords = strlen($bytes) / 4;
-        for ($i = 0; $i < $numDwords; $i++) {
-            $sum = ($sum + unpack('N', substr($bytes, $i * 4, 4))[1]) & 0xFFFFFFFF;
+        if ($bytes === '') {
+            return 0;
         }
 
-        return $sum;
+        // One unpack for the whole table. The sum of its dwords fits in a
+        // 64-bit int (each < 2^32, far fewer than 2^31 of them), so it is
+        // masked once at the end rather than at every step.
+        return array_sum(unpack('N*', $bytes)) & 0xFFFFFFFF;
     }
 }

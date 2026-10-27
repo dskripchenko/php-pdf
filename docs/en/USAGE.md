@@ -19,6 +19,7 @@ the feature you need.
   - [Page setup and section breaks](#page-setup-and-section-breaks)
 - [HTML / CSS input](#html--css-input)
 - [Custom fonts](#custom-fonts)
+  - [Fonts in per-request processes](#fonts-in-per-request-processes)
 - [Barcodes](#barcodes)
 - [Charts](#charts)
 - [Math expressions](#math-expressions)
@@ -530,6 +531,64 @@ as a CIDFontType0 with a `/FontFile3 /CIDFontType0C` program (allowed in
 PDF/A-1 too); expect the full CFF size in the output (100–200 KB for a Latin
 plus Cyrillic face). CFF2 (variable CFF) fonts are rejected. Kerning, basic ligatures, and ToUnicode CMaps are emitted
 automatically.
+
+### Fonts in per-request processes
+
+`TtfFile::fromFile()` keeps parsed fonts for the life of the process
+(`TtfFile::$cacheLimit` of them), so a queue worker or Octane parses each
+font once. Under PHP-FPM every request starts empty and parses its fonts
+again — about a millisecond for a Latin face, several for a CJK one.
+`exportState()` saves a parsed font as plain data (ints, strings, bools
+and arrays), and `TtfFile::fromState()` restores it from that data and the
+same font file without parsing:
+
+```php
+use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
+use Dskripchenko\PhpPdf\Pdf\PdfFont;
+
+function cachedFont(string $path, string $cacheDir): TtfFile
+{
+    $bytes = (string) file_get_contents($path);
+    $file = $cacheDir.'/'.basename($path).'.v'.TtfFile::STATE_FORMAT.'.php';
+
+    if (is_file($file)) {
+        try {
+            return TtfFile::fromState(require $file, $bytes);
+        } catch (\InvalidArgumentException) {
+            // another font file or a damaged state: parse again below
+        }
+    }
+
+    $font = new TtfFile($bytes);
+    $tmp = $file.'.'.getmypid();
+    file_put_contents($tmp, '<?php return '.var_export($font->exportState(), true).';');
+    rename($tmp, $file);
+
+    return $font;
+}
+
+$regular = new PdfFont(cachedFont(__DIR__.'/fonts/DejaVuSans.ttf', __DIR__.'/var/fonts'));
+```
+
+A state written with `var_export()` and read back with `require` sits in
+OPcache's shared memory, so the restore costs a fraction of a parse. JSON
+works too; with `serialize()`, read it back with
+`unserialize($s, ['allowed_classes' => false])` — a state never holds
+objects.
+
+The state is for your application's own cache: `fromState()` checks its
+shape, not its integrity, so never restore one that came from outside.
+It refuses — with an `InvalidArgumentException` — a state of another
+`TtfFile::STATE_FORMAT`, of another font file, or a damaged one; fall back
+to parsing, as above. The pair is experimental: a release that changes
+the layout bumps `STATE_FORMAT`, the cache misses once and fills again,
+and nothing else breaks. Keying the cache by `STATE_FORMAT`, as above,
+keeps states of different versions apart.
+
+Embedded font bodies are compressed at zlib level 6. Where documents are
+rendered per request, `PdfFont::$compressionLevel = 1;` compresses a
+subset two to five times faster for a stream a few percent larger. Values
+outside -1..9 are refused with an `InvalidArgumentException`.
 
 ---
 
