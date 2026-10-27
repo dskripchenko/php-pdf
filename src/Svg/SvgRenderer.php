@@ -1225,8 +1225,9 @@ final class SvgRenderer
     }
 
     /**
-     * Every point a path names, control points included: enough for a
-     * bounding box that covers the curve.
+     * The points that bound a path tightly, as SVG's objectBoundingBox
+     * takes it: every end point, and where a cubic curve turns in x or y.
+     * Control points are left out; a curve rarely reaches them.
      *
      * @param  list<array{0: string, 1: float, 2: float, 3?: float, 4?: float, 5?: float, 6?: float}|string>  $commands
      * @return list<array{0: float, 1: float}>
@@ -1234,16 +1235,62 @@ final class SvgRenderer
     private static function commandPoints(array $commands): array
     {
         $points = [];
+        $x = $y = $startX = $startY = 0.0;
         foreach ($commands as $cmd) {
             if (! is_array($cmd)) {
+                [$x, $y] = [$startX, $startY]; // Z returns to the subpath's start.
+
                 continue;
             }
-            for ($i = 1; $i + 1 < count($cmd); $i += 2) {
-                $points[] = [(float) $cmd[$i], (float) $cmd[$i + 1]];
+            if ($cmd[0] === 'C' && count($cmd) >= 7) {
+                $xs = [$x, (float) $cmd[1], (float) $cmd[3], (float) $cmd[5]];
+                $ys = [$y, (float) $cmd[2], (float) $cmd[4], (float) $cmd[6]];
+                foreach ([...self::cubicTurns($xs), ...self::cubicTurns($ys)] as $t) {
+                    $points[] = [self::cubicAt($xs, $t), self::cubicAt($ys, $t)];
+                }
+                [$x, $y] = [$xs[3], $ys[3]];
+            } else {
+                [$x, $y] = [(float) $cmd[1], (float) $cmd[2]];
+                if ($cmd[0] === 'M') {
+                    [$startX, $startY] = [$x, $y];
+                }
             }
+            $points[] = [$x, $y];
         }
 
         return $points;
+    }
+
+    /**
+     * The parameters in (0, 1) where one coordinate of a cubic Bézier
+     * turns: the roots of its derivative, a quadratic.
+     *
+     * @param  array{0: float, 1: float, 2: float, 3: float}  $p
+     * @return list<float>
+     */
+    private static function cubicTurns(array $p): array
+    {
+        $a = -$p[0] + 3 * $p[1] - 3 * $p[2] + $p[3];
+        $b = 2 * ($p[0] - 2 * $p[1] + $p[2]);
+        $c = $p[1] - $p[0];
+        if (abs($a) < 1e-12) {
+            $roots = abs($b) < 1e-12 ? [] : [-$c / $b];
+        } else {
+            $disc = $b * $b - 4 * $a * $c;
+            $roots = $disc < 0 ? [] : [(-$b + sqrt($disc)) / (2 * $a), (-$b - sqrt($disc)) / (2 * $a)];
+        }
+
+        return array_values(array_filter($roots, static fn (float $t): bool => $t > 0 && $t < 1));
+    }
+
+    /**
+     * @param  array{0: float, 1: float, 2: float, 3: float}  $p
+     */
+    private static function cubicAt(array $p, float $t): float
+    {
+        $u = 1 - $t;
+
+        return $u * $u * $u * $p[0] + 3 * $u * $u * $t * $p[1] + 3 * $u * $t * $t * $p[2] + $t * $t * $t * $p[3];
     }
 
     /**
@@ -1422,7 +1469,6 @@ final class SvgRenderer
         ];
         $commands = iterator_to_array(self::mapCommands($user, $px, $py), false);
 
-        // The control points lie on the bounding box, so they give it exactly.
         if ($hasFill && self::fillGradient($el, $page, $commands, static fn (): array => self::commandPoints($user), self::affineXY($px, $py))) {
             $hasFill = false;
         }

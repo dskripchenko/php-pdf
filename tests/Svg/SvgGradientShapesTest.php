@@ -114,6 +114,28 @@ final class SvgGradientShapesTest extends TestCase
     }
 
     /** @return array{0: string, 1: string} the page's content stream and the whole document */
+    #[Test]
+    public function the_bounding_box_hugs_a_curve_not_its_control_points(): void
+    {
+        // The curve's control points reach y = 10, the curve itself only y = 20:
+        // the box is 80 x 30 from (10, 20), not 80 x 40 from (10, 10).
+        [, $bytes] = self::render('<defs><linearGradient id="g">'.self::STOPS.'</linearGradient></defs>'.'<path d="M10 50 C10 10 90 10 90 50 Z" fill="url(#g)"/>');
+
+        self::assertStringContainsString('/Matrix [80 0 0 -30 10 80]', $bytes);
+    }
+
+    #[Test]
+    public function a_quadratic_curve_and_an_arc_bound_tightly_too(): void
+    {
+        // Q's control point is at y = 10; the curve peaks at y = 30.
+        [, $quad] = self::render('<defs><linearGradient id="g">'.self::STOPS.'</linearGradient></defs>'.'<path d="M10 50 Q50 10 90 50 Z" fill="url(#g)"/>');
+        self::assertStringContainsString('/Matrix [80 0 0 -20 10 70]', $quad);
+
+        // A half circle of radius 40 above y = 50.
+        [, $arc] = self::render('<defs><linearGradient id="g">'.self::STOPS.'</linearGradient></defs>'.'<path d="M10 50 A40 40 0 0 1 90 50 Z" fill="url(#g)"/>');
+        self::assertStringContainsString('/Matrix [80 0 0 -40 10 90]', $arc);
+    }
+
     private static function render(string $body): array
     {
         $doc = PdfDocument::new();
