@@ -255,8 +255,11 @@ final class KerningTable
     }
 
     /**
-     * Number of distinct glyph pairs with an adjustment. This expands every
-     * layer, so it is meant for diagnostics, not the render path.
+     * Number of distinct glyph pairs with an adjustment.
+     *
+     * Diagnostics only, never the render path: it expands every class
+     * subtable into glyph pairs — the work and memory the packed layout
+     * avoids, and far more for a damaged GPOS table. Lookups never need it.
      */
     public function pairCount(): int
     {

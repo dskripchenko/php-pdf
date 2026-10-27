@@ -30,8 +30,12 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   0.7 ms and 0.5 MB instead of 38 ms and 7 MB. Every lookup answers as
   before: compared pair by pair on 77 fonts.
 - `KerningTable::addPairs()` and `KerningTable::addClasses()` add packed
-  pairs and class subtables. `pairCount()` now counts by expanding the
-  table, so it is meant for diagnostics rather than the render path.
+  pairs and class subtables.
+- `KerningTable::pairCount()` returns the same number as before, but now
+  counts by expanding every class subtable into glyph pairs: it is meant
+  for diagnostics, not the render path. On a font with class kerning it
+  takes milliseconds and megabytes, as parsing did before; on a damaged
+  `GPOS` table it can take far more.
 - Font subsetting is about twice as fast: table checksums are summed from
   one `unpack()` instead of one call per 32-bit word. Inter Regular
   subsets in 0.8 ms instead of 1.9 ms, Noto Sans JP in 4.0 ms instead of
