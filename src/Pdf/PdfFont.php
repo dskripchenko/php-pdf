@@ -221,6 +221,7 @@ final class PdfFont
             $variableInstance = new \Dskripchenko\PhpPdf\Font\Ttf\VariableInstance($this->ttf, $this->axes);
         }
         $isCff = $this->ttf->isCff();
+        $fontName = self::encodeName($this->ttf->postScriptName());
         if ($isCff) {
             // FontFile3 carries /Subtype instead of /Length1 (Table 127).
             $fontBytes = $this->ttf->cffTableBytes();
@@ -231,6 +232,9 @@ final class PdfFont
                 : $this->ttf->rawBytes();
             // Length1 = un-compressed original size (PDF spec).
             $streamKeys = sprintf('/Length1 %d', strlen($fontBytes));
+            if ($this->subset) {
+                $fontName = self::subsetTag($fontBytes).'+'.$fontName;
+            }
         }
         if ($compressStreams) {
             $compressed = self::compress($fontBytes);
@@ -249,12 +253,25 @@ final class PdfFont
             ));
         }
 
-        // 2. FontDescriptor.
-        $descriptorBody = $this->buildFontDescriptor($fontFileObjId);
+        // 2. FontDescriptor. A subset also gets a CIDSet (see buildCidSet).
+        $cidSetObjId = null;
+        if ($this->subset && ! $isCff) {
+            $cidSet = $this->buildCidSet();
+            if ($compressStreams) {
+                $cidSet = (string) gzcompress($cidSet, 6);
+            }
+            $cidSetObjId = $writer->addObject(sprintf(
+                "<< /Length %d%s >>\nstream\n%s\nendstream",
+                strlen($cidSet),
+                $compressStreams ? ' /Filter /FlateDecode' : '',
+                $cidSet,
+            ));
+        }
+        $descriptorBody = $this->buildFontDescriptor($fontFileObjId, $fontName, $cidSetObjId);
         $descriptorId = $writer->addObject($descriptorBody);
 
         // 3. CIDFontType2 / CIDFontType0 descendant.
-        $cidFontBody = $this->buildCIDFont($descriptorId);
+        $cidFontBody = $this->buildCIDFont($descriptorId, $fontName);
         $cidFontId = $writer->addObject($cidFontBody);
 
         // 4. ToUnicode CMap (placeholder, filled later when usedGlyphs known).
@@ -268,7 +285,7 @@ final class PdfFont
             '<< /Type /Font /Subtype /Type0 /BaseFont /%s '
             .'/Encoding /Identity-H /DescendantFonts [%d 0 R] '
             .'/ToUnicode %d 0 R >>',
-            $this->ttf->postScriptName().($isCff ? '-Identity-H' : ''),
+            $fontName.($isCff ? '-Identity-H' : ''),
             $cidFontId,
             $toUnicodeId,
         );
@@ -276,6 +293,38 @@ final class PdfFont
         $this->writerRegistrations[$writer] = $fontObjectId;
 
         return $fontObjectId;
+    }
+
+    /**
+     * Tag for a subset font's name, as in `ABCDEF+Inter-Bold`
+     * (ISO 32000-1 §9.6.4): six uppercase letters.
+     *
+     * Taken from the subset's bytes, so two different subsets of one font in
+     * a document never share a name, and the same subset always gets the
+     * same tag — the output stays reproducible.
+     */
+    private static function subsetTag(string $subsetBytes): string
+    {
+        $tag = '';
+        foreach (str_split(substr(hash('xxh3', $subsetBytes, true), 0, 6)) as $byte) {
+            $tag .= chr(65 + ord($byte) % 26);
+        }
+
+        return $tag;
+    }
+
+    /**
+     * A PDF name's characters (ISO 32000-1 §7.3.5): delimiters, `#` and
+     * anything outside printable ASCII are written as `#xx`. The OpenType
+     * spec keeps PostScript names clear of them, but not every font obeys.
+     */
+    private static function encodeName(string $name): string
+    {
+        return preg_replace_callback(
+            '/[^\x21-\x7E]|[#\/()<>\[\]{}%]/',
+            static fn (array $m): string => sprintf('#%02X', ord($m[0])),
+            $name,
+        ) ?? $name;
     }
 
     /**
@@ -760,7 +809,7 @@ final class PdfFont
     /**
      * FontDescriptor - contains metrics and reference to the embedded font file.
      */
-    private function buildFontDescriptor(int $fontFileObjId): string
+    private function buildFontDescriptor(int $fontFileObjId, string $fontName, ?int $cidSetObjId = null): string
     {
         $upem = $this->ttf->unitsPerEm();
         $toPdf = static fn (int $fu): int => (int) round($fu * 1000 / $upem);
@@ -796,8 +845,8 @@ final class PdfFont
             '<< /Type /FontDescriptor /FontName /%s /Flags %d '
             .'/FontBBox %s /ItalicAngle %d '
             .'/Ascent %d /Descent %d /CapHeight %d /StemV 80 '
-            .'/%s %d 0 R >>',
-            $this->ttf->postScriptName(),
+            .'/%s %d 0 R%s >>',
+            $fontName,
             $flags,
             $bboxStr,
             $this->ttf->italicAngle(),
@@ -806,7 +855,31 @@ final class PdfFont
             $toPdf($this->ttf->ascent()), // CapHeight ~ ascent for POC; refine later
             $this->ttf->isCff() ? 'FontFile3' : 'FontFile2',
             $fontFileObjId,
+            $cidSetObjId !== null ? sprintf(' /CIDSet %d 0 R', $cidSetObjId) : '',
         );
+    }
+
+    /**
+     * The CIDSet of a TrueType subset (ISO 32000-1 Table 124): a bitmap with
+     * one bit per CID, the high bit of the first byte for CID 0. With
+     * /CIDToGIDMap /Identity a CID is a GID.
+     *
+     * PDF/A-1 requires it for every subset CIDFont (ISO 19005-1 §6.3.5); later
+     * parts accept it as long as it lists every glyph present (ISO 19005-2
+     * §6.2.11.4.2). The subsetter keeps the glyph numbering and leaves unused
+     * glyphs empty rather than removing them, so every GID below numGlyphs is
+     * present in the font program, and all of them are set. A CIDSet of only
+     * the used glyphs fails veraPDF for PDF/A-2 and 3.
+     */
+    private function buildCidSet(): string
+    {
+        $numGlyphs = $this->ttf->numGlyphs();
+        $set = str_repeat("\xFF", intdiv($numGlyphs, 8));
+        if ($numGlyphs % 8 !== 0) {
+            $set .= chr((0xFF00 >> ($numGlyphs % 8)) & 0xFF);
+        }
+
+        return $set;
     }
 
     /**
@@ -816,7 +889,7 @@ final class PdfFont
      * Vertical writing adds /WMode 1 + /W2 array (vertical
      * advance metrics from vmtx).
      */
-    private function buildCIDFont(int $descriptorId): string
+    private function buildCIDFont(int $descriptorId, string $fontName): string
     {
         $verticalParts = '';
         if ($this->verticalWriting) {
@@ -831,7 +904,7 @@ final class PdfFont
             .'%s/FontDescriptor %d 0 R '
             .'/W %s %s>>',
             $isCff ? 'CIDFontType0' : 'CIDFontType2',
-            $this->ttf->postScriptName(),
+            $fontName,
             $isCff ? '' : '/CIDToGIDMap /Identity ',
             $descriptorId,
             $this->buildWidthsArray(),
