@@ -19,6 +19,7 @@ einen Rundgang oder springen Sie direkt zum benötigten Feature.
   - [Seitenaufbau und Abschnittsumbrüche](#seitenaufbau-und-abschnittsumbrüche)
 - [HTML- / CSS-Eingabe](#html---css-eingabe)
 - [Eigene Schriftarten](#eigene-schriftarten)
+  - [Schriftarten in Prozessen pro Anfrage](#schriftarten-in-prozessen-pro-anfrage)
 - [Barcodes](#barcodes)
 - [Diagramme](#diagramme)
 - [Mathematische Ausdrücke](#mathematische-ausdrücke)
@@ -552,6 +553,67 @@ PDF/A-1 zulässig); die Ausgabe enthält also die volle CFF-Größe
 (100–200 KB für eine Schrift mit Latein und Kyrillisch). Schriften mit
 CFF2 (variables CFF) werden abgelehnt. Kerning, einfache Ligaturen und ToUnicode-CMaps werden
 automatisch ausgegeben.
+
+### Schriftarten in Prozessen pro Anfrage
+
+`TtfFile::fromFile()` hält geparste Schriftarten für die Lebensdauer des
+Prozesses vor (bis zu `TtfFile::$cacheLimit` Stück): Ein Queue-Worker oder
+Octane parst jede Schriftart nur einmal. Unter PHP-FPM beginnt jede Anfrage
+leer und parst ihre Schriftarten erneut — etwa eine Millisekunde für eine
+lateinische Schrift, mehrere für eine CJK-Schrift. `exportState()` speichert
+eine geparste Schriftart als einfache Daten (Ganzzahlen, Strings, Booleans
+und Arrays), und `TtfFile::fromState()` stellt sie aus diesen Daten und
+derselben Schriftdatei ohne Parsen wieder her:
+
+```php
+use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
+use Dskripchenko\PhpPdf\Pdf\PdfFont;
+
+function cachedFont(string $path, string $cacheDir): TtfFile
+{
+    $bytes = (string) file_get_contents($path);
+    $file = $cacheDir.'/'.basename($path).'.v'.TtfFile::STATE_FORMAT.'.php';
+
+    if (is_file($file)) {
+        try {
+            return TtfFile::fromState(require $file, $bytes);
+        } catch (\InvalidArgumentException) {
+            // andere Schriftdatei oder beschädigter Zustand: unten neu parsen
+        }
+    }
+
+    $font = new TtfFile($bytes);
+    $tmp = $file.'.'.getmypid();
+    file_put_contents($tmp, '<?php return '.var_export($font->exportState(), true).';');
+    rename($tmp, $file);
+
+    return $font;
+}
+
+$regular = new PdfFont(cachedFont(__DIR__.'/fonts/DejaVuSans.ttf', __DIR__.'/var/fonts'));
+```
+
+Ein mit `var_export()` geschriebener und per `require` gelesener Zustand
+liegt im gemeinsamen Speicher von OPcache, die Wiederherstellung kostet
+also einen Bruchteil des Parsens. JSON funktioniert ebenso; bei
+`serialize()` lesen Sie mit `unserialize($s, ['allowed_classes' => false])`
+zurück — ein Zustand enthält nie Objekte.
+
+Der Zustand ist für den eigenen Cache Ihrer Anwendung gedacht:
+`fromState()` prüft seine Form, nicht seine Integrität, stellen Sie also nie
+einen Zustand aus fremder Quelle wieder her. Einen Zustand mit anderem
+`TtfFile::STATE_FORMAT`, von einer anderen Schriftdatei oder einen
+beschädigten weist es mit einer `InvalidArgumentException` zurück; dann wird
+wie oben neu geparst. Die beiden Methoden sind experimentell: Ein Release,
+das das Format ändert, erhöht `STATE_FORMAT`, der Cache verfehlt einmal und
+füllt sich neu, sonst bricht nichts. Ist `STATE_FORMAT` wie oben Teil des
+Cache-Schlüssels, bleiben Zustände verschiedener Versionen getrennt.
+
+Eingebettete Schriftdaten werden mit zlib-Stufe 6 komprimiert. Wo Dokumente
+pro Anfrage erzeugt werden, komprimiert `PdfFont::$compressionLevel = 1;`
+eine Teilmenge zwei- bis fünfmal schneller, bei einem um wenige Prozent
+größeren Stream. Werte außerhalb von -1..9 werden mit einer
+`InvalidArgumentException` abgelehnt.
 
 ---
 

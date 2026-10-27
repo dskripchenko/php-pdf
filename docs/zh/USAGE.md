@@ -18,6 +18,7 @@ HTML 转 PDF 一直深入到最底层的页面发射。每个章节都是自包�
   - [页面设置与分节符](#页面设置与分节符)
 - [HTML / CSS 输入](#html--css-输入)
 - [自定义字体](#自定义字体)
+  - [按请求运行的进程中的字体](#按请求运行的进程中的字体)
 - [条形码](#条形码)
 - [图表](#图表)
 - [数学公式](#数学公式)
@@ -505,6 +506,59 @@ TrueType 轮廓字体（`.ttf`、TrueType 风格的 `.otf`）按需子集化 —
 输出中会包含完整的 CFF 大小（含拉丁与西里尔字母的字体约 100–200 KB）。
 CFF2（可变 CFF）字体会被拒绝。
 字距调整、基础连字与 ToUnicode CMap 会自动发射。
+
+### 按请求运行的进程中的字体
+
+`TtfFile::fromFile()` 会在整个进程生命周期内保留已解析的字体（最多
+`TtfFile::$cacheLimit` 个），因此队列 worker 或 Octane 对每个字体只解析一次。
+在 PHP-FPM 下，每个请求都从零开始并重新解析字体——拉丁字体约需一毫秒，
+CJK 字体需要数毫秒。`exportState()` 将已解析的字体保存为纯数据（整数、
+字符串、布尔值和数组），`TtfFile::fromState()` 则根据这些数据和同一个
+字体文件恢复字体，无需解析：
+
+```php
+use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
+use Dskripchenko\PhpPdf\Pdf\PdfFont;
+
+function cachedFont(string $path, string $cacheDir): TtfFile
+{
+    $bytes = (string) file_get_contents($path);
+    $file = $cacheDir.'/'.basename($path).'.v'.TtfFile::STATE_FORMAT.'.php';
+
+    if (is_file($file)) {
+        try {
+            return TtfFile::fromState(require $file, $bytes);
+        } catch (\InvalidArgumentException) {
+            // 其他字体文件或状态已损坏：在下面重新解析
+        }
+    }
+
+    $font = new TtfFile($bytes);
+    $tmp = $file.'.'.getmypid();
+    file_put_contents($tmp, '<?php return '.var_export($font->exportState(), true).';');
+    rename($tmp, $file);
+
+    return $font;
+}
+
+$regular = new PdfFont(cachedFont(__DIR__.'/fonts/DejaVuSans.ttf', __DIR__.'/var/fonts'));
+```
+
+用 `var_export()` 写出、再用 `require` 读回的状态会驻留在 OPcache 的共享
+内存中，恢复只需解析耗时的一小部分。也可以使用 JSON；若使用
+`serialize()`，请用 `unserialize($s, ['allowed_classes' => false])` 读回——
+状态中从不包含对象。
+
+状态仅供应用自己的缓存使用：`fromState()` 只检查其结构，不检查其完整性，
+因此切勿恢复来自外部的状态。对于 `TtfFile::STATE_FORMAT` 不同、属于其他
+字体文件或已损坏的状态，它会抛出 `InvalidArgumentException` 拒绝；此时
+按上例重新解析即可。这对方法属于实验性 API：改变格式的版本会提高
+`STATE_FORMAT`，缓存未命中一次后重新填充，不会造成其他破坏。像上例那样
+把 `STATE_FORMAT` 放进缓存键，不同版本的状态就不会混用。
+
+嵌入的字体数据以 zlib 6 级压缩。在按请求生成文档的场景中，
+`PdfFont::$compressionLevel = 1;` 压缩子集的速度快两到五倍，数据流只大
+几个百分点。-1..9 以外的取值会以 `InvalidArgumentException` 拒绝。
 
 ---
 
