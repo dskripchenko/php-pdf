@@ -4,6 +4,22 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Embedded TrueType subsets were named after the whole font. Their
+  `/BaseFont` and `/FontName` now start with a six-letter tag
+  (ISO 32000-1 §9.6.4), taken from a hash of the subset's bytes, so two
+  subsets of one font no longer share a name and the output stays
+  reproducible. The names in the output change: `/BaseFont /LiberationSans`
+  becomes `/ABCDEF+LiberationSans`. Fonts embedded whole and CFF fonts keep
+  the plain name.
+- PostScript names are written as PDF names (§7.3.5): delimiters, `#`,
+  whitespace and characters outside printable ASCII are escaped as `#xx`.
+- A TrueType subset carries a `/CIDSet` in its font descriptor, which
+  PDF/A-1 requires for a subset font (ISO 19005-1 §6.3.5). It lists every
+  glyph of the subset, as PDF/A-2 and 3 require of a CIDSet.
+
 ## [1.25.0] — 2026-10-19
 
 ### Fixed
