@@ -79,13 +79,45 @@ final readonly class PdfAConfig
 
     /**
      * Render XMP metadata stream (XML with PDF/A + Dublin Core namespaces).
+     *
+     * $info holds the document's /Info values (Title, Author, Subject,
+     * Keywords, Creator, Producer, CreationDate, ModDate, dates in PDF form):
+     * PDF/A requires each to match its XMP property, so they take precedence
+     * over this config's title, author and $producer. Empty values are left
+     * out. Without a CreationDate the current time is used.
+     *
+     * @param  array<string, string>  $info
      */
-    public function xmpMetadata(string $producer = 'dskripchenko/php-pdf'): string
+    public function xmpMetadata(string $producer = 'dskripchenko/php-pdf', array $info = []): string
     {
-        $created = (new \DateTimeImmutable)->format('Y-m-d\TH:i:sP');
-        $title = self::xmlEscape($this->title);
-        $author = self::xmlEscape($this->author);
-        $producer = self::xmlEscape($producer);
+        $value = static fn (string $key, string $fallback = ''): string => self::xmlEscape($info[$key] ?? $fallback);
+        $created = isset($info['CreationDate'])
+            ? self::xmpDate($info['CreationDate'])
+            : (new \DateTimeImmutable)->format('Y-m-d\TH:i:sP');
+        $modified = isset($info['ModDate']) ? self::xmpDate($info['ModDate']) : $created;
+
+        $properties = [];
+        if (($title = $value('Title', $this->title)) !== '') {
+            $properties[] = "<dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">$title</rdf:li></rdf:Alt></dc:title>";
+        }
+        if (($author = $value('Author', $this->author)) !== '') {
+            $properties[] = "<dc:creator><rdf:Seq><rdf:li>$author</rdf:li></rdf:Seq></dc:creator>";
+        }
+        if (($subject = $value('Subject')) !== '') {
+            $properties[] = "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">$subject</rdf:li></rdf:Alt></dc:description>";
+        }
+        if (($keywords = $value('Keywords')) !== '') {
+            $properties[] = "<pdf:Keywords>$keywords</pdf:Keywords>";
+        }
+        if (($creator = $value('Creator')) !== '') {
+            $properties[] = "<xmp:CreatorTool>$creator</xmp:CreatorTool>";
+        }
+        $properties[] = '<pdf:Producer>'.$value('Producer', $producer).'</pdf:Producer>';
+        $properties[] = "<xmp:CreateDate>$created</xmp:CreateDate>";
+        $properties[] = "<xmp:ModifyDate>$modified</xmp:ModifyDate>";
+        $properties[] = "<pdfaid:part>{$this->part}</pdfaid:part>";
+        $properties[] = "<pdfaid:conformance>{$this->conformance}</pdfaid:conformance>";
+        $body = implode("\n      ", $properties);
 
         return <<<XMP
 <?xpacket begin="\u{FEFF}" id="W5M0MpCehiHzreSzNTczkc9d"?>
@@ -96,18 +128,38 @@ final readonly class PdfAConfig
         xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
         xmlns:xmp="http://ns.adobe.com/xap/1.0/"
         xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
-      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">$title</rdf:li></rdf:Alt></dc:title>
-      <dc:creator><rdf:Seq><rdf:li>$author</rdf:li></rdf:Seq></dc:creator>
-      <pdf:Producer>$producer</pdf:Producer>
-      <xmp:CreateDate>$created</xmp:CreateDate>
-      <xmp:ModifyDate>$created</xmp:ModifyDate>
-      <pdfaid:part>{$this->part}</pdfaid:part>
-      <pdfaid:conformance>{$this->conformance}</pdfaid:conformance>
+      $body
     </rdf:Description>
   </rdf:RDF>
 </x:xmpmeta>
 <?xpacket end="w"?>
 XMP;
+    }
+
+    /**
+     * A PDF date (D:YYYYMMDDHHmmSS with an optional Z or +HH'mm' offset,
+     * later fields optional) as an XMP date, the same instant.
+     */
+    private static function xmpDate(string $pdfDate): string
+    {
+        if (preg_match("/^D:(\\d{4})(\\d{2})?(\\d{2})?(\\d{2})?(\\d{2})?(\\d{2})?(?:(Z)|([+-])(\\d{2})'?(\\d{2})?'?)?\$/", $pdfDate, $m) !== 1) {
+            return $pdfDate;
+        }
+        $offset = match (true) {
+            ($m[8] ?? '') !== '' => $m[8].$m[9].':'.(($m[10] ?? '') !== '' ? $m[10] : '00'),
+            default => '+00:00',
+        };
+
+        return sprintf(
+            '%s-%s-%sT%s:%s:%s%s',
+            $m[1],
+            ($m[2] ?? '') !== '' ? $m[2] : '01',
+            ($m[3] ?? '') !== '' ? $m[3] : '01',
+            ($m[4] ?? '') !== '' ? $m[4] : '00',
+            ($m[5] ?? '') !== '' ? $m[5] : '00',
+            ($m[6] ?? '') !== '' ? $m[6] : '00',
+            $offset,
+        );
     }
 
     private static function xmlEscape(string $s): string

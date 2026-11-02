@@ -834,8 +834,35 @@ final class Document
 
     private function formatPdfDate(\DateTimeInterface $dt): string
     {
-        // PDF date format: D:YYYYMMDDHHmmSS+TZ'mm'
-        return 'D:'.$dt->format('YmdHis').'+00\'00\'';
+        // PDF date format: D:YYYYMMDDHHmmSS+TZ'mm', written in UTC.
+        $utc = \DateTimeImmutable::createFromInterface($dt)->setTimezone(new \DateTimeZone('UTC'));
+
+        return 'D:'.$utc->format('YmdHis').'+00\'00\'';
+    }
+
+    /**
+     * The /Info dictionary values: the metadata set on the document, a
+     * default Producer and CreationDate (most readers expect an Info dict in
+     * the Properties dialog), and for PDF/A the config's title and author
+     * where the metadata has none.
+     *
+     * @return array<string, string>
+     */
+    private function infoEntries(): array
+    {
+        $info = $this->metadata + [
+            'Producer' => 'dskripchenko/php-pdf',
+            'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
+        ];
+        if ($this->pdfA !== null) {
+            foreach (['Title' => $this->pdfA->title, 'Author' => $this->pdfA->author] as $key => $value) {
+                if (! isset($info[$key]) && $value !== '') {
+                    $info[$key] = $value;
+                }
+            }
+        }
+
+        return array_map(strval(...), $info);
     }
 
     /**
@@ -1656,9 +1683,13 @@ final class Document
         }
 
         // PDF/A — Metadata stream + OutputIntent + /Lang.
+        // /Info values, resolved once: PDF/A requires the XMP packet to
+        // carry the same values (ISO 19005-1 §6.7.3).
+        $info = $this->infoEntries();
+
         $pdfARef = '';
         if ($this->pdfA !== null) {
-            $xmp = $this->pdfA->xmpMetadata();
+            $xmp = $this->pdfA->xmpMetadata(info: $info);
             // Metadata stream — not filtered, not encrypted.
             $metadataId = $writer->addObject(sprintf(
                 "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
@@ -1885,12 +1916,7 @@ final class Document
 
         $writer->setRoot($catalogId);
 
-        // /Info dictionary is always emitted with default Producer +
-        // CreationDate (most readers expect Info dict in Properties dialog).
-        $meta = $this->metadata + [
-            'Producer' => 'dskripchenko/php-pdf',
-            'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
-        ];
+        $meta = $info;
         $entries = [];
         foreach ($meta as $key => $value) {
             $entries[] = '/'.$key.' '.$this->pdfTextString((string) $value);
