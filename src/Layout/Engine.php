@@ -93,6 +93,9 @@ final class Engine
      */
     private ?int $totalPagesHint = null;
 
+    /** Whether the pass being rendered resolved a NUMPAGES field. */
+    private bool $totalPagesUsed = false;
+
     /**
      * Footnote bookkeeping, keyed by the footnote element itself.
      *
@@ -258,13 +261,15 @@ final class Engine
 
     public function render(AstDocument $document): PdfDocument
     {
-        // Two-pass for NUMPAGES resolution:
+        // Two passes only when NUMPAGES needs the page count:
         //  - Pass 1: render with totalPagesHint=null, count pages
         //  - Pass 2: render with known totalPagesHint, NUMPAGES → actual count
-        // If the document has no NUMPAGES (or no Fields at all), the double
-        // pass still runs, but it is cheap (~2× memory peak for a short time).
+        // A document that never shows the total is finished after pass 1.
         $this->totalPagesHint = null;
         $firstPass = $this->renderOnce($document);
+        if (! $this->totalPagesUsed) {
+            return $firstPass;
+        }
         $this->totalPagesHint = $firstPass->pageCount();
 
         $finalPass = $this->renderOnce($document);
@@ -424,6 +429,8 @@ final class Engine
 
     private function renderOnce(AstDocument $document): PdfDocument
     {
+        $this->totalPagesUsed = false;
+
         // Numbers are handed out in a single walk of the tree, in document
         // order, before anything is laid out. Assigning them as footnotes
         // are met would tie numbering to the order of layout passes, and a
@@ -2614,6 +2621,17 @@ final class Engine
         return $physical + ($ctx->pageSetup->firstPageNumber - 1);
     }
 
+    /**
+     * NUMPAGES: the displayed total, or 99 while measuring in the first
+     * pass. Notes that the document needs a second pass for the real count.
+     */
+    private function resolveTotalPages(?LayoutContext $ctx): int
+    {
+        $this->totalPagesUsed = true;
+
+        return $ctx !== null ? $this->displayedTotalPages($ctx) : ($this->totalPagesHint ?? 99);
+    }
+
     private function displayedTotalPages(LayoutContext $ctx): int
     {
         $count = $this->totalPagesHint ?? 1;
@@ -3285,9 +3303,9 @@ final class Engine
             $ctx->contentWidth -= $insetLeft + $insetRight;
         }
 
-        // Outline entry for heading paragraph (only in the final pass —
-        // not needed during the first pass).
-        if ($p->headingLevel !== null && $this->totalPagesHint !== null) {
+        // Outline entry for heading paragraph. Registered on every pass:
+        // the first pass is the final one unless NUMPAGES needs a second.
+        if ($p->headingLevel !== null) {
             $title = $this->extractPlainText($p->children);
             if ($title !== '') {
                 $ctx->pdf->registerOutlineEntry(
@@ -3473,9 +3491,7 @@ final class Engine
     {
         return match ($f->kind()) {
             Field::PAGE => (string) ($ctx !== null ? $this->displayedPageNumber($ctx) : 1),
-            Field::NUMPAGES => (string) ($ctx !== null
-                ? $this->displayedTotalPages($ctx)
-                : ($this->totalPagesHint ?? 99)),
+            Field::NUMPAGES => (string) $this->resolveTotalPages($ctx),
             Field::DATE => $this->formatDateTime($f->format() ?: 'dd.MM.yyyy'),
             Field::TIME => $this->formatDateTime($f->format() ?: 'HH:mm'),
             Field::MERGEFIELD => $f->format() !== '' ? $f->format() : '?',

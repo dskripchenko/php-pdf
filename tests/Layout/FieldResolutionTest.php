@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Dskripchenko\PhpPdf\Tests\Layout;
 
 use Dskripchenko\PhpPdf\Document;
+use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Field;
 use Dskripchenko\PhpPdf\Element\Paragraph;
+use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
+use Dskripchenko\PhpPdf\Element\Table;
 use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
@@ -104,5 +107,22 @@ final class FieldResolutionTest extends TestCase
         self::assertGreaterThan(1, $pageCount);
         self::assertStringContainsString("Total pages: $pageCount", $text);
         self::assertStringContainsString("END total: $pageCount", $text);
+    }
+
+    #[Test]
+    public function numpages_met_only_on_the_last_page_still_gets_the_real_count(): void
+    {
+        // A document without NUMPAGES is finished after one pass; the second
+        // pass must still run when the only total sits deep in the last page.
+        $blocks = [];
+        for ($i = 0; $i < 100; $i++) {
+            $blocks[] = new Paragraph([new Run("Paragraph $i for filler text content")]);
+        }
+        $blocks[] = new Table([new Row([new Cell([new Paragraph([new Run('Cell total: '), Field::totalPages()])])])]);
+
+        $bytes = (new Document(new Section($blocks)))->toBytes(new Engine(compressStreams: false, defaultFont: $this->font()));
+        $pageCount = substr_count($bytes, '/Type /Page ');
+        self::assertGreaterThan(1, $pageCount);
+        self::assertStringContainsString("Cell total: $pageCount", $this->pdftotext($bytes));
     }
 }
