@@ -149,6 +149,18 @@ final class Engine
      */
     private array $standardFontCache = [];
 
+    /**
+     * Text widths measured in the current render, by style and text. A word
+     * is measured for the block's height, again for line breaking and again
+     * when drawn, and tables repeat the same words row after row.
+     *
+     * @var array<string, float>
+     */
+    private array $widthCache = [];
+
+    /** Entries kept before the width cache starts over. */
+    private const WIDTH_CACHE_LIMIT = 20000;
+
     /** Font ascent and descent, in em, used to place a baseline in its line. */
     private const LINE_ASCENT = 0.905;
 
@@ -265,17 +277,21 @@ final class Engine
         //  - Pass 1: render with totalPagesHint=null, count pages
         //  - Pass 2: render with known totalPagesHint, NUMPAGES → actual count
         // A document that never shows the total is finished after pass 1.
+        // The width cache lives for one render only, so its memory goes
+        // with it.
         $this->totalPagesHint = null;
-        $firstPass = $this->renderOnce($document);
-        if (! $this->totalPagesUsed) {
-            return $firstPass;
+        try {
+            $firstPass = $this->renderOnce($document);
+            if (! $this->totalPagesUsed) {
+                return $firstPass;
+            }
+            $this->totalPagesHint = $firstPass->pageCount();
+
+            return $this->renderOnce($document);
+        } finally {
+            $this->totalPagesHint = null;
+            $this->widthCache = [];
         }
-        $this->totalPagesHint = $firstPass->pageCount();
-
-        $finalPass = $this->renderOnce($document);
-        $this->totalPagesHint = null;
-
-        return $finalPass;
     }
 
     /** Walks the tree once and gives every footnote its number. */
@@ -4282,16 +4298,30 @@ final class Engine
 
     private function measureWidth(string $text, RunStyle $style): float
     {
+        // Everything the width depends on: the font (family, weight, slant
+        // and, through the fallback chain, the text) and the size.
+        $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
+        $key = ($style->bold ? 'b' : '-').($style->italic ? 'i' : '-').pack('e', $sizePt).$style->fontFamily."\0".$text;
+        if (isset($this->widthCache[$key])) {
+            return $this->widthCache[$key];
+        }
+        if (count($this->widthCache) >= self::WIDTH_CACHE_LIMIT) {
+            $this->widthCache = [];
+        }
+
+        return $this->widthCache[$key] = $this->computeWidth($text, $style, $sizePt);
+    }
+
+    private function computeWidth(string $text, RunStyle $style, float $sizePt): float
+    {
         // SHY is invisible → strip for width estimation.
         $text = self::stripSoftHyphens($text);
         $font = $this->resolveEmbeddedFont($style, $text);
         if ($font !== null) {
-            $m = new TextMeasurer($font, $style->sizePt ?? $this->defaultFontSizePt);
-
-            return $m->widthPt($text);
+            return (new TextMeasurer($font, $sizePt))->widthPt($text);
         }
 
-        return $this->standardWidth($text, $this->standardFontFor($style), $style->sizePt ?? $this->defaultFontSizePt);
+        return $this->standardWidth($text, $this->standardFontFor($style), $sizePt);
     }
 
     /**
