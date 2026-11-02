@@ -138,6 +138,14 @@ final class Engine
 
     private ?PdfFontResolver $resolver = null;
 
+    /**
+     * Base-14 face for each family/bold/italic seen, so a CSS family list
+     * isn't parsed again for every word measured.
+     *
+     * @var array<string, StandardFont>
+     */
+    private array $standardFontCache = [];
+
     /** Font ascent and descent, in em, used to place a baseline in its line. */
     private const LINE_ASCENT = 0.905;
 
@@ -4277,6 +4285,13 @@ final class Engine
      */
     private function standardFontFor(RunStyle $style): StandardFont
     {
+        $key = ($style->bold ? 'b' : '-').($style->italic ? 'i' : '-').$style->fontFamily;
+
+        return $this->standardFontCache[$key] ??= $this->resolveStandardFont($style);
+    }
+
+    private function resolveStandardFont(RunStyle $style): StandardFont
+    {
         $base = self::standardFamily($this->fallbackStandard);
         foreach (self::families((string) $style->fontFamily) as $family) {
             $family = strtolower($family);
@@ -4319,7 +4334,14 @@ final class Engine
      */
     private static function families(string $fontFamily): array
     {
-        return array_values(array_filter(array_map('trim', explode(',', $fontFamily)), static fn (string $f): bool => $f !== ''));
+        // Shared across renders; capped so a long-running worker fed many
+        // distinct family strings doesn't grow it without bound.
+        static $cache = [];
+        if (count($cache) >= 256 && ! isset($cache[$fontFamily])) {
+            $cache = [];
+        }
+
+        return $cache[$fontFamily] ??= array_values(array_filter(array_map('trim', explode(',', $fontFamily)), static fn (string $f): bool => $f !== ''));
     }
 
     private static function standardFamily(StandardFont $font): ?string
@@ -5461,13 +5483,12 @@ final class Engine
         LayoutContext $ctx,
     ): void {
         $contentWidth = $cellWidth - $cs->paddingLeftPt - $cs->paddingRightPt;
-        $contentHeight = $this->measureBlockListHeight($cell->children, $contentWidth);
-
-        // Vertical alignment.
+        // Vertical alignment. Only center and bottom need the content's
+        // height, so top-aligned cells (the default) skip measuring it again.
         $availableHeight = $rowHeight - $cs->paddingTopPt - $cs->paddingBottomPt;
         $vOffset = match ($cs->verticalAlign) {
-            VerticalAlignment::Center => max(0, ($availableHeight - $contentHeight) / 2),
-            VerticalAlignment::Bottom => max(0, $availableHeight - $contentHeight),
+            VerticalAlignment::Center => max(0, ($availableHeight - $this->measureBlockListHeight($cell->children, $contentWidth)) / 2),
+            VerticalAlignment::Bottom => max(0, $availableHeight - $this->measureBlockListHeight($cell->children, $contentWidth)),
             default => 0,
         };
 
