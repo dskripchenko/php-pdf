@@ -8,7 +8,8 @@ declare(strict_types=1);
  * Usage: php scripts/conformance/generate.php [output-dir]
  *
  * Output: one PDF per flavour (pdfa-1b, pdfa-1a, pdfa-2b, pdfa-2u, pdfa-3b,
- * plus pdfa-2b-signed — signed, with a signature stamp), built with embedded
+ * plus pdfa-2b-signed — signed, with a signature stamp — and pdfa-1b-annotated /
+ * pdfa-2b-annotated — links and a full /Info dictionary), built with embedded
  * Liberation fonts (run scripts/fetch-fonts.sh first), plus pdfa-1b-cff,
  * pdfa-2u-cff and pdfa-2u-cff-cid — CFF-outline OpenType fonts (Source Sans 3
  * and the CID-keyed test font in tests/fixtures/fonts) — and the vendored sRGB
@@ -18,8 +19,10 @@ declare(strict_types=1);
  */
 
 use Dskripchenko\PhpPdf\Document;
+use Dskripchenko\PhpPdf\Element\Bookmark;
 use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Heading;
+use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
@@ -167,6 +170,37 @@ foreach ($flavours as $name => [$part, $conformance]) {
             part: $part,
             conformance: $conformance,
         ),
+    ));
+    $failures += $ok ? 0 : 1;
+}
+
+// Links and a full /Info dictionary: link annotations need the Print flag,
+// and every /Info entry has to match its XMP property.
+$annotated = new Section([
+    new Heading(1, [new Run('Annotated Reference Document')]),
+    new Paragraph([
+        new Run('An external link to '),
+        Hyperlink::external('https://www.pdfa.org/', [new Run('the PDF Association')]),
+        new Run(', and an internal link to '),
+        Hyperlink::internal('tables', [new Run('the table below')]),
+        new Run('.'),
+    ]),
+    new Heading(2, [new Bookmark('tables', [new Run('Tabular data')])]),
+    new Paragraph([new Run('The link above jumps here.')]),
+]);
+foreach (['pdfa-1b-annotated' => PdfAConfig::PART_1, 'pdfa-2b-annotated' => PdfAConfig::PART_2] as $name => $part) {
+    $ok = $emit($name, new Document(
+        $annotated,
+        metadata: [
+            'Title' => 'php-pdf conformance reference — '.strtoupper($name),
+            'Author' => 'dskripchenko/php-pdf',
+            'Subject' => 'Links and document information',
+            'Keywords' => 'PDF/A, links, metadata',
+            'Creator' => 'scripts/conformance/generate.php',
+            'Producer' => 'dskripchenko/php-pdf conformance',
+        ],
+        lang: 'en',
+        pdfA: new PdfAConfig($iccPath, iccProfileName: 'sRGB2014', lang: 'en', part: $part),
     ));
     $failures += $ok ? 0 : 1;
 }
