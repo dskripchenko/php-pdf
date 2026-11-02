@@ -35,32 +35,36 @@ final readonly class Field implements InlineElement
 
     public const MERGEFIELD = 'MERGEFIELD';
 
+    public RunStyle $style;
+
     public function __construct(
         public string $instruction,
-        public RunStyle $style = new RunStyle,
-    ) {}
+        ?RunStyle $style = null,
+    ) {
+        $this->style = $style ?? RunStyle::default();
+    }
 
-    public static function page(RunStyle $style = new RunStyle): self
+    public static function page(?RunStyle $style = null): self
     {
         return new self(self::PAGE, $style);
     }
 
-    public static function totalPages(RunStyle $style = new RunStyle): self
+    public static function totalPages(?RunStyle $style = null): self
     {
         return new self(self::NUMPAGES, $style);
     }
 
-    public static function date(string $format = 'dd.MM.yyyy', RunStyle $style = new RunStyle): self
+    public static function date(string $format = 'dd.MM.yyyy', ?RunStyle $style = null): self
     {
         return new self(self::DATE.':'.$format, $style);
     }
 
-    public static function time(string $format = 'HH:mm', RunStyle $style = new RunStyle): self
+    public static function time(string $format = 'HH:mm', ?RunStyle $style = null): self
     {
         return new self(self::TIME.':'.$format, $style);
     }
 
-    public static function mergeField(string $name, RunStyle $style = new RunStyle): self
+    public static function mergeField(string $name, ?RunStyle $style = null): self
     {
         return new self(self::MERGEFIELD.':'.$name, $style);
     }

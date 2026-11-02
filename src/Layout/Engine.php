@@ -5540,7 +5540,8 @@ final class Engine
         // cell.style is identical-equal to a bare-default CellStyle (i.e.
         // the user did not set their own style). This is a heuristic —
         // a full cascade with explicit merging is a future improvement.
-        if ($cell->style == new CellStyle) {
+        $default = CellStyle::default();
+        if ($cell->style === $default || $cell->style == $default) {
             return $t->style->defaultCellStyle;
         }
 

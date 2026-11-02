@@ -34,6 +34,18 @@ final readonly class RunStyle
         public ?float $letterSpacingPt = null,
     ) {}
 
+    /**
+     * The all-defaults style, shared. It is immutable, so every element
+     * created without a style can point at the same one instead of each
+     * holding its own copy.
+     */
+    public static function default(): self
+    {
+        static $default = null;
+
+        return $default ??= new self;
+    }
+
     public function withBold(bool $value = true): self
     {
         return $this->copy(bold: $value);

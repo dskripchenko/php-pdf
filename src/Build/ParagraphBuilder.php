@@ -40,8 +40,8 @@ final class ParagraphBuilder
 
     public function __construct()
     {
-        $this->style = new ParagraphStyle;
-        $this->defaultRunStyle = new RunStyle;
+        $this->style = ParagraphStyle::default();
+        $this->defaultRunStyle = RunStyle::default();
     }
 
     public static function new(): self
@@ -53,7 +53,7 @@ final class ParagraphBuilder
 
     public function text(string $text, ?RunStyle $style = null): self
     {
-        $this->children[] = new Run($text, $style ?? new RunStyle);
+        $this->children[] = new Run($text, $style);
 
         return $this;
     }

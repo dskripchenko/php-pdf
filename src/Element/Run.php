@@ -15,8 +15,12 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  */
 final readonly class Run implements InlineElement
 {
+    public RunStyle $style;
+
     public function __construct(
         public string $text,
-        public RunStyle $style = new RunStyle,
-    ) {}
+        ?RunStyle $style = null,
+    ) {
+        $this->style = $style ?? RunStyle::default();
+    }
 }

@@ -15,15 +15,18 @@ use Dskripchenko\PhpPdf\Style\CellStyle;
  */
 final readonly class Cell
 {
+    public CellStyle $style;
+
     /**
      * @param  list<BlockElement>  $children
      */
     public function __construct(
         public array $children = [],
-        public CellStyle $style = new CellStyle,
+        ?CellStyle $style = null,
         public int $columnSpan = 1,
         public int $rowSpan = 1,
     ) {
+        $this->style = $style ?? CellStyle::default();
         if ($columnSpan < 1) {
             throw new \InvalidArgumentException("columnSpan must be ≥ 1, got $columnSpan");
         }

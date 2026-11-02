@@ -15,15 +15,22 @@ use Dskripchenko\PhpPdf\Style\RunStyle;
  */
 final readonly class Paragraph implements BlockElement
 {
+    public ParagraphStyle $style;
+
+    public RunStyle $defaultRunStyle;
+
     /**
      * @param  list<InlineElement>  $children
      */
     public function __construct(
         public array $children = [],
-        public ParagraphStyle $style = new ParagraphStyle,
+        ?ParagraphStyle $style = null,
         public ?int $headingLevel = null,
-        public RunStyle $defaultRunStyle = new RunStyle,
-    ) {}
+        ?RunStyle $defaultRunStyle = null,
+    ) {
+        $this->style = $style ?? ParagraphStyle::default();
+        $this->defaultRunStyle = $defaultRunStyle ?? RunStyle::default();
+    }
 
     public function isEmpty(): bool
     {
