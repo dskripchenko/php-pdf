@@ -472,7 +472,7 @@ final class PdfFont
 
         // Bounded FIFO eviction: drop oldest entry when reached cap.
         if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
-            array_shift($this->decodeCache);
+            unset($this->decodeCache[array_key_first($this->decodeCache)]);
         }
         $this->decodeCache[$utf8] = $out;
 
