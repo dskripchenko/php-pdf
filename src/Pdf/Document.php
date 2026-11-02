@@ -1246,35 +1246,35 @@ final class Document
                 }
                 $body = match ($ann['kind']) {
                     'uri' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /S /URI /URI %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
                         $structParentPart,
                     ),
                     'named' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /Named /N /%s >>%s >>',
                         $rect,
                         $ann['target'],
                         $structParentPart,
                     ),
                     'javascript' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /JavaScript /JS %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
                         $structParentPart,
                     ),
                     'launch' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /Launch /F %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
                         $structParentPart,
                     ),
                     default => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /Dest %s%s >>',
                         $rect,
                         $this->pdfNameString($ann['target']),
@@ -2245,7 +2245,7 @@ final class Document
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s /F 4 '
                 .'%s%s%s /Ff %d /P %d 0 R%s%s >>',
                 $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId, $apRef, $aaPart,
             );
@@ -2261,7 +2261,7 @@ final class Document
             $apRef = sprintf(' /AP << /N << /Yes %d 0 R /Off %d 0 R >> >>', $yesId, $offId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s /F 4 '
                 .'%s%s%s /Ff %d /P %d 0 R /AS %s%s%s >>',
                 $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId,
                 $isChecked ? '/Yes' : '/Off',
@@ -2331,7 +2331,7 @@ final class Document
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s /F 4 '
                 .'%s%s /Ff %d /P %d 0 R%s%s%s%s >>',
                 $rect, $namePart, $tooltipPart, $flags, $pageId,
                 $mkPart, $actionPart, $apRef, $aaPart,
@@ -2351,7 +2351,7 @@ final class Document
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s /F 4 '
                 .'%s%s%s /Opt %s /Ff %d /P %d 0 R%s%s >>',
                 $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId, $apRef, $aaPart,
             );
@@ -2398,7 +2398,7 @@ final class Document
             $exportKey = ltrim($exportName, '/');
             $apRef = sprintf(' /AP << /N << /%s %d 0 R /Off %d 0 R >> >>', $exportKey, $onId, $offId);
             $body = sprintf(
-                '<< /Type /Annot /Subtype /Widget /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /Rect %s /F 4 '
                 .'/Parent %d 0 R /AS %s%s >>',
                 $rect, $parentId, $isChecked ? $exportName : '/Off', $apRef,
             );
