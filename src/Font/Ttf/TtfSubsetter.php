@@ -50,6 +50,16 @@ final class TtfSubsetter
     /** LRU cache size limit (oldest entries evicted on overflow). */
     private const CACHE_MAX = 32;
 
+    /**
+     * Each source font's id in cache keys. Ids are never reused, and an
+     * entry goes away with its font.
+     *
+     * @var \WeakMap<TtfFile, int>|null
+     */
+    private static ?\WeakMap $sourceIds = null;
+
+    private static int $nextSourceId = 0;
+
     /** Force-clear cache (mostly for testing). */
     public static function clearCache(): void
     {
@@ -87,13 +97,15 @@ final class TtfSubsetter
         // Glyph 0 (.notdef) — ALWAYS.
         $used[0] = true;
 
-        // Cache key — source instance ID + sorted glyphs + axes.
+        // Cache key — source font id + sorted glyphs + axes.
         $glyphList = array_keys($used);
         sort($glyphList);
         $axesKey = $variableInstance !== null
             ? serialize($variableInstance->userCoords)
             : '';
-        $cacheKey = spl_object_id($source).'|'.implode(',', $glyphList).'|'.$axesKey;
+        self::$sourceIds ??= new \WeakMap;
+        $sourceId = self::$sourceIds[$source] ??= ++self::$nextSourceId;
+        $cacheKey = $sourceId.'|'.implode(',', $glyphList).'|'.$axesKey;
 
         if (isset(self::$cache[$cacheKey])) {
             // LRU touch — move to end (most recently used).
