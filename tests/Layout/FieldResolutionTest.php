@@ -7,6 +7,7 @@ namespace Dskripchenko\PhpPdf\Tests\Layout;
 use Dskripchenko\PhpPdf\Document;
 use Dskripchenko\PhpPdf\Element\Cell;
 use Dskripchenko\PhpPdf\Element\Field;
+use Dskripchenko\PhpPdf\Element\Hyperlink;
 use Dskripchenko\PhpPdf\Element\Paragraph;
 use Dskripchenko\PhpPdf\Element\Row;
 use Dskripchenko\PhpPdf\Element\Run;
@@ -15,6 +16,7 @@ use Dskripchenko\PhpPdf\Font\Ttf\TtfFile;
 use Dskripchenko\PhpPdf\Layout\Engine;
 use Dskripchenko\PhpPdf\Pdf\PdfFont;
 use Dskripchenko\PhpPdf\Section;
+use Dskripchenko\PhpPdf\Style\RunStyle;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -124,5 +126,57 @@ final class FieldResolutionTest extends TestCase
         $pageCount = substr_count($bytes, '/Type /Page ');
         self::assertGreaterThan(1, $pageCount);
         self::assertStringContainsString("Cell total: $pageCount", $this->pdftotext($bytes));
+    }
+
+    /** @return list<Paragraph> */
+    private function filler(int $count): array
+    {
+        return array_map(
+            fn (int $i) => new Paragraph([new Run("Paragraph $i with words enough to wrap now and then across the width of the page.")]),
+            range(1, $count),
+        );
+    }
+
+    #[Test]
+    public function footer_total_is_right_on_every_page(): void
+    {
+        $footer = new Paragraph([new Run('Page '), Field::page(), new Run(' of '), Field::totalPages()]);
+        $bytes = (new Document(new Section($this->filler(200), footerBlocks: [$footer])))
+            ->toBytes(new Engine(compressStreams: false));
+        $pageCount = substr_count($bytes, '/Type /Page ');
+        self::assertGreaterThan(3, $pageCount);
+        $text = $this->pdftotext($bytes);
+        for ($page = 1; $page <= $pageCount; $page++) {
+            self::assertStringContainsString("Page $page of $pageCount", $text);
+        }
+        self::assertStringNotContainsString(' of 1'."\n", $text);
+    }
+
+    #[Test]
+    public function footer_total_lays_out_as_if_the_number_were_typed(): void
+    {
+        // A large footer that takes one more line with the stand-in 99 than
+        // with the real total: the room it leaves the body must be the room
+        // the real total needs.
+        $big = new RunStyle(sizePt: 30);
+        $footer = fn (Run|Field $total) => new Paragraph([new Run(str_repeat('x', 30).' ', $big), $total]);
+        $render = fn (Run|Field $total) => (new Document(new Section($this->filler(300), footerBlocks: [$footer($total)])))
+            ->toBytes(new Engine(compressStreams: false));
+
+        $withField = $render(Field::totalPages($big));
+        $pageCount = substr_count($withField, '/Type /Page ');
+        $typed = $render(new Run((string) $pageCount, $big));
+
+        self::assertSame($this->pdftotext($typed), $this->pdftotext($withField));
+    }
+
+    #[Test]
+    public function footer_link_beside_the_total_is_kept_once_per_page(): void
+    {
+        $footer = new Paragraph([Hyperlink::external('https://example.com', [new Run('Site')]), new Run(' · '), Field::totalPages()]);
+        $bytes = (new Document(new Section($this->filler(200), footerBlocks: [$footer])))
+            ->toBytes(new Engine(compressStreams: false));
+
+        self::assertSame(substr_count($bytes, '/Type /Page '), substr_count($bytes, '/Subtype /Link'));
     }
 }

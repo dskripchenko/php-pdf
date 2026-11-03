@@ -96,6 +96,23 @@ final class Engine
     /** Whether the pass being rendered resolved a NUMPAGES field. */
     private bool $totalPagesUsed = false;
 
+    /** Whether a NUMPAGES field was met outside the headers and footers. */
+    private bool $totalPagesInBody = false;
+
+    /** NUMPAGES fields resolved so far in this pass. */
+    private int $totalPagesResolved = 0;
+
+    /** Whether headers, footers and fixed blocks are being drawn. */
+    private bool $inPageFurniture = false;
+
+    /**
+     * Headers and footers drawn in the first pass that show the page total,
+     * with what is needed to draw them again once the total is known.
+     *
+     * @var list<array{ctx: LayoutContext, from: array{0: int, 1: array<string, mixed>}, to: array{0: int, 1: array<string, mixed>}, after: array<mixed>, section: Section, fixed: list<Positioned>}>
+     */
+    private array $totalPagesSlots = [];
+
     /**
      * Footnote bookkeeping, keyed by the footnote element itself.
      *
@@ -276,10 +293,12 @@ final class Engine
 
     public function render(AstDocument $document): PdfDocument
     {
-        // Two passes only when NUMPAGES needs the page count:
-        //  - Pass 1: render with totalPagesHint=null, count pages
-        //  - Pass 2: render with known totalPagesHint, NUMPAGES → actual count
-        // A document that never shows the total is finished after pass 1.
+        // NUMPAGES needs the page count, which is known only after layout:
+        //  - Pass 1: render with totalPagesHint=null, count pages.
+        //  - A document that never shows the total is finished.
+        //  - When the total shows only in headers and footers, they are
+        //    drawn again with the count, if that changes nothing else.
+        //  - Otherwise pass 2 renders with the known count.
         // The width cache lives for one render only, so its memory goes
         // with it.
         $this->totalPagesHint = null;
@@ -289,10 +308,14 @@ final class Engine
                 return $firstPass;
             }
             $this->totalPagesHint = $firstPass->pageCount();
+            if (! $this->totalPagesInBody && $this->redrawPageTotals($firstPass)) {
+                return $firstPass;
+            }
 
             return $this->renderOnce($document);
         } finally {
             $this->totalPagesHint = null;
+            $this->totalPagesSlots = [];
             $this->widthCache = [];
         }
     }
@@ -457,6 +480,9 @@ final class Engine
     private function renderOnce(AstDocument $document): PdfDocument
     {
         $this->totalPagesUsed = false;
+        $this->totalPagesInBody = false;
+        $this->totalPagesResolved = 0;
+        $this->totalPagesSlots = [];
 
         // Numbers are handed out in a single walk of the tree, in document
         // order, before anything is laid out. Assigning them as footnotes
@@ -2414,8 +2440,124 @@ final class Engine
      * .. pageHeight]. Cursor starts just below the top edge.
      * Footer bounds: leftX..leftX+contentWidth × [0 .. bottomMargin].
      * Cursor starts sufficiently below the content area.
+     *
+     * When they show the page total, what was drawn is noted so that it
+     * can be drawn again once the total is known.
      */
     private function renderHeaderFooter(LayoutContext $ctx): void
+    {
+        $before = clone $ctx;
+        $from = $ctx->currentPage->contentMark();
+        $resolved = $this->totalPagesResolved;
+        $fixed = $this->fixedPositioned;
+        $this->inPageFurniture = true;
+        try {
+            $this->drawPageFurniture($ctx);
+        } finally {
+            $this->inPageFurniture = false;
+        }
+        if ($this->totalPagesResolved === $resolved) {
+            return;
+        }
+        if ($this->fixedPositioned !== $fixed) {
+            // A fixed block met in a header: drawing it again would not do
+            // the same. Pass 2 handles it.
+            $this->totalPagesInBody = true;
+
+            return;
+        }
+        $this->totalPagesSlots[] = [
+            'ctx' => $before,
+            'from' => $from,
+            'to' => $ctx->currentPage->contentMark(),
+            'after' => self::stateOf($ctx),
+            'section' => $this->currentSection,
+            'fixed' => $fixed,
+        ];
+    }
+
+    /**
+     * Draws headers and footers again with the page total, now known, in
+     * place of what pass 1 drew with a stand-in.
+     *
+     * Pass 2 would draw them with the same total, so the result is the
+     * same as long as they take the same room and change nothing but their
+     * own content: no resource, annotation or outline entry added, the
+     * content stream left in the same state. When any of that does not
+     * hold, false is returned and $pdf is discarded.
+     */
+    private function redrawPageTotals(PdfDocument $pdf): bool
+    {
+        $document = self::stateOf($pdf);
+        $footnotes = [$this->footnoteNumbers, $this->pageFootnotes, $this->pageFootnoteRoom];
+        try {
+            // Last first: a page drawn on twice keeps its earlier offsets.
+            foreach (array_reverse($this->totalPagesSlots) as $slot) {
+                $ctx = clone $slot['ctx'];
+                $page = $ctx->currentPage;
+                $pageState = self::stateOf($page);
+                $this->currentSection = $slot['section'];
+                $this->fixedPositioned = $slot['fixed'];
+                $redrawn = $page->rewriteContent($slot['from'], $slot['to'], function () use ($ctx): void {
+                    $this->inPageFurniture = true;
+                    try {
+                        $this->drawPageFurniture($ctx);
+                    } finally {
+                        $this->inPageFurniture = false;
+                    }
+                });
+                if (! $redrawn
+                    || self::stateOf($ctx) !== $slot['after']
+                    || self::stateOf($page) !== $pageState
+                    || $this->fixedPositioned !== $slot['fixed']) {
+                    return false;
+                }
+            }
+        } finally {
+            $this->currentSection = null;
+            $this->fixedPositioned = [];
+        }
+
+        return self::stateOf($pdf) === $document
+            && [$this->footnoteNumbers, $this->pageFootnotes, $this->pageFootnoteRoom] === $footnotes;
+    }
+
+    /**
+     * An object's properties, for telling whether something changed them:
+     * values as they are, objects by identity and size. The content stream
+     * of a page is left out.
+     *
+     * @return array<mixed>
+     */
+    private static function stateOf(object $object): array
+    {
+        $state = (array) $object;
+        unset($state["\0".Page::class."\0stream"]);
+
+        return self::stateOfValue($state);
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     * @return array<mixed>
+     */
+    private static function stateOfValue(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if (is_array($value)) {
+                $values[$key] = self::stateOfValue($value);
+            } elseif ($value instanceof \Countable) {
+                $values[$key] = [spl_object_id($value), count($value)];
+            } elseif (is_object($value)) {
+                $values[$key] = spl_object_id($value);
+            }
+        }
+
+        return $values;
+    }
+
+    /** Draws fixed blocks, header and footer on the current page. */
+    private function drawPageFurniture(LayoutContext $ctx): void
     {
         if ($this->currentSection === null) {
             return;
@@ -2655,6 +2797,10 @@ final class Engine
     private function resolveTotalPages(?LayoutContext $ctx): int
     {
         $this->totalPagesUsed = true;
+        $this->totalPagesResolved++;
+        if (! $this->inPageFurniture) {
+            $this->totalPagesInBody = true;
+        }
 
         return $ctx !== null ? $this->displayedTotalPages($ctx) : ($this->totalPagesHint ?? 99);
     }
