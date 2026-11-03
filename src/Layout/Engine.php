@@ -158,6 +158,9 @@ final class Engine
      */
     private array $widthCache = [];
 
+    /** @var array<int, RunStyle> Base run style per heading level, 0 for body text. */
+    private array $headingStyles = [];
+
     /** Entries kept before the width cache starts over. */
     private const WIDTH_CACHE_LIMIT = 20000;
 
@@ -312,6 +315,10 @@ final class Engine
     private function collectFootnotes(iterable $nodes): void
     {
         foreach ($nodes as $node) {
+            // Text runs are leaves and the bulk of any tree.
+            if ($node instanceof Run) {
+                continue;
+            }
             if ($node instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
                 $id = spl_object_id($node);
                 if (! isset($this->footnoteNumbers[$id])) {
@@ -428,6 +435,10 @@ final class Engine
     {
         $numbers = [];
         foreach ($nodes as $node) {
+            // Text runs are leaves and the bulk of any tree.
+            if ($node instanceof Run) {
+                continue;
+            }
             if ($node instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
                 $numbers[] = $this->footnoteNumberFor($node);
 
@@ -4406,11 +4417,7 @@ final class Engine
         if (! StandardFontMetrics::has($font->value)) {
             return mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
         }
-        $units = 0;
-        $bytes = WinAnsi::encodeLossy($text);
-        for ($i = 0, $n = strlen($bytes); $i < $n; $i++) {
-            $units += StandardFontMetrics::width($font->value, ord($bytes[$i]));
-        }
+        $units = StandardFontMetrics::stringWidth($font->value, WinAnsi::encodeLossy($text));
 
         return $units * $sizePt / 1000;
     }
@@ -4517,6 +4524,11 @@ final class Engine
      * Can be overridden by the caller via explicit RunStyle/ParagraphStyle.
      */
     private function headingStyle(?int $level): RunStyle
+    {
+        return $this->headingStyles[$level ?? 0] ??= $this->makeHeadingStyle($level);
+    }
+
+    private function makeHeadingStyle(?int $level): RunStyle
     {
         if ($level === null) {
             return new RunStyle(sizePt: $this->defaultFontSizePt);
@@ -4887,6 +4899,10 @@ final class Engine
      */
     private function spanWidth(array $colWidths, int $start, int $span): float
     {
+        if ($span === 1) {
+            return (float) ($colWidths[$start] ?? 0.0);
+        }
+
         return (float) array_sum(array_slice($colWidths, $start, $span));
     }
 
@@ -6124,8 +6140,6 @@ final class Engine
      */
     private function splitWords(string $text): array
     {
-        $parts = preg_split('/\s+/u', trim($text)) ?: [];
-
-        return array_values(array_filter($parts, fn (string $p): bool => $p !== ''));
+        return preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
     }
 }

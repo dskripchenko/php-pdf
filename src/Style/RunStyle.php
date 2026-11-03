@@ -107,6 +107,15 @@ final readonly class RunStyle
      */
     public function inheritFrom(self $parent): self
     {
+        // An all-defaults side adds nothing: the result has the other
+        // side's values, so hand that back instead of a copy.
+        if ($parent === $this || $parent->isEmpty()) {
+            return $this;
+        }
+        if ($this->isEmpty()) {
+            return $parent;
+        }
+
         return new self(
             sizePt: $this->sizePt ?? $parent->sizePt,
             color: $this->color ?? $parent->color,

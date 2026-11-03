@@ -1031,21 +1031,25 @@ final class ContentStream
      */
     private function escapeString(string $s): string
     {
-        $out = '';
-        for ($i = 0; $i < strlen($s); $i++) {
-            $c = $s[$i];
-            $ord = ord($c);
-            if ($c === '\\' || $c === '(' || $c === ')') {
-                $out .= '\\'.$c;
-            } elseif ($ord < 0x20 || $ord > 0x7E) {
-                // Non-printable / non-ASCII: octal \nnn.
-                $out .= sprintf("\\%03o", $ord);
-            } else {
-                $out .= $c;
+        // Backslash and parentheses get a backslash; non-printable and
+        // non-ASCII bytes become octal \nnn. Most text needs neither.
+        static $special = null;
+        static $map = null;
+        if ($special === null) {
+            $special = '\\()';
+            $map = ['\\' => '\\\\', '(' => '\\(', ')' => '\\)'];
+            for ($ord = 0; $ord < 256; $ord++) {
+                if ($ord < 0x20 || $ord > 0x7E) {
+                    $special .= chr($ord);
+                    $map[chr($ord)] = sprintf('\\%03o', $ord);
+                }
             }
         }
+        if (strcspn($s, $special) === strlen($s)) {
+            return $s;
+        }
 
-        return $out;
+        return strtr($s, $map);
     }
 
     /**
