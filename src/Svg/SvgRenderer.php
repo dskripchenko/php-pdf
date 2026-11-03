@@ -293,6 +293,7 @@ final class SvgRenderer
             self::$currentGradients = $previous;
             self::$chainOf = null;
             self::$chain = [];
+            self::$parents = [];
         }
     }
 
@@ -489,12 +490,32 @@ final class SvgRenderer
     private static array $chain = [];
 
     /**
+     * The groups the walk is inside, nearest first, so that a shape's
+     * ancestors are known without asking the document.
+     *
+     * @var list<\SimpleXMLElement>
+     */
+    private static array $parents = [];
+
+    /**
+     * Primes inheritedProperty() with the ancestors of the shape about to
+     * be drawn, taken from the walk.
+     */
+    private static function enter(\SimpleXMLElement $el): void
+    {
+        self::$chainOf = $el;
+        self::$chain = [$el, ...self::$parents];
+    }
+
+    /**
      * @param  callable(float): float  $tx
      * @param  callable(float): float  $ty
      */
     private static function walkElement(\SimpleXMLElement $el, Page $page, callable $tx, callable $ty, float $scaleX, float $scaleY): void
     {
+        array_unshift(self::$parents, $el);
         foreach ($el->children() as $child) {
+            self::enter($child);
             // Apply element-level transform (if present).
             $elTx = $tx;
             $elTy = $ty;
@@ -531,6 +552,7 @@ final class SvgRenderer
                 default => null,
             };
         }
+        array_shift(self::$parents);
     }
 
     /**
@@ -568,6 +590,7 @@ final class SvgRenderer
         $px = static fn (float $x, float $y): float => $a * $x + $c * $y + $e;
         $py = static fn (float $x, float $y): float => $b * $x + $d * $y + $f;
 
+        self::enter($el);
         match ($el->getName()) {
             'rect' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $scaleX, $scaleY))),
             'line' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $scaleX))),
@@ -695,6 +718,7 @@ final class SvgRenderer
      */
     private static function walkElementXY(\SimpleXMLElement $el, Page $page, array $m, float $scaleX, float $scaleY): void
     {
+        array_unshift(self::$parents, $el);
         foreach ($el->children() as $child) {
             // A child's own transform applies inside its group's.
             $matrix = isset($child['transform']) ? self::parseTransform((string) $child['transform']) : null;
@@ -712,6 +736,7 @@ final class SvgRenderer
                 $scaleY,
             );
         }
+        array_shift(self::$parents);
     }
 
     /**
