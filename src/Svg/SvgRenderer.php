@@ -534,9 +534,10 @@ final class SvgRenderer
     }
 
     /**
-     * Apply transform matrix to element-level coords; coords
-     * then pass through original tx/ty (PDF mapping).
+     * A child with a transform, under the page mapping $origTx / $origTy.
      *
+     * @param  callable(float): float  $origTx
+     * @param  callable(float): float  $origTy
      * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $matrix  [a, b, c, d, e, f]
      */
     private static function walkChildTransformed(
@@ -548,46 +549,35 @@ final class SvgRenderer
         float $scaleX,
         float $scaleY,
     ): void {
-        [$a, $b, $c, $d, $e, $f] = $matrix;
-        // Composed transform: SVG coord (x, y) → transformed (a*x+c*y+e, b*x+d*y+f) → PDF.
-        // Single-arg signatures cannot represent cross-coupling, so we
-        // construct point-transforming closures for each method.
-        // Simplest: wrap tx/ty to accept transformed inputs precomputed
-        // by callers. That requires callers compute (a*x + c*y + e, b*x + d*y + f)
-        // before calling tx/ty.
-
+        [$a, $b, $c, $d] = $matrix;
         // Effective scale for stroke-width = sqrt(|a*d - b*c|).
         $effScale = $scaleX * sqrt(max(abs($a * $d - $b * $c), 1e-9));
+        self::drawTransformed($el, $page, self::multiplyMatrix(self::affineTxTy($origTx, $origTy), $matrix), $effScale, $scaleY);
+    }
 
-        $newTx = static function (float $x) use ($a, $c, $e, $origTx): float {
-            // y component injected later through cross-coupled wrappers.
-            // Fallback if used standalone: y = 0.
-            return $origTx($a * $x + $c * 0 + $e);
-        };
-        $newTy = static function (float $y) use ($b, $d, $f, $origTy): float {
-            return $origTy($b * 0 + $d * $y + $f);
-        };
+    /**
+     * Draws an element under $m, the whole mapping from its user space to
+     * the page. Nested transforms are multiplied into $m as the walk goes
+     * down, so a point costs one closure call however deep it sits.
+     *
+     * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $m
+     */
+    private static function drawTransformed(\SimpleXMLElement $el, Page $page, array $m, float $scaleX, float $scaleY): void
+    {
+        [$a, $b, $c, $d, $e, $f] = $m;
+        $px = static fn (float $x, float $y): float => $a * $x + $c * $y + $e;
+        $py = static fn (float $x, float $y): float => $b * $x + $d * $y + $f;
 
-        // Properly transform requires cross-axis coupling. Use combined
-        // wrapper that accepts both x and y as a pair: emit points directly.
-        $px = static function (float $x, float $y) use ($a, $c, $e, $origTx): float {
-            return $origTx($a * $x + $c * $y + $e);
-        };
-        $py = static function (float $x, float $y) use ($b, $d, $f, $origTy): float {
-            return $origTy($b * $x + $d * $y + $f);
-        };
-
-        $tag = $el->getName();
-        match ($tag) {
-            'rect' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY))),
-            'line' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $effScale))),
-            'circle' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, true))),
-            'ellipse' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, false))),
-            'polygon' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, true, $effScale))),
-            'polyline' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, false, $effScale))),
-            'path' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPathXY($el, $page, $px, $py, $effScale))),
-            'text' => self::renderTextXY($el, $page, $px, $py, $effScale),
-            'g' => self::walkElementXY($el, $page, $px, $py, $effScale, $scaleY),
+        match ($el->getName()) {
+            'rect' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $scaleX, $scaleY))),
+            'line' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $scaleX))),
+            'circle' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $scaleX, true))),
+            'ellipse' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $scaleX, false))),
+            'polygon' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, true, $scaleX))),
+            'polyline' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, false, $scaleX))),
+            'path' => self::withDash($el, $page, $scaleX, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPathXY($el, $page, $px, $py, $scaleX))),
+            'text' => self::renderTextXY($el, $page, $px, $py, $scaleX),
+            'g' => self::walkElementXY($el, $page, $m, $scaleX, $scaleY),
             default => null,
         };
     }
@@ -699,38 +689,28 @@ final class SvgRenderer
     }
 
     /**
-     * Walk children with (px, py) cross-coupled point transformers.
+     * Walks a group's children under $m, the group's mapping to the page.
      *
-     * @param  callable(float, float): float  $px
-     * @param  callable(float, float): float  $py
+     * @param  array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float}  $m
      */
-    private static function walkElementXY(\SimpleXMLElement $el, Page $page, callable $px, callable $py, float $scaleX, float $scaleY): void
+    private static function walkElementXY(\SimpleXMLElement $el, Page $page, array $m, float $scaleX, float $scaleY): void
     {
         foreach ($el->children() as $child) {
             // A child's own transform applies inside its group's.
-            $cpx = $px;
-            $cpy = $py;
-            $cScale = $scaleX;
             $matrix = isset($child['transform']) ? self::parseTransform((string) $child['transform']) : null;
-            if ($matrix !== null) {
-                [$a, $b, $c, $d, $e, $f] = $matrix;
-                $cpx = static fn (float $x, float $y): float => $px($a * $x + $c * $y + $e, $b * $x + $d * $y + $f);
-                $cpy = static fn (float $x, float $y): float => $py($a * $x + $c * $y + $e, $b * $x + $d * $y + $f);
-                $cScale = $scaleX * sqrt(max(abs($a * $d - $b * $c), 1e-9));
+            if ($matrix === null) {
+                self::drawTransformed($child, $page, $m, $scaleX, $scaleY);
+
+                continue;
             }
-            $tag = $child->getName();
-            match ($tag) {
-                'rect' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderRectXY($child, $page, $cpx, $cpy, $cScale, $scaleY))),
-                'line' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderLineXY($child, $page, $cpx, $cpy, $cScale))),
-                'circle' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, true))),
-                'ellipse' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, false))),
-                'polygon' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, true, $cScale))),
-                'polyline' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, false, $cScale))),
-                'path' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPathXY($child, $page, $cpx, $cpy, $cScale))),
-                'text' => self::renderTextXY($child, $page, $cpx, $cpy, $cScale),
-                'g' => self::walkElementXY($child, $page, $cpx, $cpy, $cScale, $scaleY),
-                default => null,
-            };
+            [$a, $b, $c, $d] = $matrix;
+            self::drawTransformed(
+                $child,
+                $page,
+                self::multiplyMatrix($m, $matrix),
+                $scaleX * sqrt(max(abs($a * $d - $b * $c), 1e-9)),
+                $scaleY,
+            );
         }
     }
 
