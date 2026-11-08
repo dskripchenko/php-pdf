@@ -517,13 +517,13 @@ final class SvgRenderer
             }
             $tag = $child->getName();
             match ($tag) {
-                'rect' => self::renderRect($child, $page, $elTx, $elTy, $scaleX, $scaleY),
-                'line' => self::withShapeOpacity($child, $page, static fn () => self::renderLine($child, $page, $elTx, $elTy, $scaleX)),
-                'circle' => self::renderCircle($child, $page, $elTx, $elTy, $scaleX, $scaleY),
-                'ellipse' => self::renderEllipse($child, $page, $elTx, $elTy, $scaleX, $scaleY),
-                'polygon' => self::renderPolygon($child, $page, $elTx, $elTy, true, $scaleX),
-                'polyline' => self::renderPolygon($child, $page, $elTx, $elTy, false, $scaleX),
-                'path' => self::withShapeOpacity($child, $page, static fn () => self::renderPath($child, $page, $elTx, $elTy, $scaleX)),
+                'rect' => self::withDash($child, $page, $scaleX, static fn () => self::renderRect($child, $page, $elTx, $elTy, $scaleX, $scaleY)),
+                'line' => self::withDash($child, $page, $scaleX, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderLine($child, $page, $elTx, $elTy, $scaleX))),
+                'circle' => self::withDash($child, $page, $scaleX, static fn () => self::renderCircle($child, $page, $elTx, $elTy, $scaleX, $scaleY)),
+                'ellipse' => self::withDash($child, $page, $scaleX, static fn () => self::renderEllipse($child, $page, $elTx, $elTy, $scaleX, $scaleY)),
+                'polygon' => self::withDash($child, $page, $scaleX, static fn () => self::renderPolygon($child, $page, $elTx, $elTy, true, $scaleX)),
+                'polyline' => self::withDash($child, $page, $scaleX, static fn () => self::renderPolygon($child, $page, $elTx, $elTy, false, $scaleX)),
+                'path' => self::withDash($child, $page, $scaleX, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPath($child, $page, $elTx, $elTy, $scaleX))),
                 'text' => self::renderText($child, $page, $elTx, $elTy, $scaleX),
                 'g' => self::walkElement($child, $page, $elTx, $elTy, $scaleX, $scaleY),
                 'defs' => null, // <defs> children referenced by <use>, not rendered directly.
@@ -579,13 +579,13 @@ final class SvgRenderer
 
         $tag = $el->getName();
         match ($tag) {
-            'rect' => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY)),
-            'line' => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $effScale)),
-            'circle' => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, true)),
-            'ellipse' => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, false)),
-            'polygon' => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, true, $effScale)),
-            'polyline' => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, false, $effScale)),
-            'path' => self::withShapeOpacity($el, $page, static fn () => self::renderPathXY($el, $page, $px, $py, $effScale)),
+            'rect' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderRectXY($el, $page, $px, $py, $effScale, $scaleY))),
+            'line' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderLineXY($el, $page, $px, $py, $effScale))),
+            'circle' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, true))),
+            'ellipse' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderEllipseXY($el, $page, $px, $py, $effScale, false))),
+            'polygon' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, true, $effScale))),
+            'polyline' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPolygonXY($el, $page, $px, $py, false, $effScale))),
+            'path' => self::withDash($el, $page, $effScale, static fn () => self::withShapeOpacity($el, $page, static fn () => self::renderPathXY($el, $page, $px, $py, $effScale))),
             'text' => self::renderTextXY($el, $page, $px, $py, $effScale),
             'g' => self::walkElementXY($el, $page, $px, $py, $effScale, $scaleY),
             default => null,
@@ -606,6 +606,96 @@ final class SvgRenderer
             self::parseOpacity($el, 'stroke-opacity', $opacity),
             $draw,
         );
+    }
+
+    /**
+     * Draws a shape with its `stroke-dasharray` and `stroke-dashoffset`,
+     * scaled to the page as its stroke width is. The pattern lives in its
+     * own graphics state, so it never reaches the next shape. A shape
+     * without a stroke, or with a solid one, is drawn as it is.
+     *
+     * @param  \Closure(): mixed  $draw
+     */
+    private static function withDash(\SimpleXMLElement $el, Page $page, float $scale, \Closure $draw): void
+    {
+        $dash = self::dashPattern($el, $scale);
+        if ($dash === null) {
+            $draw();
+
+            return;
+        }
+        // A line strokes black by default here; other shapes only when asked.
+        $stroke = self::inheritedProperty($el, 'stroke') ?? ($el->getName() === 'line' ? '#000' : null);
+        if (! self::parseColor($stroke)[3]) {
+            $draw();
+
+            return;
+        }
+        $page->withLineDashPattern($dash[0], $dash[1], $draw);
+    }
+
+    /**
+     * The dash pattern of an element's stroke in page units, with its
+     * phase — or null for a solid stroke. As SVG defines: `none`, an
+     * invalid list (a negative length, a length that is not one) and a
+     * list of zeros are solid; a list of odd length is repeated once.
+     *
+     * @return array{0: list<float>, 1: float}|null
+     */
+    private static function dashPattern(\SimpleXMLElement $el, float $scale): ?array
+    {
+        $raw = trim((string) self::inheritedProperty($el, 'stroke-dasharray'));
+        if ($raw === '' || strtolower($raw) === 'none') {
+            return null;
+        }
+        $tokens = preg_split('@\s*,\s*|\s+@', $raw) ?: [];
+        $lengths = [];
+        foreach ($tokens as $token) {
+            $length = self::dashLength($token);
+            if ($length === null || $length < 0) {
+                return null;
+            }
+            $lengths[] = $length;
+        }
+        if ($lengths === [] || array_sum($lengths) <= 0) {
+            return null;
+        }
+        if (count($lengths) % 2 === 1) {
+            $lengths = [...$lengths, ...$lengths];
+        }
+        $pattern = array_map(static fn (float $l): float => $l * $scale, $lengths);
+
+        // The offset may be negative or longer than the pattern; the PDF
+        // phase is the same point within one period.
+        $offset = self::dashLength(trim((string) self::inheritedProperty($el, 'stroke-dashoffset'))) ?? 0.0;
+        $period = array_sum($pattern);
+        $phase = fmod($offset * $scale, $period);
+        if ($phase < 0) {
+            $phase += $period;
+        }
+
+        return [$pattern, $phase];
+    }
+
+    /**
+     * A dash length in user units: a number, bare or in px, or in an
+     * absolute unit (pt, pc, mm, cm, in). Null for anything else.
+     */
+    private static function dashLength(string $token): ?float
+    {
+        if (preg_match('@^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(px|pt|pc|mm|cm|in)?$@i', $token, $m) !== 1) {
+            return null;
+        }
+        $factor = match (strtolower($m[2] ?? '')) {
+            'pt' => 4 / 3,
+            'pc' => 16.0,
+            'mm' => 96 / 25.4,
+            'cm' => 96 / 2.54,
+            'in' => 96.0,
+            default => 1.0,
+        };
+
+        return (float) $m[1] * $factor;
     }
 
     /**
@@ -630,13 +720,13 @@ final class SvgRenderer
             }
             $tag = $child->getName();
             match ($tag) {
-                'rect' => self::withShapeOpacity($child, $page, static fn () => self::renderRectXY($child, $page, $cpx, $cpy, $cScale, $scaleY)),
-                'line' => self::withShapeOpacity($child, $page, static fn () => self::renderLineXY($child, $page, $cpx, $cpy, $cScale)),
-                'circle' => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, true)),
-                'ellipse' => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, false)),
-                'polygon' => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, true, $cScale)),
-                'polyline' => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, false, $cScale)),
-                'path' => self::withShapeOpacity($child, $page, static fn () => self::renderPathXY($child, $page, $cpx, $cpy, $cScale)),
+                'rect' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderRectXY($child, $page, $cpx, $cpy, $cScale, $scaleY))),
+                'line' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderLineXY($child, $page, $cpx, $cpy, $cScale))),
+                'circle' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, true))),
+                'ellipse' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderEllipseXY($child, $page, $cpx, $cpy, $cScale, false))),
+                'polygon' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, true, $cScale))),
+                'polyline' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPolygonXY($child, $page, $cpx, $cpy, false, $cScale))),
+                'path' => self::withDash($child, $page, $cScale, static fn () => self::withShapeOpacity($child, $page, static fn () => self::renderPathXY($child, $page, $cpx, $cpy, $cScale))),
                 'text' => self::renderTextXY($child, $page, $cpx, $cpy, $cScale),
                 'g' => self::walkElementXY($child, $page, $cpx, $cpy, $cScale, $scaleY),
                 default => null,

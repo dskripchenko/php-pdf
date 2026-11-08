@@ -848,6 +848,14 @@ final class ContentStream
         return $this;
     }
 
+    /** Saves the graphics state (q); pair with popGraphicsState(). */
+    public function pushGraphicsState(): self
+    {
+        $this->body .= "q\n";
+
+        return $this;
+    }
+
     public function popGraphicsState(): self
     {
         $this->body .= "Q\n";

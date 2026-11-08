@@ -633,6 +633,32 @@ final class Page implements AppearanceResources
         return $this;
     }
 
+    /**
+     * Runs `$draw` with a dash pattern inside its own graphics state
+     * (q … Q), so the pattern ends with it. An empty pattern draws solid
+     * and adds nothing to the content stream.
+     *
+     * @param  list<float>  $pattern  alternating on/off lengths
+     * @param  callable(): mixed  $draw
+     */
+    public function withLineDashPattern(array $pattern, float $phase, callable $draw): self
+    {
+        if ($pattern === []) {
+            $draw();
+
+            return $this;
+        }
+        $this->stream->pushGraphicsState();
+        $this->stream->setLineDashPattern($pattern, $phase);
+        try {
+            $draw();
+        } finally {
+            $this->stream->popGraphicsState();
+        }
+
+        return $this;
+    }
+
     /** Set line cap (0=butt, 1=round, 2=projecting square). */
     public function setLineCap(int $cap): self
     {
