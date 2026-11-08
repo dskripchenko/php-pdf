@@ -4,6 +4,24 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `Page::withLineDashPattern()` draws inside a graphics state of its own
+  with a dash pattern, so the pattern ends with the drawing;
+  `ContentStream::pushGraphicsState()` saves the state without an
+  ExtGState.
+
+### Fixed
+- SVG ignored `stroke-dasharray` and `stroke-dashoffset`, so dashed lines —
+  a chart's guide line, say — printed solid. Lines, polylines, polygons,
+  paths, rectangles, circles and ellipses now stroke with dashes, under
+  transforms too, scaled as their stroke width. The properties are read
+  from the element, its `style`, a style sheet or a group, as SVG resolves
+  them. `none`, a negative length, a list of zeros or a length in a
+  relative unit (`%`, `em`) strokes solid; a list of odd length is
+  repeated once. The pattern does not reach the next shape.
+
 ## [1.26.0] — 2026-10-27
 
 ### Added

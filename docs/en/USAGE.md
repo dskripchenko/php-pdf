@@ -701,6 +701,9 @@ on a group — fills paths and polygons by the even-odd rule, so a hole drawn
 the same way round as its outline (a ring, the letter O) stays empty.
 Gradients fill any shape, in either `gradientUnits`; `fill`, `stroke` and
 their opacities are inherited from groups, and nested transforms compose.
+Dashed strokes: `stroke-dasharray` and `stroke-dashoffset`, read the same
+way, dash every stroked shape and scale with it like `stroke-width`; `none`
+or an invalid list strokes solid, and a list of odd length is repeated once.
 
 `<text>` is set in the document's fonts — the same family chain, fallbacks
 and bold/italic faces as a paragraph — so Cyrillic and other non-Latin text

@@ -729,6 +729,10 @@ der Buchstabe O), bleibt leer.
 Verläufe füllen jede Form, in beiden `gradientUnits`; `fill`, `stroke` und
 ihre Deckkraft werden von Gruppen geerbt, und verschachtelte Transformationen
 werden verkettet.
+Gestrichelte Konturen: `stroke-dasharray` und `stroke-dashoffset`, ebenso
+gelesen, stricheln jede konturierte Form und skalieren mit ihr wie
+`stroke-width`; `none` oder eine ungültige Liste ergibt eine durchgezogene
+Linie, eine Liste ungerader Länge wird einmal wiederholt.
 
 `<text>` wird in den Schriften des Dokuments gesetzt — dieselbe
 Familienkette, dieselben Ersatzschriften und Fett-/Kursivschnitte wie ein
