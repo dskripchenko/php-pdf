@@ -357,7 +357,7 @@ final class Document
      * carry mcid = null plus a list of child element indexes. Hierarchy
      * lives in the structure tree — marked-content sequences never nest.
      *
-     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int, attributes?: string}>
+     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int, attributes?: string, holdsLink?: bool}>
      */
     private array $structElements = [];
 
@@ -376,6 +376,14 @@ final class Document
      * @var array<int, int>
      */
     private array $structParentLinkKeys = [];
+
+    /**
+     * Links given a place in the structure tree by placeLinkInStructure():
+     * page index → link annotation index → struct element index.
+     *
+     * @var array<int, array<int, int>>
+     */
+    private array $placedLinks = [];
 
     /**
      * Enable Tagged PDF (accessibility).
@@ -460,6 +468,52 @@ final class Document
     public function endStructContainer(): void
     {
         array_pop($this->structContainerStack);
+    }
+
+    /**
+     * Puts the link annotation last added to $page into the structure tree
+     * here, in reading order. Inside an open Link container (opened with
+     * beginStructContainer('Link', ...) around the link's text) the
+     * annotation joins that element, so it holds both the text and the
+     * annotation, as PDF/UA asks (ISO 14289-1 §7.18.5). Otherwise a Link
+     * element is added under the innermost open container.
+     *
+     * Links that are not placed keep their default: a Link element at the
+     * end of the root. Does nothing on an untagged document.
+     */
+    public function placeLinkInStructure(Page $page): void
+    {
+        if (! $this->tagged) {
+            return;
+        }
+        $annotations = count($page->linkAnnotations());
+        if ($annotations === 0) {
+            throw new \LogicException('placeLinkInStructure() needs a link annotation on the page; add the link first.');
+        }
+        $pageIndex = array_search($page, $this->pages, true);
+        if ($pageIndex === false) {
+            throw new \LogicException('placeLinkInStructure() was given a page of another document.');
+        }
+        $parent = $this->structContainerStack === []
+            ? null
+            : $this->structContainerStack[count($this->structContainerStack) - 1];
+        // One annotation per Link container: a second link inside it gets
+        // an element of its own.
+        if ($parent !== null && $this->structElements[$parent]['type'] === 'Link'
+            && ! ($this->structElements[$parent]['holdsLink'] ?? false)) {
+            $idx = $parent;
+            $this->structElements[$parent]['holdsLink'] = true;
+        } else {
+            $idx = count($this->structElements);
+            $this->structElements[] = [
+                'type' => 'Link', 'mcid' => null, 'page' => $page,
+                'altText' => null, 'parent' => $parent, 'children' => [],
+            ];
+            if ($parent !== null) {
+                $this->structElements[$parent]['children'][] = $idx;
+            }
+        }
+        $this->placedLinks[(int) $pageIndex][$annotations - 1] = $idx;
     }
 
     /**
@@ -1276,7 +1330,8 @@ final class Document
 
             // Annotations: emit /Annot objects + reference array.
             $annotIds = [];
-            foreach ($page->linkAnnotations() as $ann) {
+            $placedOnPage = $this->placedLinks[$i] ?? [];
+            foreach ($page->linkAnnotations() as $annIndex => $ann) {
                 $rect = sprintf(
                     '[%s %s %s %s]',
                     $this->fmt($ann['x1']), $this->fmt($ann['y1']),
@@ -1339,16 +1394,23 @@ final class Document
                 // Tagged PDF — register /Link struct element referencing
                 // this annotation via /OBJR; reserve a ParentTree entry
                 // under the reserved StructParent key.
+                // A link placed with placeLinkInStructure() already has its
+                // element in reading order; any other goes at the root.
                 if ($this->tagged) {
-                    $structIdx = count($this->structElements);
-                    $this->structElements[] = [
-                        'type' => 'Link',
-                        'mcid' => null,
-                        'page' => $page,
-                        'objr' => $linkAnnotId,
-                        'parent' => null,
-                        'children' => [],
-                    ];
+                    $structIdx = $placedOnPage[$annIndex] ?? null;
+                    if ($structIdx !== null) {
+                        $this->structElements[$structIdx]['objr'] = $linkAnnotId;
+                    } else {
+                        $structIdx = count($this->structElements);
+                        $this->structElements[] = [
+                            'type' => 'Link',
+                            'mcid' => null,
+                            'page' => $page,
+                            'objr' => $linkAnnotId,
+                            'parent' => null,
+                            'children' => [],
+                        ];
+                    }
                     $this->structParentLinkKeys[$structIdx] = $structParentKey;
                 }
             }
@@ -1656,13 +1718,17 @@ final class Document
                 if (! empty($elem['altText'])) {
                     $altPart = ' /Alt '.$this->pdfTextString((string) $elem['altText']);
                 }
-                if (! empty($elem['objr'])) {
+                if (! empty($elem['objr']) && $elem['children'] === []) {
                     $kPart = sprintf('<< /Type /OBJR /Obj %d 0 R >>', $elem['objr']);
                 } elseif ($elem['mcid'] === null) {
                     $kids = array_map(
                         fn (int $childIdx) => sprintf('%d 0 R', $elemIds[$childIdx]),
                         array_values(array_filter($elem['children'], fn (int $c) => isset($elemIds[$c]))),
                     );
+                    // A Link container holds its text and its annotation.
+                    if (! empty($elem['objr'])) {
+                        $kids[] = sprintf('<< /Type /OBJR /Obj %d 0 R >>', $elem['objr']);
+                    }
                     $kPart = '['.implode(' ', $kids).']';
                 } else {
                     $kPart = (string) $elem['mcid'];
