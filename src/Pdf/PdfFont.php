@@ -609,9 +609,6 @@ final class PdfFont
     public function shapedGlyphs(string $utf8): array
     {
         $decoded = $this->decodeUtf8($utf8);
-        $glyphIds = array_map(fn ($e) => $e['gid'], $decoded);
-        $codepoints = array_map(fn ($e) => $e['cp'], $decoded);
-
         $ligatures = $this->ligaturesEnabled ? $this->ttf->ligatures() : null;
 
         if ($ligatures === null) {
@@ -633,6 +630,8 @@ final class PdfFont
             return $out;
         }
 
+        $glyphIds = array_column($decoded, 'gid');
+        $codepoints = array_column($decoded, 'cp');
         $result = $ligatures->apply($glyphIds);
         // Mapping: source-glyph-index ranges to result glyph + sources.
         // ligatures->apply() returns {glyphs, sourceMap (ligatureGid -> component-gids)}
