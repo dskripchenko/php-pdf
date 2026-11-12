@@ -433,6 +433,35 @@ final class PdfFont
 
         $cps = self::utf8ToCps($utf8);
 
+        // Every script that needs shaping or reordering starts at U+0590, so
+        // text below it (Latin, Greek, Cyrillic) skips the three scans.
+        if ($cps === [] || max($cps) < 0x0590) {
+            $out = [];
+            foreach ($this->ttf->glyphIdsForChars($cps) as $i => $gid) {
+                $out[] = ['cp' => $cps[$i], 'gid' => $gid];
+            }
+        } else {
+            $out = $this->shapeAndMap($cps);
+        }
+
+        // Bounded FIFO eviction: drop oldest entry when reached cap.
+        if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
+            array_shift($this->decodeCache);
+        }
+        $this->decodeCache[$utf8] = $out;
+
+        return $out;
+    }
+
+    /**
+     * decodeUtf8()'s pipeline for text that may need shaping or reordering:
+     * Arabic/Indic shaping, Bidi, cmap and rphf.
+     *
+     * @param  list<int>  $cps
+     * @return list<array{cp: int, gid: int}>
+     */
+    private function shapeAndMap(array $cps): array
+    {
         // Arabic contextual shaping in logical order.
         if ($this->arabicShapingEnabled && self::containsArabic($cps)) {
             $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shapeLogical($cps);
@@ -469,12 +498,6 @@ final class PdfFont
                 }
             }
         }
-
-        // Bounded FIFO eviction: drop oldest entry when reached cap.
-        if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
-            array_shift($this->decodeCache);
-        }
-        $this->decodeCache[$utf8] = $out;
 
         return $out;
     }
@@ -551,6 +574,14 @@ final class PdfFont
      */
     private static function utf8ToCps(string $utf8): array
     {
+        // ASCII (most text) and valid UTF-8 decode in C; the loop below stays
+        // for malformed input, which it decodes its own way.
+        if (! preg_match('/[\x80-\xFF]/', $utf8)) {
+            return $utf8 === '' ? [] : array_values(unpack('C*', $utf8));
+        }
+        if (mb_check_encoding($utf8, 'UTF-8')) {
+            return array_values(unpack('N*', mb_convert_encoding($utf8, 'UTF-32BE', 'UTF-8')));
+        }
         $cps = [];
         $i = 0;
         $len = strlen($utf8);

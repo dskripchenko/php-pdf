@@ -530,6 +530,23 @@ final class TtfFile
         return $this->cmap[$codepoint] ?? 0;
     }
 
+    /**
+     * glyphIdForChar() for a list of codepoints at once.
+     *
+     * @param  list<int>  $codepoints
+     * @return list<int>
+     */
+    public function glyphIdsForChars(array $codepoints): array
+    {
+        $cmap = $this->cmap;
+        $out = [];
+        foreach ($codepoints as $cp) {
+            $out[] = $cmap[$cp] ?? 0;
+        }
+
+        return $out;
+    }
+
     public function advanceWidth(int $glyphId): int
     {
         return $this->advanceWidths[$glyphId] ?? 0;

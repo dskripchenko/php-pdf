@@ -87,6 +87,15 @@ final class PdfFontTextEncodingTest extends TestCase
         self::assertSame([], $font->decodeUtf8(''));
     }
 
+    #[Test]
+    public function glyph_ids_for_chars_matches_one_at_a_time(): void
+    {
+        $ttf = $this->font('liberation-fonts-ttf-2.1.5/LiberationSans-Regular.ttf', true)->ttf();
+        $cps = [0x41, 0x56, 0xE9, 0x416, 0x10FFFF, 0];
+        self::assertSame(array_map($ttf->glyphIdForChar(...), $cps), $ttf->glyphIdsForChars($cps));
+        self::assertSame([], $ttf->glyphIdsForChars([]));
+    }
+
     private function font(string $file, bool $ligatures): PdfFont
     {
         $path = __DIR__.'/../../.cache/fonts/'.$file;
