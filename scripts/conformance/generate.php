@@ -361,4 +361,91 @@ $failures += $emit('pdfa-2b-signed', new Document(
     signature: $signature,
 )) ? 0 : 1;
 
+// PDF/UA-1: a tagged document built on the low-level writer, as a layout
+// engine on top of php-pdf would — headings, a paragraph with a link held
+// in its Link element, a table whose header cells have a scope, and a
+// running footer marked as an artifact. pdfua-1 is PDF/UA alone;
+// pdfa-2u-ua1 is the same document as PDF/A-2u too, checked against both.
+$pdfUaReference = function (?PdfAConfig $pdfA) use ($fontDir): PdfDocument {
+    $regular = new PdfFont(TtfFile::fromFile($fontDir.'/LiberationSans-Regular.ttf'));
+    $bold = new PdfFont(TtfFile::fromFile($fontDir.'/LiberationSans-Bold.ttf'));
+    $pdf = PdfDocument::new();
+    if ($pdfA !== null) {
+        $pdf->enablePdfA($pdfA);
+    }
+    $pdf->enablePdfUa();
+    $pdf->setLang('en');
+    $pdf->metadata(
+        title: 'php-pdf conformance reference — PDF/UA-1',
+        author: 'dskripchenko/php-pdf',
+        creationDate: new DateTimeImmutable('2026-01-01 00:00:00', new DateTimeZone('UTC')),
+    );
+    $page = $pdf->addPage();
+    $leaf = function (string $type, \Closure $draw, array $attributes = []) use ($pdf, $page): void {
+        $mcid = $page->nextMcid();
+        $pdf->addStructElement($type, $mcid, $page, attributes: $attributes);
+        $page->beginMarkedContent($type, $mcid);
+        $draw();
+        $page->endMarkedContent();
+    };
+
+    $pdf->beginStructContainer('Document', $page);
+    $leaf('H1', fn () => $page->showEmbeddedText('Accessible Reference Document', 72, 760, $bold, 20));
+    $leaf('P', fn () => $page->showEmbeddedText('Every piece of content here is tagged, and the footer is an artifact.', 72, 730, $regular, 11));
+
+    $pdf->beginStructContainer('P', $page);
+    $leaf('Span', fn () => $page->showEmbeddedText('Read more at ', 72, 710, $regular, 11));
+    $pdf->beginStructContainer('Link', $page);
+    $leaf('Span', fn () => $page->showEmbeddedText('the PDF Association', 140, 710, $regular, 11, 0.1, 0.2, 0.6));
+    $page->addExternalLink(140, 706, 104, 14, 'https://pdfa.org/', 'The PDF Association website');
+    $pdf->placeLinkInStructure($page);
+    $pdf->endStructContainer();
+    $leaf('Span', fn () => $page->showEmbeddedText('.', 244, 710, $regular, 11));
+    $pdf->endStructContainer();
+
+    $leaf('H2', fn () => $page->showEmbeddedText('Standards', 72, 670, $bold, 14));
+    $rows = [['Standard', 'Number'], ['PDF/A-2', 'ISO 19005-2'], ['PDF/UA-1', 'ISO 14289-1']];
+    $pdf->beginStructContainer('Table', $page);
+    foreach ($rows as $r => $cells) {
+        $y = 645 - $r * 20;
+        $pdf->beginStructContainer('TR', $page);
+        foreach ($cells as $c => $text) {
+            $header = $r === 0;
+            $leaf(
+                $header ? 'TH' : 'TD',
+                fn () => $page->showEmbeddedText($text, 72 + $c * 150, $y, $header ? $bold : $regular, 11),
+                $header ? ['O' => 'Table', 'Scope' => 'Column'] : [],
+            );
+        }
+        $pdf->endStructContainer();
+        $page->beginArtifact('Layout');
+        $page->strokeLine(72, $y - 6, 372, $y - 6, 0.5, 0.6, 0.6, 0.6);
+        $page->endMarkedContent();
+    }
+    $pdf->endStructContainer();
+    $pdf->endStructContainer();
+
+    $page->beginArtifact('Pagination');
+    $page->showEmbeddedText('Page 1', 72, 40, $regular, 9);
+    $page->endMarkedContent();
+
+    return $pdf;
+};
+foreach (['pdfua-1' => null, 'pdfa-2u-ua1' => new PdfAConfig(
+    $iccPath,
+    iccProfileName: 'sRGB2014',
+    lang: 'en',
+    part: PdfAConfig::PART_2,
+    conformance: PdfAConfig::CONFORMANCE_U,
+)] as $name => $pdfA) {
+    $path = $outDir.'/'.$name.'.pdf';
+    try {
+        file_put_contents($path, $pdfUaReference($pdfA)->toBytes());
+        echo "generated $path\n";
+    } catch (\Throwable $e) {
+        fwrite(STDERR, "FAILED $name: {$e->getMessage()}\n");
+        $failures++;
+    }
+}
+
 exit($failures > 0 ? 1 : 0);

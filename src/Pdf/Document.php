@@ -233,6 +233,9 @@ final class Document
      */
     private array $viewerPreferences = [];
 
+    /** PDF/UA part claimed in the XMP metadata, or null for none. */
+    private ?int $pdfUaPart = null;
+
     /** BCP 47 language tag for /Lang in Catalog. */
     private ?string $lang = null;
 
@@ -553,6 +556,35 @@ final class Document
     }
 
     /**
+     * Identify the document as PDF/UA-1 (ISO 14289-1, universal
+     * accessibility). Enables Tagged PDF, writes an XMP metadata stream
+     * with pdfuaid:part 1 (inside the PDF/A packet when PDF/A is enabled
+     * too) and sets DisplayDocTitle, so viewers show the title rather than
+     * the file name.
+     *
+     * The document needs a title (metadata(title: ...)); toBytes() throws
+     * without one. Everything else PDF/UA asks of the content is the
+     * caller's: a struct element for all real content and artifacts for
+     * the rest, alt text on figures, a description on links, /Lang
+     * (setLang()), headings in sequence, embedded fonts.
+     */
+    public function enablePdfUa(): self
+    {
+        if ($this->pdfX !== null) {
+            throw new \LogicException('PDF/UA with PDF/X is not supported — both write their own XMP metadata.');
+        }
+        $this->pdfUaPart = 1;
+        $this->enableTagged();
+
+        return $this;
+    }
+
+    public function isPdfUa(): bool
+    {
+        return $this->pdfUaPart !== null;
+    }
+
+    /**
      * Enable PDF/A compliance. Conformance 'A' (accessibility) auto-enables
      * Tagged PDF.
      */
@@ -594,6 +626,9 @@ final class Document
         }
         if ($this->pdfA !== null) {
             throw new \LogicException('Cannot combine PDF/X and PDF/A — choose one variant.');
+        }
+        if ($this->pdfUaPart !== null) {
+            throw new \LogicException('PDF/UA with PDF/X is not supported — both write their own XMP metadata.');
         }
         $this->pdfX = $config;
         // PDF/X-4 requires PDF 1.6+; X-1a/X-3 require PDF 1.4+.
@@ -1063,6 +1098,9 @@ final class Document
             // (the spec requires ≥ 1 page in the page tree).
             $this->addPage();
         }
+        if ($this->pdfUaPart !== null && trim($this->infoEntries()['Title'] ?? '') === '') {
+            throw new \LogicException('PDF/UA requires a document title — set it with metadata(title: ...).');
+        }
 
         // XRef streams auto-disabled with PKCS#7 signing — the signing path
         // patches /ByteRange + /Contents in classic xref layout.
@@ -1528,8 +1566,14 @@ final class Document
 
             // /Parent points to the immediate parent (root or intermediate).
             $parentId = $pageTree['parentOf'][$i];
-            // Optional /Tabs entry for form field tab navigation.
-            $tabsRef = $page->tabOrder() !== null ? ' /Tabs /'.$page->tabOrder() : '';
+            // Optional /Tabs entry for form field tab navigation. PDF/UA
+            // requires structure order on every page with annotations
+            // (ISO 14289-1 §7.18.3), so that is the default there.
+            $tabOrder = $page->tabOrder();
+            if ($tabOrder === null && $this->pdfUaPart !== null && $annotIds !== []) {
+                $tabOrder = 'S';
+            }
+            $tabsRef = $tabOrder !== null ? ' /Tabs /'.$tabOrder : '';
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
                 .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s%s%s >>',
@@ -1808,7 +1852,7 @@ final class Document
 
         $pdfARef = '';
         if ($this->pdfA !== null) {
-            $xmp = $this->pdfA->xmpMetadata(info: $info);
+            $xmp = $this->pdfA->xmpMetadata(info: $info, pdfUaPart: $this->pdfUaPart);
             // Metadata stream — not filtered, not encrypted.
             $metadataId = $writer->addObject(sprintf(
                 "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
@@ -1841,6 +1885,20 @@ final class Document
                 $outputIntentId,
                 $this->pdfString($this->pdfA->lang),
             );
+        }
+
+        // PDF/UA without PDF/A — an XMP packet of its own, from the same
+        // /Info values (ISO 14289-1 §7.1: the Catalog's /Metadata with
+        // pdfuaid:part).
+        if ($this->pdfUaPart !== null && $this->pdfA === null) {
+            $xmp = XmpPacket::build($info, 'dskripchenko/php-pdf', identification: [
+                'pdfuaid' => ['part' => (string) $this->pdfUaPart],
+            ]);
+            $pdfARef = sprintf(' /Metadata %d 0 R', $writer->addObject(sprintf(
+                "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
+                strlen($xmp),
+                $xmp,
+            )));
         }
 
         // PDF/X — Metadata stream + OutputIntent with /S /GTS_PDFX.
@@ -1951,7 +2009,12 @@ final class Document
 
         // /ViewerPreferences dict.
         $viewerPrefsRef = '';
-        if ($this->viewerPreferences !== []) {
+        $viewerPreferences = $this->viewerPreferences;
+        if ($this->pdfUaPart !== null) {
+            // PDF/UA: show the title, not the file name (ISO 14289-1 §7.1).
+            $viewerPreferences['displayDocTitle'] = true;
+        }
+        if ($viewerPreferences !== []) {
             $entries = [];
             $boolKeys = [
                 'hideToolbar' => 'HideToolbar', 'hideMenubar' => 'HideMenubar',
@@ -1959,18 +2022,18 @@ final class Document
                 'centerWindow' => 'CenterWindow', 'displayDocTitle' => 'DisplayDocTitle',
             ];
             foreach ($boolKeys as $k => $name) {
-                if (isset($this->viewerPreferences[$k])) {
-                    $entries[] = "/$name ".($this->viewerPreferences[$k] ? 'true' : 'false');
+                if (isset($viewerPreferences[$k])) {
+                    $entries[] = "/$name ".($viewerPreferences[$k] ? 'true' : 'false');
                 }
             }
-            if (isset($this->viewerPreferences['direction'])) {
-                $entries[] = '/Direction /'.$this->viewerPreferences['direction'];
+            if (isset($viewerPreferences['direction'])) {
+                $entries[] = '/Direction /'.$viewerPreferences['direction'];
             }
-            if (isset($this->viewerPreferences['printScaling'])) {
-                $entries[] = '/PrintScaling /'.$this->viewerPreferences['printScaling'];
+            if (isset($viewerPreferences['printScaling'])) {
+                $entries[] = '/PrintScaling /'.$viewerPreferences['printScaling'];
             }
-            if (isset($this->viewerPreferences['duplex'])) {
-                $entries[] = '/Duplex /'.$this->viewerPreferences['duplex'];
+            if (isset($viewerPreferences['duplex'])) {
+                $entries[] = '/Duplex /'.$viewerPreferences['duplex'];
             }
             if ($entries !== []) {
                 $viewerPrefsRef = ' /ViewerPreferences << '.implode(' ', $entries).' >>';

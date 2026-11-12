@@ -86,84 +86,23 @@ final readonly class PdfAConfig
      * over this config's title, author and $producer. Empty values are left
      * out. Without a CreationDate the current time is used.
      *
+     * $pdfUaPart adds the PDF/UA identification (pdfuaid:part) for a
+     * document that is both PDF/A and PDF/UA.
+     *
      * @param  array<string, string>  $info
      */
-    public function xmpMetadata(string $producer = 'dskripchenko/php-pdf', array $info = []): string
+    public function xmpMetadata(string $producer = 'dskripchenko/php-pdf', array $info = [], ?int $pdfUaPart = null): string
     {
-        $value = static fn (string $key, string $fallback = ''): string => self::xmlEscape($info[$key] ?? $fallback);
-        $created = isset($info['CreationDate'])
-            ? self::xmpDate($info['CreationDate'])
-            : (new \DateTimeImmutable)->format('Y-m-d\TH:i:sP');
-        $modified = isset($info['ModDate']) ? self::xmpDate($info['ModDate']) : $created;
+        $identification = ['pdfaid' => ['part' => (string) $this->part, 'conformance' => $this->conformance]];
+        if ($pdfUaPart !== null) {
+            $identification['pdfuaid'] = ['part' => (string) $pdfUaPart];
+        }
 
-        $properties = [];
-        if (($title = $value('Title', $this->title)) !== '') {
-            $properties[] = "<dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">$title</rdf:li></rdf:Alt></dc:title>";
-        }
-        if (($author = $value('Author', $this->author)) !== '') {
-            $properties[] = "<dc:creator><rdf:Seq><rdf:li>$author</rdf:li></rdf:Seq></dc:creator>";
-        }
-        if (($subject = $value('Subject')) !== '') {
-            $properties[] = "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">$subject</rdf:li></rdf:Alt></dc:description>";
-        }
-        if (($keywords = $value('Keywords')) !== '') {
-            $properties[] = "<pdf:Keywords>$keywords</pdf:Keywords>";
-        }
-        if (($creator = $value('Creator')) !== '') {
-            $properties[] = "<xmp:CreatorTool>$creator</xmp:CreatorTool>";
-        }
-        $properties[] = '<pdf:Producer>'.$value('Producer', $producer).'</pdf:Producer>';
-        $properties[] = "<xmp:CreateDate>$created</xmp:CreateDate>";
-        $properties[] = "<xmp:ModifyDate>$modified</xmp:ModifyDate>";
-        $properties[] = "<pdfaid:part>{$this->part}</pdfaid:part>";
-        $properties[] = "<pdfaid:conformance>{$this->conformance}</pdfaid:conformance>";
-        $body = implode("\n      ", $properties);
-
-        return <<<XMP
-<?xpacket begin="\u{FEFF}" id="W5M0MpCehiHzreSzNTczkc9d"?>
-<x:xmpmeta xmlns:x="adobe:ns:meta/">
-  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-    <rdf:Description rdf:about=""
-        xmlns:dc="http://purl.org/dc/elements/1.1/"
-        xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
-        xmlns:xmp="http://ns.adobe.com/xap/1.0/"
-        xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
-      $body
-    </rdf:Description>
-  </rdf:RDF>
-</x:xmpmeta>
-<?xpacket end="w"?>
-XMP;
-    }
-
-    /**
-     * A PDF date (D:YYYYMMDDHHmmSS with an optional Z or +HH'mm' offset,
-     * later fields optional) as an XMP date, the same instant.
-     */
-    private static function xmpDate(string $pdfDate): string
-    {
-        if (preg_match("/^D:(\\d{4})(\\d{2})?(\\d{2})?(\\d{2})?(\\d{2})?(\\d{2})?(?:(Z)|([+-])(\\d{2})'?(\\d{2})?'?)?\$/", $pdfDate, $m) !== 1) {
-            return $pdfDate;
-        }
-        $offset = match (true) {
-            ($m[8] ?? '') !== '' => $m[8].$m[9].':'.(($m[10] ?? '') !== '' ? $m[10] : '00'),
-            default => '+00:00',
-        };
-
-        return sprintf(
-            '%s-%s-%sT%s:%s:%s%s',
-            $m[1],
-            ($m[2] ?? '') !== '' ? $m[2] : '01',
-            ($m[3] ?? '') !== '' ? $m[3] : '01',
-            ($m[4] ?? '') !== '' ? $m[4] : '00',
-            ($m[5] ?? '') !== '' ? $m[5] : '00',
-            ($m[6] ?? '') !== '' ? $m[6] : '00',
-            $offset,
+        return XmpPacket::build(
+            $info,
+            $producer,
+            ['Title' => $this->title, 'Author' => $this->author],
+            $identification,
         );
-    }
-
-    private static function xmlEscape(string $s): string
-    {
-        return htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 }
