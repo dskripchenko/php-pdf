@@ -383,6 +383,14 @@ final class PdfFont
     private const DECODE_CACHE_MAX = 2048;
 
     /**
+     * Glyph id to its 4-digit hex character code, as written in a text
+     * string: the CID for CFF fonts, the glyph id itself otherwise.
+     *
+     * @var array<int, string>
+     */
+    private array $cidHex = [];
+
+    /**
      * Disable Arabic shaping (for debug or if font handles
      * shaping itself via GSUB rather than Presentation Forms B).
      */
@@ -764,7 +772,8 @@ final class PdfFont
     {
         $hex = '';
         foreach ($this->shapedGlyphs($utf8) as $shaped) {
-            $hex .= sprintf('%04X', $this->ttf->cidForGlyph($shaped['gid']));
+            $gid = $shaped['gid'];
+            $hex .= $this->cidHex[$gid] ??= sprintf('%04X', $this->ttf->cidForGlyph($gid));
         }
 
         return '<'.$hex.'>';
@@ -793,17 +802,21 @@ final class PdfFont
         $result = [];
         $currentRun = '';
         $prevGid = null;
+        // kerningPdfUnits() inline, with the per-font lookups out of the loop.
+        $kt = $this->ttf->kerningTable();
+        $upm = $this->ttf->unitsPerEm();
         foreach ($this->shapedGlyphs($utf8) as $shaped) {
             $gid = $shaped['gid'];
-            if ($prevGid !== null) {
-                $kern = $this->kerningPdfUnits($prevGid, $gid);
+            if ($prevGid !== null && $kt !== null) {
+                $fu = $kt->lookup($prevGid, $gid);
+                $kern = $fu === 0 ? 0 : (int) round(-$fu * 1000 / $upm);
                 if ($kern !== 0) {
                     $result[] = '<'.$currentRun.'>';
                     $result[] = $kern;
                     $currentRun = '';
                 }
             }
-            $currentRun .= sprintf('%04X', $this->ttf->cidForGlyph($gid));
+            $currentRun .= $this->cidHex[$gid] ??= sprintf('%04X', $this->ttf->cidForGlyph($gid));
             $prevGid = $gid;
         }
         if ($currentRun !== '') {
