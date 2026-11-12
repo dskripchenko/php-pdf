@@ -1238,11 +1238,15 @@ final class Document
                 // Reserve /StructParent number for tagged links — counter
                 // starts after page indices. The annotation dict includes
                 // /StructParent N; ParentTree maps N → struct elem ID.
-                $structParentPart = '';
+                $annotTail = '';
                 $structParentKey = -1;
                 if ($this->tagged) {
                     $structParentKey = count($this->pages) + count($this->structParentLinkKeys);
-                    $structParentPart = sprintf(' /StructParent %d', $structParentKey);
+                    $annotTail = sprintf(' /StructParent %d', $structParentKey);
+                }
+                // Link description for assistive technology (PDF/UA §7.18.5).
+                if ($ann['contents'] !== null) {
+                    $annotTail = ' /Contents '.$this->pdfTextString($ann['contents']).$annotTail;
                 }
                 $body = match ($ann['kind']) {
                     'uri' => sprintf(
@@ -1250,35 +1254,35 @@ final class Document
                         .'/Border [0 0 0] /A << /S /URI /URI %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                     'named' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /Named /N /%s >>%s >>',
                         $rect,
                         $ann['target'],
-                        $structParentPart,
+                        $annotTail,
                     ),
                     'javascript' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /JavaScript /JS %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                     'launch' => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /Launch /F %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                     default => sprintf(
                         '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /Dest %s%s >>',
                         $rect,
                         $this->pdfNameString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                 };
                 $linkAnnotId = $writer->addObject($body);

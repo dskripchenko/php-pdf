@@ -289,7 +289,7 @@ final class Page implements AppearanceResources
     /**
      * Link annotations accumulated on this page.
      *
-     * @var list<array{kind: 'uri'|'internal', x1: float, y1: float, x2: float, y2: float, target: string}>
+     * @var list<array{kind: 'uri'|'internal'|'named'|'javascript'|'launch', x1: float, y1: float, x2: float, y2: float, target: string, contents: ?string}>
      */
     private array $linkAnnotations = [];
 
@@ -1080,14 +1080,19 @@ final class Page implements AppearanceResources
 
     /**
      * External URL link — click inside Rect opens $uri.
+     *
+     * $contents is the link's description (/Contents), read by assistive
+     * technology. PDF/UA requires one on every link (ISO 14289-1 §7.18.5).
+     * The other add*Link() methods take it too.
      */
-    public function addExternalLink(float $x, float $y, float $width, float $height, string $uri): self
+    public function addExternalLink(float $x, float $y, float $width, float $height, string $uri, ?string $contents = null): self
     {
         $this->linkAnnotations[] = [
             'kind' => 'uri',
             'x1' => $x, 'y1' => $y,
             'x2' => $x + $width, 'y2' => $y + $height,
             'target' => $uri,
+            'contents' => $contents,
         ];
 
         return $this;
@@ -1451,13 +1456,14 @@ final class Page implements AppearanceResources
     /**
      * Internal link — click inside Rect jumps to named destination $destName.
      */
-    public function addInternalLink(float $x, float $y, float $width, float $height, string $destName): self
+    public function addInternalLink(float $x, float $y, float $width, float $height, string $destName, ?string $contents = null): self
     {
         $this->linkAnnotations[] = [
             'kind' => 'internal',
             'x1' => $x, 'y1' => $y,
             'x2' => $x + $width, 'y2' => $y + $height,
             'target' => $destName,
+            'contents' => $contents,
         ];
 
         return $this;
@@ -1469,7 +1475,7 @@ final class Page implements AppearanceResources
      * @param  string  $action  one of: NextPage, PrevPage, FirstPage, LastPage,
      *                          Find, Print, SaveAs, GoBack, GoForward.
      */
-    public function addNamedActionLink(float $x, float $y, float $width, float $height, string $action): self
+    public function addNamedActionLink(float $x, float $y, float $width, float $height, string $action, ?string $contents = null): self
     {
         $valid = ['NextPage', 'PrevPage', 'FirstPage', 'LastPage', 'Find', 'Print', 'SaveAs', 'GoBack', 'GoForward'];
         if (! in_array($action, $valid, true)) {
@@ -1480,6 +1486,7 @@ final class Page implements AppearanceResources
             'x1' => $x, 'y1' => $y,
             'x2' => $x + $width, 'y2' => $y + $height,
             'target' => $action,
+            'contents' => $contents,
         ];
 
         return $this;
@@ -1488,13 +1495,14 @@ final class Page implements AppearanceResources
     /**
      * JavaScript link — click executes $script.
      */
-    public function addJavaScriptLink(float $x, float $y, float $width, float $height, string $script): self
+    public function addJavaScriptLink(float $x, float $y, float $width, float $height, string $script, ?string $contents = null): self
     {
         $this->linkAnnotations[] = [
             'kind' => 'javascript',
             'x1' => $x, 'y1' => $y,
             'x2' => $x + $width, 'y2' => $y + $height,
             'target' => $script,
+            'contents' => $contents,
         ];
 
         return $this;
@@ -1505,20 +1513,21 @@ final class Page implements AppearanceResources
      *
      * Note: most PDF readers disable launch actions by default for security.
      */
-    public function addLaunchLink(float $x, float $y, float $width, float $height, string $filePath): self
+    public function addLaunchLink(float $x, float $y, float $width, float $height, string $filePath, ?string $contents = null): self
     {
         $this->linkAnnotations[] = [
             'kind' => 'launch',
             'x1' => $x, 'y1' => $y,
             'x2' => $x + $width, 'y2' => $y + $height,
             'target' => $filePath,
+            'contents' => $contents,
         ];
 
         return $this;
     }
 
     /**
-     * @return list<array{kind: 'uri'|'internal', x1: float, y1: float, x2: float, y2: float, target: string}>
+     * @return list<array{kind: 'uri'|'internal'|'named'|'javascript'|'launch', x1: float, y1: float, x2: float, y2: float, target: string, contents: ?string}>
      *
      * @internal
      */
