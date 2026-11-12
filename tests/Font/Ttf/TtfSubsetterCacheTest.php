@@ -175,4 +175,28 @@ final class TtfSubsetterCacheTest extends TestCase
         TtfSubsetter::clearCache();
         self::assertSame(0, TtfSubsetter::cacheSize());
     }
+
+    #[Test]
+    public function a_freed_font_s_subsets_are_not_served_for_the_next_font(): void
+    {
+        // PHP reuses a freed object's id. Keyed by spl_object_id, the cache
+        // handed Bold the subset of a Regular freed just before: both have
+        // the same glyph order, so the same text meant the same key.
+        $dir = dirname($this->fontPath()).'/';
+        $glyphs = static fn (TtfFile $f): array => array_map(
+            static fn (string $c): int => $f->glyphIdForChar(mb_ord($c)),
+            mb_str_split('Invoice 42'),
+        );
+
+        $regular = new TtfFile((string) file_get_contents($dir.'LiberationSans-Regular.ttf'));
+        $regularSubset = (new TtfSubsetter)->subset($regular, $glyphs($regular));
+        unset($regular);
+
+        $bold = new TtfFile((string) file_get_contents($dir.'LiberationSans-Bold.ttf'));
+        $boldSubset = (new TtfSubsetter)->subset($bold, $glyphs($bold));
+        TtfSubsetter::clearCache();
+
+        self::assertNotSame($regularSubset, $boldSubset);
+        self::assertSame((new TtfSubsetter)->subset($bold, $glyphs($bold)), $boldSubset);
+    }
 }
