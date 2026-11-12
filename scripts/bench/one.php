@@ -16,6 +16,12 @@ if (! function_exists($fn)) {
     exit(2);
 }
 
+// Untimed setup a scenario may need, such as writing its fixtures.
+$prepare = "bench_prepare_{$scenario}";
+if (function_exists($prepare)) {
+    $prepare();
+}
+
 $start = hrtime(true);
 $bytes = $fn();
 $ms = (hrtime(true) - $start) / 1e6;

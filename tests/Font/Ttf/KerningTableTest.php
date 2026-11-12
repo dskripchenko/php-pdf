@@ -179,4 +179,28 @@ final class KerningTableTest extends TestCase
         self::assertFalse($kt->isEmpty());
         self::assertSame(-1, $kt->lookup(1, 3));
     }
+
+    #[Test]
+    public function lookup_run_answers_each_neighbouring_pair_like_lookup(): void
+    {
+        $table = static function (): KerningTable {
+            $kt = new KerningTable;
+            $kt->add(36, 57, -152);
+            $kt->add(57, 36, -140);
+            $kt->add(36, 36, 10);
+
+            return $kt;
+        };
+        $gids = [36, 57, 36, 36, 5, 57];
+        $expected = [0, -152, -140, 10, 0, 0];
+
+        self::assertSame($expected, $table()->lookupRun($gids));
+
+        $warmed = $table();
+        $warmed->lookup(36, 57);
+        self::assertSame($expected, $warmed->lookupRun($gids));
+
+        self::assertSame([], $warmed->lookupRun([]));
+        self::assertSame([0], $warmed->lookupRun([36]));
+    }
 }

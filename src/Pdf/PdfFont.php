@@ -383,6 +383,14 @@ final class PdfFont
     private const DECODE_CACHE_MAX = 2048;
 
     /**
+     * Glyph id to its 4-digit hex character code, as written in a text
+     * string: the CID for CFF fonts, the glyph id itself otherwise.
+     *
+     * @var array<int, string>
+     */
+    private array $cidHex = [];
+
+    /**
      * Disable Arabic shaping (for debug or if font handles
      * shaping itself via GSUB rather than Presentation Forms B).
      */
@@ -433,6 +441,35 @@ final class PdfFont
 
         $cps = self::utf8ToCps($utf8);
 
+        // Every script that needs shaping or reordering starts at U+0590, so
+        // text below it (Latin, Greek, Cyrillic) skips the three scans.
+        if ($cps === [] || max($cps) < 0x0590) {
+            $out = [];
+            foreach ($this->ttf->glyphIdsForChars($cps) as $i => $gid) {
+                $out[] = ['cp' => $cps[$i], 'gid' => $gid];
+            }
+        } else {
+            $out = $this->shapeAndMap($cps);
+        }
+
+        // Bounded FIFO eviction: drop oldest entry when reached cap.
+        if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
+            array_shift($this->decodeCache);
+        }
+        $this->decodeCache[$utf8] = $out;
+
+        return $out;
+    }
+
+    /**
+     * decodeUtf8()'s pipeline for text that may need shaping or reordering:
+     * Arabic/Indic shaping, Bidi, cmap and rphf.
+     *
+     * @param  list<int>  $cps
+     * @return list<array{cp: int, gid: int}>
+     */
+    private function shapeAndMap(array $cps): array
+    {
         // Arabic contextual shaping in logical order.
         if ($this->arabicShapingEnabled && self::containsArabic($cps)) {
             $cps = \Dskripchenko\PhpPdf\Text\ArabicShaper::shapeLogical($cps);
@@ -469,12 +506,6 @@ final class PdfFont
                 }
             }
         }
-
-        // Bounded FIFO eviction: drop oldest entry when reached cap.
-        if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
-            array_shift($this->decodeCache);
-        }
-        $this->decodeCache[$utf8] = $out;
 
         return $out;
     }
@@ -551,6 +582,14 @@ final class PdfFont
      */
     private static function utf8ToCps(string $utf8): array
     {
+        // ASCII (most text) and valid UTF-8 decode in C; the loop below stays
+        // for malformed input, which it decodes its own way.
+        if (! preg_match('/[\x80-\xFF]/', $utf8)) {
+            return $utf8 === '' ? [] : array_values(unpack('C*', $utf8));
+        }
+        if (mb_check_encoding($utf8, 'UTF-8')) {
+            return array_values(unpack('N*', mb_convert_encoding($utf8, 'UTF-32BE', 'UTF-8')));
+        }
         $cps = [];
         $i = 0;
         $len = strlen($utf8);
@@ -609,9 +648,6 @@ final class PdfFont
     public function shapedGlyphs(string $utf8): array
     {
         $decoded = $this->decodeUtf8($utf8);
-        $glyphIds = array_map(fn ($e) => $e['gid'], $decoded);
-        $codepoints = array_map(fn ($e) => $e['cp'], $decoded);
-
         $ligatures = $this->ligaturesEnabled ? $this->ttf->ligatures() : null;
 
         if ($ligatures === null) {
@@ -633,6 +669,8 @@ final class PdfFont
             return $out;
         }
 
+        $glyphIds = array_column($decoded, 'gid');
+        $codepoints = array_column($decoded, 'cp');
         $result = $ligatures->apply($glyphIds);
         // Mapping: source-glyph-index ranges to result glyph + sources.
         // ligatures->apply() returns {glyphs, sourceMap (ligatureGid -> component-gids)}
@@ -723,6 +761,47 @@ final class PdfFont
     }
 
     /**
+     * The glyph ids shapedGlyphs() gives, with the same effect on
+     * usedGlyphs, for drawing. Without ligatures glyphs map one to one to
+     * codepoints, so text below U+0590 skips decodeUtf8()'s per-character
+     * entries and is not cached: a drawn line rarely comes back.
+     *
+     * @return list<int>
+     */
+    private function glyphIdsToShow(string $utf8): array
+    {
+        if ($this->ligaturesEnabled && $this->ttf->ligatures() !== null) {
+            return array_column($this->shapedGlyphs($utf8), 'gid');
+        }
+        $decoded = $this->decodeCache[$utf8] ?? null;
+        if ($decoded === null) {
+            $cps = self::utf8ToCps($utf8);
+            if ($cps === [] || max($cps) < 0x0590) {
+                $gids = $this->ttf->glyphIdsForChars($cps);
+            } else {
+                $decoded = $this->decodeUtf8($utf8);
+            }
+        }
+        if ($decoded !== null) {
+            $cps = array_column($decoded, 'cp');
+            $gids = array_column($decoded, 'gid');
+        }
+        // One write per distinct glyph. array_combine keeps each glyph at its
+        // first position with its last codepoint, as writing them in order
+        // would; glyph 0 stays out of ToUnicode (see shapedGlyphs()).
+        $byGid = array_combine($gids, $cps);
+        unset($byGid[0]);
+        foreach ($byGid as $gid => $cp) {
+            $used = $this->usedGlyphs[$gid] ?? null;
+            if ($used === null || isset($used[1]) || $used[0] !== $cp) {
+                $this->usedGlyphs[$gid] = [$cp];
+            }
+        }
+
+        return $gids;
+    }
+
+    /**
      * Encodes UTF-8 text as a hex glyph-ID string for the simple Tj operator
      * with Identity-H encoding. Applies ligature substitution via
      * shapedGlyphs(). Without kerning - for the kerning-aware version see
@@ -734,7 +813,8 @@ final class PdfFont
     {
         $hex = '';
         foreach ($this->shapedGlyphs($utf8) as $shaped) {
-            $hex .= sprintf('%04X', $this->ttf->cidForGlyph($shaped['gid']));
+            $gid = $shaped['gid'];
+            $hex .= $this->cidHex[$gid] ??= sprintf('%04X', $this->ttf->cidForGlyph($gid));
         }
 
         return '<'.$hex.'>';
@@ -762,19 +842,19 @@ final class PdfFont
     {
         $result = [];
         $currentRun = '';
-        $prevGid = null;
-        foreach ($this->shapedGlyphs($utf8) as $shaped) {
-            $gid = $shaped['gid'];
-            if ($prevGid !== null) {
-                $kern = $this->kerningPdfUnits($prevGid, $gid);
-                if ($kern !== 0) {
-                    $result[] = '<'.$currentRun.'>';
-                    $result[] = $kern;
-                    $currentRun = '';
-                }
+        // kerningPdfUnits() for the whole run at once; element 0 is always 0.
+        $gids = $this->glyphIdsToShow($utf8);
+        $kerns = $this->ttf->kerningTable()?->lookupRun($gids);
+        $upm = $this->ttf->unitsPerEm();
+        foreach ($gids as $i => $gid) {
+            $fu = $kerns === null ? 0 : $kerns[$i];
+            $kern = $fu === 0 ? 0 : (int) round(-$fu * 1000 / $upm);
+            if ($kern !== 0) {
+                $result[] = '<'.$currentRun.'>';
+                $result[] = $kern;
+                $currentRun = '';
             }
-            $currentRun .= sprintf('%04X', $this->ttf->cidForGlyph($gid));
-            $prevGid = $gid;
+            $currentRun .= $this->cidHex[$gid] ??= sprintf('%04X', $this->ttf->cidForGlyph($gid));
         }
         if ($currentRun !== '') {
             $result[] = '<'.$currentRun.'>';

@@ -946,6 +946,33 @@ final class Page implements AppearanceResources
     }
 
     /**
+     * Where the page's content stands. See {@see ContentStream::mark()}.
+     *
+     * @internal
+     *
+     * @return array{0: int, 1: array<string, mixed>}
+     */
+    public function contentMark(): array
+    {
+        return $this->stream->mark();
+    }
+
+    /**
+     * Draws the content between two marks again. See
+     * {@see ContentStream::rewrite()}.
+     *
+     * @internal
+     *
+     * @param  array{0: int, 1: array<string, mixed>}  $from
+     * @param  array{0: int, 1: array<string, mixed>}  $to
+     * @param  \Closure(): void  $draw
+     */
+    public function rewriteContent(array $from, array $to, \Closure $draw): bool
+    {
+        return $this->stream->rewrite($from, $to, $draw);
+    }
+
+    /**
      * Begin /Artifact marked content (PDF/UA — content
      * excluded from struct tree).
      */

@@ -93,6 +93,26 @@ final class Engine
      */
     private ?int $totalPagesHint = null;
 
+    /** Whether the pass being rendered resolved a NUMPAGES field. */
+    private bool $totalPagesUsed = false;
+
+    /** Whether a NUMPAGES field was met outside the headers and footers. */
+    private bool $totalPagesInBody = false;
+
+    /** NUMPAGES fields resolved so far in this pass. */
+    private int $totalPagesResolved = 0;
+
+    /** Whether headers, footers and fixed blocks are being drawn. */
+    private bool $inPageFurniture = false;
+
+    /**
+     * Headers and footers drawn in the first pass that show the page total,
+     * with what is needed to draw them again once the total is known.
+     *
+     * @var list<array{ctx: LayoutContext, from: array{0: int, 1: array<string, mixed>}, to: array{0: int, 1: array<string, mixed>}, after: array<mixed>, section: Section, fixed: list<Positioned>}>
+     */
+    private array $totalPagesSlots = [];
+
     /**
      * Footnote bookkeeping, keyed by the footnote element itself.
      *
@@ -137,6 +157,29 @@ final class Engine
     private array $fixedPositioned = [];
 
     private ?PdfFontResolver $resolver = null;
+
+    /**
+     * Base-14 face for each family/bold/italic seen, so a CSS family list
+     * isn't parsed again for every word measured.
+     *
+     * @var array<string, StandardFont>
+     */
+    private array $standardFontCache = [];
+
+    /**
+     * Text widths measured in the current render, by style and text. A word
+     * is measured for the block's height, again for line breaking and again
+     * when drawn, and tables repeat the same words row after row.
+     *
+     * @var array<string, float>
+     */
+    private array $widthCache = [];
+
+    /** @var array<int, RunStyle> Base run style per heading level, 0 for body text. */
+    private array $headingStyles = [];
+
+    /** Entries kept before the width cache starts over. */
+    private const WIDTH_CACHE_LIMIT = 20000;
 
     /** Font ascent and descent, in em, used to place a baseline in its line. */
     private const LINE_ASCENT = 0.905;
@@ -250,19 +293,31 @@ final class Engine
 
     public function render(AstDocument $document): PdfDocument
     {
-        // Two-pass for NUMPAGES resolution:
-        //  - Pass 1: render with totalPagesHint=null, count pages
-        //  - Pass 2: render with known totalPagesHint, NUMPAGES → actual count
-        // If the document has no NUMPAGES (or no Fields at all), the double
-        // pass still runs, but it is cheap (~2× memory peak for a short time).
+        // NUMPAGES needs the page count, which is known only after layout:
+        //  - Pass 1: render with totalPagesHint=null, count pages.
+        //  - A document that never shows the total is finished.
+        //  - When the total shows only in headers and footers, they are
+        //    drawn again with the count, if that changes nothing else.
+        //  - Otherwise pass 2 renders with the known count.
+        // The width cache lives for one render only, so its memory goes
+        // with it.
         $this->totalPagesHint = null;
-        $firstPass = $this->renderOnce($document);
-        $this->totalPagesHint = $firstPass->pageCount();
+        try {
+            $firstPass = $this->renderOnce($document);
+            if (! $this->totalPagesUsed) {
+                return $firstPass;
+            }
+            $this->totalPagesHint = $firstPass->pageCount();
+            if (! $this->totalPagesInBody && $this->redrawPageTotals($firstPass)) {
+                return $firstPass;
+            }
 
-        $finalPass = $this->renderOnce($document);
-        $this->totalPagesHint = null;
-
-        return $finalPass;
+            return $this->renderOnce($document);
+        } finally {
+            $this->totalPagesHint = null;
+            $this->totalPagesSlots = [];
+            $this->widthCache = [];
+        }
     }
 
     /** Walks the tree once and gives every footnote its number. */
@@ -283,6 +338,10 @@ final class Engine
     private function collectFootnotes(iterable $nodes): void
     {
         foreach ($nodes as $node) {
+            // Text runs are leaves and the bulk of any tree.
+            if ($node instanceof Run) {
+                continue;
+            }
             if ($node instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
                 $id = spl_object_id($node);
                 if (! isset($this->footnoteNumbers[$id])) {
@@ -399,6 +458,10 @@ final class Engine
     {
         $numbers = [];
         foreach ($nodes as $node) {
+            // Text runs are leaves and the bulk of any tree.
+            if ($node instanceof Run) {
+                continue;
+            }
             if ($node instanceof \Dskripchenko\PhpPdf\Element\Footnote) {
                 $numbers[] = $this->footnoteNumberFor($node);
 
@@ -416,6 +479,11 @@ final class Engine
 
     private function renderOnce(AstDocument $document): PdfDocument
     {
+        $this->totalPagesUsed = false;
+        $this->totalPagesInBody = false;
+        $this->totalPagesResolved = 0;
+        $this->totalPagesSlots = [];
+
         // Numbers are handed out in a single walk of the tree, in document
         // order, before anything is laid out. Assigning them as footnotes
         // are met would tie numbering to the order of layout passes, and a
@@ -2372,8 +2440,124 @@ final class Engine
      * .. pageHeight]. Cursor starts just below the top edge.
      * Footer bounds: leftX..leftX+contentWidth × [0 .. bottomMargin].
      * Cursor starts sufficiently below the content area.
+     *
+     * When they show the page total, what was drawn is noted so that it
+     * can be drawn again once the total is known.
      */
     private function renderHeaderFooter(LayoutContext $ctx): void
+    {
+        $before = clone $ctx;
+        $from = $ctx->currentPage->contentMark();
+        $resolved = $this->totalPagesResolved;
+        $fixed = $this->fixedPositioned;
+        $this->inPageFurniture = true;
+        try {
+            $this->drawPageFurniture($ctx);
+        } finally {
+            $this->inPageFurniture = false;
+        }
+        if ($this->totalPagesResolved === $resolved) {
+            return;
+        }
+        if ($this->fixedPositioned !== $fixed) {
+            // A fixed block met in a header: drawing it again would not do
+            // the same. Pass 2 handles it.
+            $this->totalPagesInBody = true;
+
+            return;
+        }
+        $this->totalPagesSlots[] = [
+            'ctx' => $before,
+            'from' => $from,
+            'to' => $ctx->currentPage->contentMark(),
+            'after' => self::stateOf($ctx),
+            'section' => $this->currentSection,
+            'fixed' => $fixed,
+        ];
+    }
+
+    /**
+     * Draws headers and footers again with the page total, now known, in
+     * place of what pass 1 drew with a stand-in.
+     *
+     * Pass 2 would draw them with the same total, so the result is the
+     * same as long as they take the same room and change nothing but their
+     * own content: no resource, annotation or outline entry added, the
+     * content stream left in the same state. When any of that does not
+     * hold, false is returned and $pdf is discarded.
+     */
+    private function redrawPageTotals(PdfDocument $pdf): bool
+    {
+        $document = self::stateOf($pdf);
+        $footnotes = [$this->footnoteNumbers, $this->pageFootnotes, $this->pageFootnoteRoom];
+        try {
+            // Last first: a page drawn on twice keeps its earlier offsets.
+            foreach (array_reverse($this->totalPagesSlots) as $slot) {
+                $ctx = clone $slot['ctx'];
+                $page = $ctx->currentPage;
+                $pageState = self::stateOf($page);
+                $this->currentSection = $slot['section'];
+                $this->fixedPositioned = $slot['fixed'];
+                $redrawn = $page->rewriteContent($slot['from'], $slot['to'], function () use ($ctx): void {
+                    $this->inPageFurniture = true;
+                    try {
+                        $this->drawPageFurniture($ctx);
+                    } finally {
+                        $this->inPageFurniture = false;
+                    }
+                });
+                if (! $redrawn
+                    || self::stateOf($ctx) !== $slot['after']
+                    || self::stateOf($page) !== $pageState
+                    || $this->fixedPositioned !== $slot['fixed']) {
+                    return false;
+                }
+            }
+        } finally {
+            $this->currentSection = null;
+            $this->fixedPositioned = [];
+        }
+
+        return self::stateOf($pdf) === $document
+            && [$this->footnoteNumbers, $this->pageFootnotes, $this->pageFootnoteRoom] === $footnotes;
+    }
+
+    /**
+     * An object's properties, for telling whether something changed them:
+     * values as they are, objects by identity and size. The content stream
+     * of a page is left out.
+     *
+     * @return array<mixed>
+     */
+    private static function stateOf(object $object): array
+    {
+        $state = (array) $object;
+        unset($state["\0".Page::class."\0stream"]);
+
+        return self::stateOfValue($state);
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     * @return array<mixed>
+     */
+    private static function stateOfValue(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if (is_array($value)) {
+                $values[$key] = self::stateOfValue($value);
+            } elseif ($value instanceof \Countable) {
+                $values[$key] = [spl_object_id($value), count($value)];
+            } elseif (is_object($value)) {
+                $values[$key] = spl_object_id($value);
+            }
+        }
+
+        return $values;
+    }
+
+    /** Draws fixed blocks, header and footer on the current page. */
+    private function drawPageFurniture(LayoutContext $ctx): void
     {
         if ($this->currentSection === null) {
             return;
@@ -2604,6 +2788,21 @@ final class Engine
         }
 
         return $physical + ($ctx->pageSetup->firstPageNumber - 1);
+    }
+
+    /**
+     * NUMPAGES: the displayed total, or 99 while measuring in the first
+     * pass. Notes that the document needs a second pass for the real count.
+     */
+    private function resolveTotalPages(?LayoutContext $ctx): int
+    {
+        $this->totalPagesUsed = true;
+        $this->totalPagesResolved++;
+        if (! $this->inPageFurniture) {
+            $this->totalPagesInBody = true;
+        }
+
+        return $ctx !== null ? $this->displayedTotalPages($ctx) : ($this->totalPagesHint ?? 99);
     }
 
     private function displayedTotalPages(LayoutContext $ctx): int
@@ -3277,9 +3476,9 @@ final class Engine
             $ctx->contentWidth -= $insetLeft + $insetRight;
         }
 
-        // Outline entry for heading paragraph (only in the final pass —
-        // not needed during the first pass).
-        if ($p->headingLevel !== null && $this->totalPagesHint !== null) {
+        // Outline entry for heading paragraph. Registered on every pass:
+        // the first pass is the final one unless NUMPAGES needs a second.
+        if ($p->headingLevel !== null) {
             $title = $this->extractPlainText($p->children);
             if ($title !== '') {
                 $ctx->pdf->registerOutlineEntry(
@@ -3465,9 +3664,7 @@ final class Engine
     {
         return match ($f->kind()) {
             Field::PAGE => (string) ($ctx !== null ? $this->displayedPageNumber($ctx) : 1),
-            Field::NUMPAGES => (string) ($ctx !== null
-                ? $this->displayedTotalPages($ctx)
-                : ($this->totalPagesHint ?? 99)),
+            Field::NUMPAGES => (string) $this->resolveTotalPages($ctx),
             Field::DATE => $this->formatDateTime($f->format() ?: 'dd.MM.yyyy'),
             Field::TIME => $this->formatDateTime($f->format() ?: 'HH:mm'),
             Field::MERGEFIELD => $f->format() !== '' ? $f->format() : '?',
@@ -4258,16 +4455,30 @@ final class Engine
 
     private function measureWidth(string $text, RunStyle $style): float
     {
+        // Everything the width depends on: the font (family, weight, slant
+        // and, through the fallback chain, the text) and the size.
+        $sizePt = $style->sizePt ?? $this->defaultFontSizePt;
+        $key = ($style->bold ? 'b' : '-').($style->italic ? 'i' : '-').pack('e', $sizePt).$style->fontFamily."\0".$text;
+        if (isset($this->widthCache[$key])) {
+            return $this->widthCache[$key];
+        }
+        if (count($this->widthCache) >= self::WIDTH_CACHE_LIMIT) {
+            $this->widthCache = [];
+        }
+
+        return $this->widthCache[$key] = $this->computeWidth($text, $style, $sizePt);
+    }
+
+    private function computeWidth(string $text, RunStyle $style, float $sizePt): float
+    {
         // SHY is invisible → strip for width estimation.
         $text = self::stripSoftHyphens($text);
         $font = $this->resolveEmbeddedFont($style, $text);
         if ($font !== null) {
-            $m = new TextMeasurer($font, $style->sizePt ?? $this->defaultFontSizePt);
-
-            return $m->widthPt($text);
+            return (new TextMeasurer($font, $sizePt))->widthPt($text);
         }
 
-        return $this->standardWidth($text, $this->standardFontFor($style), $style->sizePt ?? $this->defaultFontSizePt);
+        return $this->standardWidth($text, $this->standardFontFor($style), $sizePt);
     }
 
     /**
@@ -4276,6 +4487,13 @@ final class Engine
      * mono → Courier, sans → Helvetica), in the run's weight and slant.
      */
     private function standardFontFor(RunStyle $style): StandardFont
+    {
+        $key = ($style->bold ? 'b' : '-').($style->italic ? 'i' : '-').$style->fontFamily;
+
+        return $this->standardFontCache[$key] ??= $this->resolveStandardFont($style);
+    }
+
+    private function resolveStandardFont(RunStyle $style): StandardFont
     {
         $base = self::standardFamily($this->fallbackStandard);
         foreach (self::families((string) $style->fontFamily) as $family) {
@@ -4319,7 +4537,14 @@ final class Engine
      */
     private static function families(string $fontFamily): array
     {
-        return array_values(array_filter(array_map('trim', explode(',', $fontFamily)), static fn (string $f): bool => $f !== ''));
+        // Shared across renders; capped so a long-running worker fed many
+        // distinct family strings doesn't grow it without bound.
+        static $cache = [];
+        if (count($cache) >= 256 && ! isset($cache[$fontFamily])) {
+            $cache = [];
+        }
+
+        return $cache[$fontFamily] ??= array_values(array_filter(array_map('trim', explode(',', $fontFamily)), static fn (string $f): bool => $f !== ''));
     }
 
     private static function standardFamily(StandardFont $font): ?string
@@ -4338,11 +4563,7 @@ final class Engine
         if (! StandardFontMetrics::has($font->value)) {
             return mb_strlen($text, 'UTF-8') * $sizePt * 0.5;
         }
-        $units = 0;
-        $bytes = WinAnsi::encodeLossy($text);
-        for ($i = 0, $n = strlen($bytes); $i < $n; $i++) {
-            $units += StandardFontMetrics::width($font->value, ord($bytes[$i]));
-        }
+        $units = StandardFontMetrics::stringWidth($font->value, WinAnsi::encodeLossy($text));
 
         return $units * $sizePt / 1000;
     }
@@ -4449,6 +4670,11 @@ final class Engine
      * Can be overridden by the caller via explicit RunStyle/ParagraphStyle.
      */
     private function headingStyle(?int $level): RunStyle
+    {
+        return $this->headingStyles[$level ?? 0] ??= $this->makeHeadingStyle($level);
+    }
+
+    private function makeHeadingStyle(?int $level): RunStyle
     {
         if ($level === null) {
             return new RunStyle(sizePt: $this->defaultFontSizePt);
@@ -4819,6 +5045,10 @@ final class Engine
      */
     private function spanWidth(array $colWidths, int $start, int $span): float
     {
+        if ($span === 1) {
+            return (float) ($colWidths[$start] ?? 0.0);
+        }
+
         return (float) array_sum(array_slice($colWidths, $start, $span));
     }
 
@@ -5461,13 +5691,12 @@ final class Engine
         LayoutContext $ctx,
     ): void {
         $contentWidth = $cellWidth - $cs->paddingLeftPt - $cs->paddingRightPt;
-        $contentHeight = $this->measureBlockListHeight($cell->children, $contentWidth);
-
-        // Vertical alignment.
+        // Vertical alignment. Only center and bottom need the content's
+        // height, so top-aligned cells (the default) skip measuring it again.
         $availableHeight = $rowHeight - $cs->paddingTopPt - $cs->paddingBottomPt;
         $vOffset = match ($cs->verticalAlign) {
-            VerticalAlignment::Center => max(0, ($availableHeight - $contentHeight) / 2),
-            VerticalAlignment::Bottom => max(0, $availableHeight - $contentHeight),
+            VerticalAlignment::Center => max(0, ($availableHeight - $this->measureBlockListHeight($cell->children, $contentWidth)) / 2),
+            VerticalAlignment::Bottom => max(0, $availableHeight - $this->measureBlockListHeight($cell->children, $contentWidth)),
             default => 0,
         };
 
@@ -5519,7 +5748,8 @@ final class Engine
         // cell.style is identical-equal to a bare-default CellStyle (i.e.
         // the user did not set their own style). This is a heuristic —
         // a full cascade with explicit merging is a future improvement.
-        if ($cell->style == new CellStyle) {
+        $default = CellStyle::default();
+        if ($cell->style === $default || $cell->style == $default) {
             return $t->style->defaultCellStyle;
         }
 
@@ -6056,8 +6286,6 @@ final class Engine
      */
     private function splitWords(string $text): array
     {
-        $parts = preg_split('/\s+/u', trim($text)) ?: [];
-
-        return array_values(array_filter($parts, fn (string $p): bool => $p !== ''));
+        return preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
     }
 }

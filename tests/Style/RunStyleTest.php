@@ -82,4 +82,45 @@ final class RunStyleTest extends TestCase
         $s = (new RunStyle)->withSizePt(14.5);
         self::assertSame(14.5, $s->sizePt);
     }
+
+    #[Test]
+    public function inheritFrom_with_a_default_side_returns_the_other(): void
+    {
+        $styled = new RunStyle(sizePt: 14, color: 'ff0000', bold: true);
+
+        self::assertSame($styled, $styled->inheritFrom(new RunStyle));
+        self::assertSame($styled, RunStyle::default()->inheritFrom($styled));
+        self::assertSame($styled, (new RunStyle)->inheritFrom($styled));
+        self::assertSame($styled, $styled->inheritFrom($styled));
+    }
+
+    #[Test]
+    public function inheritFrom_shortcuts_give_the_same_values_as_a_merge(): void
+    {
+        $styles = [
+            new RunStyle,
+            new RunStyle(sizePt: 9),
+            new RunStyle(color: '00ff00', italic: true),
+            new RunStyle(fontFamily: 'Times', underline: true, letterSpacingPt: 0.5),
+        ];
+        foreach ($styles as $child) {
+            foreach ($styles as $parent) {
+                $merged = new RunStyle(
+                    sizePt: $child->sizePt ?? $parent->sizePt,
+                    color: $child->color ?? $parent->color,
+                    backgroundColor: $child->backgroundColor ?? $parent->backgroundColor,
+                    fontFamily: $child->fontFamily ?? $parent->fontFamily,
+                    bold: $child->bold || $parent->bold,
+                    italic: $child->italic || $parent->italic,
+                    underline: $child->underline || $parent->underline,
+                    strikethrough: $child->strikethrough || $parent->strikethrough,
+                    superscript: $child->superscript || $parent->superscript,
+                    subscript: $child->subscript || $parent->subscript,
+                    highlight: $child->highlight ?? $parent->highlight,
+                    letterSpacingPt: $child->letterSpacingPt ?? $parent->letterSpacingPt,
+                );
+                self::assertEquals($merged, $child->inheritFrom($parent));
+            }
+        }
+    }
 }
