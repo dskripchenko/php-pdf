@@ -130,6 +130,7 @@ final class PdfFont
         $this->usedGlyphs = [];
         $this->writerRegistrations = new \WeakMap;
         $this->decodeCache = [];
+        $this->recentDecodes = [];
     }
 
     /**
@@ -372,15 +373,30 @@ final class PdfFont
     private bool $indicShapingEnabled = true;
 
     /**
-     * Bounded LRU cache for decodeUtf8 results - TextMeasurer
-     * (Engine layout) repeatedly calls on the same words while measuring
-     * line-fits, justification, etc.
+     * decodeUtf8 results for short strings - words, numbers, labels - which
+     * come back throughout a document: layout measures the same words over
+     * and over. Oldest out first once DECODE_CACHE_MAX are held.
      *
      * @var array<string, list<array{cp: int, gid: int}>>
      */
     private array $decodeCache = [];
 
+    /**
+     * decodeUtf8 results for longer strings, such as a whole line drawn at
+     * once. These mostly come back within the same draw (shaped, then
+     * encoded), so a few recent ones are enough. Each entry costs ~400
+     * bytes per character, so they stay out of the large cache.
+     *
+     * @var array<string, list<array{cp: int, gid: int}>>
+     */
+    private array $recentDecodes = [];
+
     private const DECODE_CACHE_MAX = 2048;
+
+    private const RECENT_DECODES_MAX = 16;
+
+    /** Strings up to this many bytes go in the large cache. */
+    private const SHORT_STRING_MAX_BYTES = 32;
 
     /**
      * Disable Arabic shaping (for debug or if font handles
@@ -423,12 +439,12 @@ final class PdfFont
      */
     public function decodeUtf8(string $utf8): array
     {
-        // Memo cache. TextMeasurer repeatedly calls decodeUtf8
-        // on the same words during layout passes; without cache the pipeline
-        // (utf8 to cps + Arabic/Indic shape + Bidi + cmap + rphf) runs
-        // every time and blows memory. Bounded FIFO cap = 2048 entries.
-        if (isset($this->decodeCache[$utf8])) {
-            return $this->decodeCache[$utf8];
+        // The pipeline below (utf8 to cps + Arabic/Indic shape + Bidi +
+        // cmap + rphf) is cached; see $decodeCache and $recentDecodes.
+        $short = strlen($utf8) <= self::SHORT_STRING_MAX_BYTES;
+        $cached = $short ? ($this->decodeCache[$utf8] ?? null) : ($this->recentDecodes[$utf8] ?? null);
+        if ($cached !== null) {
+            return $cached;
         }
 
         $cps = self::utf8ToCps($utf8);
@@ -470,11 +486,19 @@ final class PdfFont
             }
         }
 
-        // Bounded FIFO eviction: drop oldest entry when reached cap.
-        if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
-            array_shift($this->decodeCache);
+        // Drop the oldest entry at the cap. unset, not array_shift: a key
+        // like "1" is stored as an integer, and array_shift would renumber it.
+        if ($short) {
+            if (count($this->decodeCache) >= self::DECODE_CACHE_MAX) {
+                unset($this->decodeCache[array_key_first($this->decodeCache)]);
+            }
+            $this->decodeCache[$utf8] = $out;
+        } else {
+            if (count($this->recentDecodes) >= self::RECENT_DECODES_MAX) {
+                unset($this->recentDecodes[array_key_first($this->recentDecodes)]);
+            }
+            $this->recentDecodes[$utf8] = $out;
         }
-        $this->decodeCache[$utf8] = $out;
 
         return $out;
     }
