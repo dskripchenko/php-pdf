@@ -79,39 +79,30 @@ final readonly class PdfAConfig
 
     /**
      * Render XMP metadata stream (XML with PDF/A + Dublin Core namespaces).
+     *
+     * $info holds the document's /Info values (Title, Author, Subject,
+     * Keywords, Creator, Producer, CreationDate, ModDate, dates in PDF form):
+     * PDF/A requires each to match its XMP property, so they take precedence
+     * over this config's title, author and $producer. Empty values are left
+     * out. Without a CreationDate the current time is used.
+     *
+     * $pdfUaPart adds the PDF/UA identification (pdfuaid:part) for a
+     * document that is both PDF/A and PDF/UA.
+     *
+     * @param  array<string, string>  $info
      */
-    public function xmpMetadata(string $producer = 'dskripchenko/php-pdf'): string
+    public function xmpMetadata(string $producer = 'dskripchenko/php-pdf', array $info = [], ?int $pdfUaPart = null): string
     {
-        $created = (new \DateTimeImmutable)->format('Y-m-d\TH:i:sP');
-        $title = self::xmlEscape($this->title);
-        $author = self::xmlEscape($this->author);
-        $producer = self::xmlEscape($producer);
+        $identification = ['pdfaid' => ['part' => (string) $this->part, 'conformance' => $this->conformance]];
+        if ($pdfUaPart !== null) {
+            $identification['pdfuaid'] = ['part' => (string) $pdfUaPart];
+        }
 
-        return <<<XMP
-<?xpacket begin="\u{FEFF}" id="W5M0MpCehiHzreSzNTczkc9d"?>
-<x:xmpmeta xmlns:x="adobe:ns:meta/">
-  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-    <rdf:Description rdf:about=""
-        xmlns:dc="http://purl.org/dc/elements/1.1/"
-        xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
-        xmlns:xmp="http://ns.adobe.com/xap/1.0/"
-        xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
-      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">$title</rdf:li></rdf:Alt></dc:title>
-      <dc:creator><rdf:Seq><rdf:li>$author</rdf:li></rdf:Seq></dc:creator>
-      <pdf:Producer>$producer</pdf:Producer>
-      <xmp:CreateDate>$created</xmp:CreateDate>
-      <xmp:ModifyDate>$created</xmp:ModifyDate>
-      <pdfaid:part>{$this->part}</pdfaid:part>
-      <pdfaid:conformance>{$this->conformance}</pdfaid:conformance>
-    </rdf:Description>
-  </rdf:RDF>
-</x:xmpmeta>
-<?xpacket end="w"?>
-XMP;
-    }
-
-    private static function xmlEscape(string $s): string
-    {
-        return htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        return XmpPacket::build(
+            $info,
+            $producer,
+            ['Title' => $this->title, 'Author' => $this->author],
+            $identification,
+        );
     }
 }
