@@ -162,6 +162,25 @@ final class KerningTable
         return $this->memo[$leftGid][$rightGid] ??= $this->find($leftGid, $rightGid);
     }
 
+    /**
+     * lookup() for each neighbouring pair of a glyph run: element $i is the
+     * adjustment between $gids[$i - 1] and $gids[$i] (element 0 is 0).
+     *
+     * @param  list<int>  $gids
+     * @return list<int>
+     */
+    public function lookupRun(array $gids): array
+    {
+        $out = [];
+        $prev = null;
+        foreach ($gids as $gid) {
+            $out[] = $prev === null ? 0 : ($this->memo[$prev][$gid] ??= $this->find($prev, $gid));
+            $prev = $gid;
+        }
+
+        return $out;
+    }
+
     private function find(int $leftGid, int $rightGid): int
     {
         for ($i = count($this->layers) - 1; $i >= 0; $i--) {
