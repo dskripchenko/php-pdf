@@ -357,7 +357,7 @@ final class Document
      * carry mcid = null plus a list of child element indexes. Hierarchy
      * lives in the structure tree — marked-content sequences never nest.
      *
-     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int}>
+     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int, attributes?: string}>
      */
     private array $structElements = [];
 
@@ -405,8 +405,15 @@ final class Document
     /**
      * @internal Used by the Engine to register leaf struct elements
      * (the ones owning a marked-content sequence).
+     *
+     * $attributes is the element's attribute object (/A): an owner under
+     * 'O' and its attributes, e.g. ['O' => 'Table', 'Scope' => 'Column']
+     * for a column header cell (ISO 32000-1 §14.8.5). String values are
+     * written as names, numbers as numbers.
+     *
+     * @param  array<string, string|int|float>  $attributes
      */
-    public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null): void
+    public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null, array $attributes = []): void
     {
         $parent = $this->structContainerStack === []
             ? null
@@ -415,6 +422,7 @@ final class Document
         $this->structElements[] = [
             'type' => $type, 'mcid' => $mcid, 'page' => $page,
             'altText' => $altText, 'parent' => $parent, 'children' => [],
+            'attributes' => self::structAttributes($attributes),
         ];
         if ($parent !== null) {
             $this->structElements[$parent]['children'][] = $idx;
@@ -425,8 +433,11 @@ final class Document
      * @internal Open a grouping struct element (Table, TR, TD, L, LI...).
      * Containers have no marked content of their own — their /K is the
      * list of child elements, so MCID sequences never nest.
+     * $attributes as for addStructElement() — e.g. a TH container's scope.
+     *
+     * @param  array<string, string|int|float>  $attributes
      */
-    public function beginStructContainer(string $type, Page $page): void
+    public function beginStructContainer(string $type, Page $page, array $attributes = []): void
     {
         $parent = $this->structContainerStack === []
             ? null
@@ -435,6 +446,7 @@ final class Document
         $this->structElements[] = [
             'type' => $type, 'mcid' => null, 'page' => $page,
             'altText' => null, 'parent' => $parent, 'children' => [],
+            'attributes' => self::structAttributes($attributes),
         ];
         if ($parent !== null) {
             $this->structElements[$parent]['children'][] = $idx;
@@ -448,6 +460,42 @@ final class Document
     public function endStructContainer(): void
     {
         array_pop($this->structContainerStack);
+    }
+
+    /**
+     * An attribute object as a PDF dictionary, or '' for none.
+     *
+     * @param  array<string, string|int|float>  $attributes
+     */
+    private static function structAttributes(array $attributes): string
+    {
+        if ($attributes === []) {
+            return '';
+        }
+        if (! isset($attributes['O'])) {
+            throw new \InvalidArgumentException('A struct attribute object needs an owner under \'O\' (e.g. Table, List, Layout).');
+        }
+        $entries = [];
+        foreach ($attributes as $key => $value) {
+            if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $key) !== 1) {
+                throw new \InvalidArgumentException(sprintf('Invalid struct attribute name "%s".', $key));
+            }
+            if (is_string($value)) {
+                if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $value) !== 1) {
+                    throw new \InvalidArgumentException(sprintf('Invalid value "%s" for struct attribute %s: expected a name.', $value, $key));
+                }
+                $entries[] = '/'.$key.' /'.$value;
+            } elseif (is_int($value)) {
+                $entries[] = '/'.$key.' '.$value;
+            } else {
+                if (! is_finite($value)) {
+                    throw new \InvalidArgumentException(sprintf('Struct attribute %s must be finite.', $key));
+                }
+                $entries[] = '/'.$key.' '.rtrim(rtrim(sprintf('%.4F', $value), '0'), '.');
+            }
+        }
+
+        return '<< '.implode(' ', $entries).' >>';
     }
 
     /**
@@ -1619,9 +1667,10 @@ final class Document
                 } else {
                     $kPart = (string) $elem['mcid'];
                 }
+                $attrPart = ($elem['attributes'] ?? '') !== '' ? ' /A '.$elem['attributes'] : '';
                 $writer->setObject($elemId, sprintf(
-                    '<< /Type /StructElem /S /%s /P %d 0 R /Pg %d 0 R /K %s%s >>',
-                    $elem['type'], $parentRef, $pageId, $kPart, $altPart,
+                    '<< /Type /StructElem /S /%s /P %d 0 R /Pg %d 0 R /K %s%s%s >>',
+                    $elem['type'], $parentRef, $pageId, $kPart, $altPart, $attrPart,
                 ));
                 if ($elem['parent'] === null) {
                     $childIds[] = $elemId;
