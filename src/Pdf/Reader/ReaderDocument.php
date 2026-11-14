@@ -275,6 +275,15 @@ final class ReaderDocument
     }
 
     /**
+     * The document's plain text, pages separated by a blank line (§9.10):
+     * what its fonts say the shown glyphs are, in content order.
+     */
+    public function text(): string
+    {
+        return (new Text\TextExtractor($this))->document();
+    }
+
+    /**
      * The document catalog (`/Root`).
      */
     public function catalog(): PdfDictionary

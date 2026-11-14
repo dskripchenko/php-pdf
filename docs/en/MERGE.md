@@ -9,6 +9,7 @@ All of it is pure PHP and MIT-licensed — no FPDI, no external binaries.
 ## Contents
 
 - [Reading a PDF](#reading-a-pdf)
+- [Extracting text](#extracting-text)
 - [Appending documents](#appending-documents)
 - [Selecting and reordering pages](#selecting-and-reordering-pages)
 - [Embedding (stamping) a page](#embedding-stamping-a-page)
@@ -35,6 +36,22 @@ foreach ($doc->pages() as $page) {
 A `ReaderDocument` resolves objects lazily, follows the cross-reference chain
 (classic tables, XRef streams, and object streams), and falls back to a
 full-file scan when the cross-reference is corrupt.
+
+## Extracting text
+
+```php
+$doc = ReaderDocument::fromBytes(file_get_contents('report.pdf'));
+echo $doc->text();   // every page, pages separated by a blank line
+```
+
+Each glyph's text comes from its font: the `/ToUnicode` map first, then the
+simple font's encoding (Standard, WinAnsi, MacRoman) with `/Differences`
+named by the Adobe Glyph List (Cyrillic `afii` names, `uniXXXX` included).
+Text is read in content order; a move to another line starts a new line, a
+gap wider than a fifth of the font size becomes a space, and typographic
+ligatures are written out (`ﬁ` → `fi`). Form XObjects are read too. A scan
+has no text to give — there is no OCR — and a composite font without a
+`/ToUnicode` map gives nothing for its glyphs.
 
 ## Appending documents
 

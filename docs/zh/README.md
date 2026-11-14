@@ -241,6 +241,7 @@ file_put_contents('hello.pdf', $doc->toBytes());
 ### 读取与合并
 - 读取现有 PDF（`ReaderDocument`）—— 经典与流式 xref、对象流、损坏 xref 恢复、
   解密（RC4 / AES-128 / AES-256）。
+- 提取纯文本（`ReaderDocument::text()`）—— ToUnicode 映射、带 `/Differences` 的简单字体编码、复合字体、表单 XObject；按字形位置划分行与词间空格。
 - 合并（`PdfMerger`）—— 追加并重排来自多个文件的全部或选定页面；页面注释与书签
   会被带入，内部链接和命名目标随之重新映射。
 - 盖印叠加（水印、信头）与 FPDI 风格的页面导入，通过

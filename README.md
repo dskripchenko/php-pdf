@@ -261,6 +261,9 @@ file_put_contents('hello.pdf', $doc->toBytes());
 ### Reading and merging
 - Read existing PDFs (`ReaderDocument`) — classic and stream xref, object
   streams, corrupt-xref recovery, decryption (RC4 / AES-128 / AES-256).
+- Extract plain text (`ReaderDocument::text()`) — ToUnicode maps, simple-font
+  encodings with `/Differences`, composite fonts, form XObjects; lines and
+  word spaces from glyph positions.
 - Merge (`PdfMerger`) — append and reorder whole or selected pages from
   multiple files; page annotations and bookmarks carried over with internal
   links and named destinations remapped.

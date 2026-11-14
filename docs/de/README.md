@@ -261,6 +261,9 @@ file_put_contents('hello.pdf', $doc->toBytes());
 - Bestehende PDFs lesen (`ReaderDocument`) — klassische und Stream-xref,
   Objekt-Streams, Wiederherstellung bei beschädigter xref, Entschlüsselung
   (RC4 / AES-128 / AES-256).
+- Text extrahieren (`ReaderDocument::text()`) — ToUnicode-Tabellen,
+  Kodierungen einfacher Schriften mit `/Differences`, zusammengesetzte
+  Schriften, Form-XObjects; Zeilen und Wortabstände aus den Glyphpositionen.
 - Zusammenführen (`PdfMerger`) — ganze oder ausgewählte Seiten aus mehreren
   Dateien anhängen und umordnen; Seitenannotationen und Lesezeichen werden
   mit umgemappten internen Links und benannten Zielen übernommen.

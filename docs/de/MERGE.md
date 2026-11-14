@@ -10,6 +10,7 @@ Alles in reinem PHP und MIT-lizenziert — kein FPDI, keine externen Binaries.
 ## Inhalt
 
 - [Ein PDF lesen](#ein-pdf-lesen)
+- [Text extrahieren](#text-extrahieren)
 - [Dokumente anhängen](#dokumente-anhängen)
 - [Seiten auswählen und umordnen](#seiten-auswählen-und-umordnen)
 - [Eine Seite einbetten (stempeln)](#eine-seite-einbetten-stempeln)
@@ -36,6 +37,23 @@ foreach ($doc->pages() as $page) {
 Ein `ReaderDocument` löst Objekte lazy auf, folgt der Querverweiskette
 (klassische Tabellen, XRef-Streams und Objekt-Streams) und fällt auf einen
 vollständigen Datei-Scan zurück, wenn die Querverweise beschädigt sind.
+
+## Text extrahieren
+
+```php
+$doc = ReaderDocument::fromBytes(file_get_contents('report.pdf'));
+echo $doc->text();   // alle Seiten, getrennt durch eine Leerzeile
+```
+
+Der Text jeder Glyphe kommt aus ihrer Schrift: zuerst die `/ToUnicode`-Tabelle,
+dann die Kodierung der einfachen Schrift (Standard, WinAnsi, MacRoman) mit
+`/Differences` nach den Namen der Adobe Glyph List (einschließlich der
+kyrillischen `afii`-Namen und `uniXXXX`). Gelesen wird in Inhaltsreihenfolge;
+ein Wechsel in eine andere Zeile beginnt eine neue Zeile, eine Lücke breiter
+als ein Fünftel der Schriftgröße wird zum Leerzeichen, Ligaturen werden
+ausgeschrieben (`ﬁ` → `fi`). Form-XObjects werden mitgelesen. Ein Scan hat
+keinen Text — es gibt keine Texterkennung —, und eine zusammengesetzte
+Schrift ohne `/ToUnicode`-Tabelle liefert für ihre Glyphen nichts.
 
 ## Dokumente anhängen
 
