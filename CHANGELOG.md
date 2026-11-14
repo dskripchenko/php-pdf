@@ -4,6 +4,21 @@ All notable changes to `dskripchenko/php-pdf` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] — 2026-11-14
+
+### Added
+- `ReaderDocument::text()` extracts the plain text of a PDF:
+  `Pdf\Reader\Text\TextExtractor` interprets the text operators of each
+  page and the form XObjects it draws; `FontDecoder` turns codes into text
+  through `/ToUnicode` maps (`ToUnicodeMap`: code space, `bfchar`, `bfrange`
+  with arrays), simple-font encodings (`SimpleEncodings`: Standard,
+  WinAnsi, MacRoman) and `/Differences` named by the Adobe Glyph List
+  (`GlyphNames`: the Latin set, `uniXXXX`, `uXXXX`, Cyrillic `afii`,
+  ligatures with `_`); widths from `/Widths` and `/W` place the glyphs, so
+  lines and word spaces follow the page. Typographic ligatures are written
+  out. Inline images are skipped; a broken stream gives the text read up to
+  the break.
+
 ## [1.27.0] — 2026-11-09
 
 ### Added

@@ -9,6 +9,7 @@
 ## 目录
 
 - [读取 PDF](#读取-pdf)
+- [提取文本](#提取文本)
 - [追加文档](#追加文档)
 - [选择与重排页面](#选择与重排页面)
 - [嵌入（盖印）页面](#嵌入盖印页面)
@@ -34,6 +35,15 @@ foreach ($doc->pages() as $page) {
 
 `ReaderDocument` 惰性解析对象，沿交叉引用链（经典表、XRef 流和对象流）遍历，
 并在交叉引用损坏时回退到整文件扫描。
+
+## 提取文本
+
+```php
+$doc = ReaderDocument::fromBytes(file_get_contents('report.pdf'));
+echo $doc->text();   // 所有页面，页面之间以空行分隔
+```
+
+每个字形的文本来自其字体：先查 `/ToUnicode` 映射，再按简单字体的编码（Standard、WinAnsi、MacRoman）及按 Adobe Glyph List 命名的 `/Differences`（包括西里尔 `afii` 名称和 `uniXXXX`）。文本按内容顺序读取；换到另一行时开始新行，宽于字号五分之一的间隙变为空格，排版连字会展开（`ﬁ` → `fi`）。表单 XObject 也会读取。扫描件没有文本可提取——不做 OCR；没有 `/ToUnicode` 映射的复合字体不会给出其字形的文本。
 
 ## 追加文档
 
