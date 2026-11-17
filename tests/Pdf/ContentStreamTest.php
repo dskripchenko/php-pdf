@@ -138,4 +138,41 @@ final class ContentStreamTest extends TestCase
         $cs->text('F1', 12, 0, 0, 'x');
         self::assertFalse($cs->isEmpty());
     }
+
+    #[Test]
+    public function rewrite_replaces_the_commands_between_two_marks(): void
+    {
+        $cs = (new ContentStream)->text('F1', 12, 0, 0, 'head');
+        $from = $cs->mark();
+        $cs->text('F1', 12, 0, 0, 'old');
+        $to = $cs->mark();
+        $cs->text('F1', 12, 0, 0, 'tail');
+
+        self::assertTrue($cs->rewrite($from, $to, function () use ($cs): void {
+            $cs->text('F1', 12, 0, 0, 'new');
+        }));
+        self::assertSame(
+            (new ContentStream)->text('F1', 12, 0, 0, 'head')->text('F1', 12, 0, 0, 'new')->text('F1', 12, 0, 0, 'tail')->toString(),
+            $cs->toString(),
+        );
+    }
+
+    #[Test]
+    public function rewrite_that_would_leave_another_state_changes_nothing(): void
+    {
+        // The red text after the mark was written knowing the fill is
+        // already red; new commands ending in black would turn it black.
+        $cs = new ContentStream;
+        $from = $cs->mark();
+        $cs->text('F1', 12, 0, 0, 'old', 1.0, 0.0, 0.0);
+        $to = $cs->mark();
+        $cs->text('F1', 12, 0, 0, 'tail', 1.0, 0.0, 0.0);
+        $before = $cs->toString();
+
+        self::assertFalse($cs->rewrite($from, $to, function () use ($cs): void {
+            $cs->text('F1', 12, 0, 0, 'new');
+        }));
+        self::assertSame($before, $cs->toString());
+        self::assertSame($to[1], $cs->mark()[1]);
+    }
 }

@@ -34,7 +34,7 @@ final class CellBuilder
 
     public function __construct()
     {
-        $this->style = new CellStyle;
+        $this->style = CellStyle::default();
     }
 
     public static function new(): self

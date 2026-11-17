@@ -42,4 +42,23 @@ final class StandardFontMetrics
 
         return $code >= 32 && $code <= 255 ? $table[$code - 32] : 0;
     }
+
+    /** Advance width of a string of WinAnsi bytes, in 1/1000 em. */
+    public static function stringWidth(string $baseFont, string $bytes): int
+    {
+        $n = strlen($bytes);
+        if (str_starts_with($baseFont, 'Courier')) {
+            return $n * self::COURIER_WIDTH;
+        }
+        $table = self::WIDTHS[$baseFont] ?? self::WIDTHS['Helvetica'];
+        $units = 0;
+        for ($i = 0; $i < $n; $i++) {
+            $code = ord($bytes[$i]);
+            if ($code >= 32) {
+                $units += $table[$code - 32];
+            }
+        }
+
+        return $units;
+    }
 }

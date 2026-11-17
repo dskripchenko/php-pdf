@@ -28,6 +28,7 @@ $scenarios = [
     'invoice' => ['label' => '100-page invoice (50 rows/page)'],
     'images'  => ['label' => 'Image grid (20 pages × 4 JPEGs)'],
     'html'    => ['label' => 'HTML → PDF article (~5 pages)'],
+    'svg'     => ['label' => 'SVG dashboards (10 pages, ~1,200 shapes each)'],
 ];
 
 $libs = ['phppdf', 'mpdf', 'tcpdf', 'dompdf', 'fpdf'];
@@ -244,7 +245,7 @@ function summary_table(array $scenarios, array $results): string
 {
     $out = "| Scenario | dskripchenko/php-pdf | mpdf | tcpdf | dompdf | FPDF |\n";
     $out .= "|---|---:|---:|---:|---:|---:|\n";
-    foreach (['html', 'invoice', 'images', 'hello'] as $key) {
+    foreach (['html', 'invoice', 'images', 'svg', 'hello'] as $key) {
         if (! isset($scenarios[$key])) {
             continue;
         }
@@ -322,9 +323,10 @@ Wall-time is measured with `hrtime(true)`; memory with
 | `invoice` | 100 pages × 50 rows; each page has an `<h1>` heading and a 4-column table. |
 | `images`  | 20 pages × 4 JPEG thumbnails (250 × 180 pt each).     |
 | `html`    | One `<h1>`, two `<h2>` sections, 24 paragraphs of Lorem with bold/italic/link plus bullet lists. ~5 pages. |
+| `svg`     | 10 pages, each a different metrics-dashboard SVG: 12 panels of line, bar, scatter and area charts with gridlines and labels, ~1,200 shapes. |
 
-FPDF has no HTML support and is therefore skipped on the `html`
-scenario.
+FPDF has no HTML or SVG support and is therefore skipped on the
+`html` and `svg` scenarios.
 
 ## How to reproduce
 

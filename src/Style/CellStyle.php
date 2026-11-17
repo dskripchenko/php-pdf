@@ -32,6 +32,18 @@ final readonly class CellStyle
         public ?float $minHeightPt = null,
     ) {}
 
+    /**
+     * The all-defaults style, shared. It is immutable, so every element
+     * created without a style can point at the same one instead of each
+     * holding its own copy.
+     */
+    public static function default(): self
+    {
+        static $default = null;
+
+        return $default ??= new self;
+    }
+
     public function withPadding(float $pt): self
     {
         return $this->copy(

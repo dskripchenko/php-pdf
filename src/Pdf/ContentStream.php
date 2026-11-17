@@ -1026,26 +1026,89 @@ final class ContentStream
     }
 
     /**
+     * Where the stream stands: its length, and the state the next command
+     * is written against.
+     *
+     * @internal
+     *
+     * @return array{0: int, 1: array<string, mixed>}
+     */
+    public function mark(): array
+    {
+        $state = get_object_vars($this);
+        unset($state['body']);
+
+        return [strlen($this->body), $state];
+    }
+
+    /**
+     * Writes the commands between two marks again, with $draw.
+     *
+     * The commands after $to were written against the state the old ones
+     * left, so the new ones must leave the same state. When they don't, the
+     * stream is left as it was and false is returned.
+     *
+     * @internal
+     *
+     * @param  array{0: int, 1: array<string, mixed>}  $from
+     * @param  array{0: int, 1: array<string, mixed>}  $to
+     * @param  \Closure(): void  $draw
+     */
+    public function rewrite(array $from, array $to, \Closure $draw): bool
+    {
+        $body = $this->body;
+        $state = $this->mark()[1];
+        $this->body = '';
+        $this->restoreState($from[1]);
+        try {
+            $draw();
+            $drawn = $this->body;
+            $sameEnd = $this->mark()[1] === $to[1];
+        } finally {
+            $this->body = $body;
+            $this->restoreState($state);
+        }
+        if (! $sameEnd) {
+            return false;
+        }
+        $this->body = substr($body, 0, $from[0]).$drawn.substr($body, $to[0]);
+
+        return true;
+    }
+
+    /** @param  array<string, mixed>  $state */
+    private function restoreState(array $state): void
+    {
+        foreach ($state as $name => $value) {
+            $this->{$name} = $value;
+        }
+    }
+
+    /**
      * Escape a PDF literal string `(…)`. Per ISO 32000-1 §7.3.4.2:
      * must escape `\`, `(`, `)`. Also non-printable bytes → \nnn.
      */
     private function escapeString(string $s): string
     {
-        $out = '';
-        for ($i = 0; $i < strlen($s); $i++) {
-            $c = $s[$i];
-            $ord = ord($c);
-            if ($c === '\\' || $c === '(' || $c === ')') {
-                $out .= '\\'.$c;
-            } elseif ($ord < 0x20 || $ord > 0x7E) {
-                // Non-printable / non-ASCII: octal \nnn.
-                $out .= sprintf("\\%03o", $ord);
-            } else {
-                $out .= $c;
+        // Backslash and parentheses get a backslash; non-printable and
+        // non-ASCII bytes become octal \nnn. Most text needs neither.
+        static $special = null;
+        static $map = null;
+        if ($special === null) {
+            $special = '\\()';
+            $map = ['\\' => '\\\\', '(' => '\\(', ')' => '\\)'];
+            for ($ord = 0; $ord < 256; $ord++) {
+                if ($ord < 0x20 || $ord > 0x7E) {
+                    $special .= chr($ord);
+                    $map[chr($ord)] = sprintf('\\%03o', $ord);
+                }
             }
         }
+        if (strcspn($s, $special) === strlen($s)) {
+            return $s;
+        }
 
-        return $out;
+        return strtr($s, $map);
     }
 
     /**
