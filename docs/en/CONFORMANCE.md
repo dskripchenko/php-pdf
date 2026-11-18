@@ -13,6 +13,7 @@ summary page.
 | Check | Standard | Tool | References |
 |---|---|---|---|
 | PDF/A validation | ISO 19005 | [veraPDF](https://verapdf.org) — the industry-standard open-source validator | PDF/A-1b, 1a, 2b, 2u, 3b, and a signed PDF/A-2b with a signature stamp |
+| PDF/UA validation | ISO 14289-1 | veraPDF, PDF/UA-1 profile (its machine-checkable rules) | a tagged PDF/UA-1 document built on the low-level writer (headings, a link in its Link element, a table with header scope, artifacts), and the same document as PDF/A-2u + PDF/UA-1, checked against both |
 | PDF/X structure | ISO 15930 | Ghostscript render (`-dPDFSTOPONERROR`) + byte-level assertions (OutputIntent `/GTS_PDFX`, CMYK profile and RGB-operator ban for X-1a, Info keys, trailer `/ID`, TrimBox/ArtBox per page, no encryption) | PDF/X-1a, X-3, X-4 |
 | Visual regression | — | poppler `pdftoppm` render diffed against committed golden PNGs (ImageMagick, 5% fuzz, ≤0.5% differing pixels) | reference pages, form fill, signature stamps |
 | Signatures | ETSI EN 319 142 (PAdES), RFC 5652, RFC 3161 | OpenSSL CLI: `openssl cms -verify` over the exact `/ByteRange` bytes up to a test root CA, `openssl ts -verify` for timestamps; tampering must break verification. [pyHanko](https://github.com/MatthiasValvekens/pyHanko) validates the signed PDFs as a whole (trust, timestamp, whole-file coverage) | test suite (`Signature*Test`, `PadesSignatureTest`, `CmsBuilderTest`) |
@@ -35,7 +36,7 @@ with the sRGB2014 ICC profile vendored in
 bash scripts/fetch-fonts.sh
 php scripts/conformance/generate.php
 
-# PDF/A — requires veraPDF (https://verapdf.org, or `brew install verapdf`)
+# PDF/A and PDF/UA — requires veraPDF (https://verapdf.org, or `brew install verapdf`)
 bash scripts/conformance/verapdf.sh
 
 # PDF/X — requires Ghostscript
@@ -59,6 +60,12 @@ vendor/bin/phpunit tests/Pdf/SignatureOpenSslTest.php
   not sufficient, conditions.
 - veraPDF emits "Nested MCID" *warnings* (not violations) for tagged
   documents; tightening the tagged emission is tracked as future work.
+- **PDF/UA** has rules no validator can check — that alternate text
+  describes the image, that the reading order makes sense, that the tags
+  match what the content is. veraPDF checks the machine-checkable ones;
+  the rest needs a person with a screen reader (or the PAC/Matterhorn
+  human checks). `enablePdfUa()` writes the identification and metadata;
+  tagging the content correctly is the caller's job.
 - Signature verification by the OpenSSL CLI proves cryptographic
   correctness over `/ByteRange`; the Acrobat signature panel is verified
   manually as part of the [viewer matrix](VIEWER-MATRIX.md).

@@ -233,6 +233,9 @@ final class Document
      */
     private array $viewerPreferences = [];
 
+    /** PDF/UA part claimed in the XMP metadata, or null for none. */
+    private ?int $pdfUaPart = null;
+
     /** BCP 47 language tag for /Lang in Catalog. */
     private ?string $lang = null;
 
@@ -357,7 +360,7 @@ final class Document
      * carry mcid = null plus a list of child element indexes. Hierarchy
      * lives in the structure tree — marked-content sequences never nest.
      *
-     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int}>
+     * @var list<array{type: string, mcid: ?int, page: Page, altText?: ?string, parent: ?int, children: list<int>, objr?: int, attributes?: string, holdsLink?: bool}>
      */
     private array $structElements = [];
 
@@ -376,6 +379,14 @@ final class Document
      * @var array<int, int>
      */
     private array $structParentLinkKeys = [];
+
+    /**
+     * Links given a place in the structure tree by placeLinkInStructure():
+     * page index → link annotation index → struct element index.
+     *
+     * @var array<int, array<int, int>>
+     */
+    private array $placedLinks = [];
 
     /**
      * Enable Tagged PDF (accessibility).
@@ -405,8 +416,15 @@ final class Document
     /**
      * @internal Used by the Engine to register leaf struct elements
      * (the ones owning a marked-content sequence).
+     *
+     * $attributes is the element's attribute object (/A): an owner under
+     * 'O' and its attributes, e.g. ['O' => 'Table', 'Scope' => 'Column']
+     * for a column header cell (ISO 32000-1 §14.8.5). String values are
+     * written as names, numbers as numbers.
+     *
+     * @param  array<string, string|int|float>  $attributes
      */
-    public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null): void
+    public function addStructElement(string $type, int $mcid, Page $page, ?string $altText = null, array $attributes = []): void
     {
         $parent = $this->structContainerStack === []
             ? null
@@ -415,6 +433,7 @@ final class Document
         $this->structElements[] = [
             'type' => $type, 'mcid' => $mcid, 'page' => $page,
             'altText' => $altText, 'parent' => $parent, 'children' => [],
+            'attributes' => self::structAttributes($attributes),
         ];
         if ($parent !== null) {
             $this->structElements[$parent]['children'][] = $idx;
@@ -425,8 +444,11 @@ final class Document
      * @internal Open a grouping struct element (Table, TR, TD, L, LI...).
      * Containers have no marked content of their own — their /K is the
      * list of child elements, so MCID sequences never nest.
+     * $attributes as for addStructElement() — e.g. a TH container's scope.
+     *
+     * @param  array<string, string|int|float>  $attributes
      */
-    public function beginStructContainer(string $type, Page $page): void
+    public function beginStructContainer(string $type, Page $page, array $attributes = []): void
     {
         $parent = $this->structContainerStack === []
             ? null
@@ -435,6 +457,7 @@ final class Document
         $this->structElements[] = [
             'type' => $type, 'mcid' => null, 'page' => $page,
             'altText' => null, 'parent' => $parent, 'children' => [],
+            'attributes' => self::structAttributes($attributes),
         ];
         if ($parent !== null) {
             $this->structElements[$parent]['children'][] = $idx;
@@ -448,6 +471,117 @@ final class Document
     public function endStructContainer(): void
     {
         array_pop($this->structContainerStack);
+    }
+
+    /**
+     * Puts the link annotation last added to $page into the structure tree
+     * here, in reading order. Inside an open Link container (opened with
+     * beginStructContainer('Link', ...) around the link's text) the
+     * annotation joins that element, so it holds both the text and the
+     * annotation, as PDF/UA asks (ISO 14289-1 §7.18.5). Otherwise a Link
+     * element is added under the innermost open container.
+     *
+     * Links that are not placed keep their default: a Link element at the
+     * end of the root. Does nothing on an untagged document.
+     */
+    public function placeLinkInStructure(Page $page): void
+    {
+        if (! $this->tagged) {
+            return;
+        }
+        $annotations = count($page->linkAnnotations());
+        if ($annotations === 0) {
+            throw new \LogicException('placeLinkInStructure() needs a link annotation on the page; add the link first.');
+        }
+        $pageIndex = array_search($page, $this->pages, true);
+        if ($pageIndex === false) {
+            throw new \LogicException('placeLinkInStructure() was given a page of another document.');
+        }
+        $parent = $this->structContainerStack === []
+            ? null
+            : $this->structContainerStack[count($this->structContainerStack) - 1];
+        // One annotation per Link container: a second link inside it gets
+        // an element of its own.
+        if ($parent !== null && $this->structElements[$parent]['type'] === 'Link'
+            && ! ($this->structElements[$parent]['holdsLink'] ?? false)) {
+            $idx = $parent;
+            $this->structElements[$parent]['holdsLink'] = true;
+        } else {
+            $idx = count($this->structElements);
+            $this->structElements[] = [
+                'type' => 'Link', 'mcid' => null, 'page' => $page,
+                'altText' => null, 'parent' => $parent, 'children' => [],
+            ];
+            if ($parent !== null) {
+                $this->structElements[$parent]['children'][] = $idx;
+            }
+        }
+        $this->placedLinks[(int) $pageIndex][$annotations - 1] = $idx;
+    }
+
+    /**
+     * An attribute object as a PDF dictionary, or '' for none.
+     *
+     * @param  array<string, string|int|float>  $attributes
+     */
+    private static function structAttributes(array $attributes): string
+    {
+        if ($attributes === []) {
+            return '';
+        }
+        if (! isset($attributes['O'])) {
+            throw new \InvalidArgumentException('A struct attribute object needs an owner under \'O\' (e.g. Table, List, Layout).');
+        }
+        $entries = [];
+        foreach ($attributes as $key => $value) {
+            if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $key) !== 1) {
+                throw new \InvalidArgumentException(sprintf('Invalid struct attribute name "%s".', $key));
+            }
+            if (is_string($value)) {
+                if (preg_match('/^[A-Za-z][A-Za-z0-9]*$/', $value) !== 1) {
+                    throw new \InvalidArgumentException(sprintf('Invalid value "%s" for struct attribute %s: expected a name.', $value, $key));
+                }
+                $entries[] = '/'.$key.' /'.$value;
+            } elseif (is_int($value)) {
+                $entries[] = '/'.$key.' '.$value;
+            } else {
+                if (! is_finite($value)) {
+                    throw new \InvalidArgumentException(sprintf('Struct attribute %s must be finite.', $key));
+                }
+                $entries[] = '/'.$key.' '.rtrim(rtrim(sprintf('%.4F', $value), '0'), '.');
+            }
+        }
+
+        return '<< '.implode(' ', $entries).' >>';
+    }
+
+    /**
+     * Identify the document as PDF/UA-1 (ISO 14289-1, universal
+     * accessibility). Enables Tagged PDF, writes an XMP metadata stream
+     * with pdfuaid:part 1 (inside the PDF/A packet when PDF/A is enabled
+     * too) and sets DisplayDocTitle, so viewers show the title rather than
+     * the file name.
+     *
+     * The document needs a title (metadata(title: ...)); toBytes() throws
+     * without one. Everything else PDF/UA asks of the content is the
+     * caller's: a struct element for all real content and artifacts for
+     * the rest, alt text on figures, a description on links, /Lang
+     * (setLang()), headings in sequence, embedded fonts.
+     */
+    public function enablePdfUa(): self
+    {
+        if ($this->pdfX !== null) {
+            throw new \LogicException('PDF/UA with PDF/X is not supported — both write their own XMP metadata.');
+        }
+        $this->pdfUaPart = 1;
+        $this->enableTagged();
+
+        return $this;
+    }
+
+    public function isPdfUa(): bool
+    {
+        return $this->pdfUaPart !== null;
     }
 
     /**
@@ -492,6 +626,9 @@ final class Document
         }
         if ($this->pdfA !== null) {
             throw new \LogicException('Cannot combine PDF/X and PDF/A — choose one variant.');
+        }
+        if ($this->pdfUaPart !== null) {
+            throw new \LogicException('PDF/UA with PDF/X is not supported — both write their own XMP metadata.');
         }
         $this->pdfX = $config;
         // PDF/X-4 requires PDF 1.6+; X-1a/X-3 require PDF 1.4+.
@@ -834,8 +971,35 @@ final class Document
 
     private function formatPdfDate(\DateTimeInterface $dt): string
     {
-        // PDF date format: D:YYYYMMDDHHmmSS+TZ'mm'
-        return 'D:'.$dt->format('YmdHis').'+00\'00\'';
+        // PDF date format: D:YYYYMMDDHHmmSS+TZ'mm', written in UTC.
+        $utc = \DateTimeImmutable::createFromInterface($dt)->setTimezone(new \DateTimeZone('UTC'));
+
+        return 'D:'.$utc->format('YmdHis').'+00\'00\'';
+    }
+
+    /**
+     * The /Info dictionary values: the metadata set on the document, a
+     * default Producer and CreationDate (most readers expect an Info dict in
+     * the Properties dialog), and for PDF/A the config's title and author
+     * where the metadata has none.
+     *
+     * @return array<string, string>
+     */
+    private function infoEntries(): array
+    {
+        $info = $this->metadata + [
+            'Producer' => 'dskripchenko/php-pdf',
+            'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
+        ];
+        if ($this->pdfA !== null) {
+            foreach (['Title' => $this->pdfA->title, 'Author' => $this->pdfA->author] as $key => $value) {
+                if (! isset($info[$key]) && $value !== '') {
+                    $info[$key] = $value;
+                }
+            }
+        }
+
+        return array_map(strval(...), $info);
     }
 
     /**
@@ -933,6 +1097,9 @@ final class Document
             // Empty document — add a blank page so the PDF is valid
             // (the spec requires ≥ 1 page in the page tree).
             $this->addPage();
+        }
+        if ($this->pdfUaPart !== null && trim($this->infoEntries()['Title'] ?? '') === '') {
+            throw new \LogicException('PDF/UA requires a document title — set it with metadata(title: ...).');
         }
 
         // XRef streams auto-disabled with PKCS#7 signing — the signing path
@@ -1201,7 +1368,8 @@ final class Document
 
             // Annotations: emit /Annot objects + reference array.
             $annotIds = [];
-            foreach ($page->linkAnnotations() as $ann) {
+            $placedOnPage = $this->placedLinks[$i] ?? [];
+            foreach ($page->linkAnnotations() as $annIndex => $ann) {
                 $rect = sprintf(
                     '[%s %s %s %s]',
                     $this->fmt($ann['x1']), $this->fmt($ann['y1']),
@@ -1211,47 +1379,51 @@ final class Document
                 // Reserve /StructParent number for tagged links — counter
                 // starts after page indices. The annotation dict includes
                 // /StructParent N; ParentTree maps N → struct elem ID.
-                $structParentPart = '';
+                $annotTail = '';
                 $structParentKey = -1;
                 if ($this->tagged) {
                     $structParentKey = count($this->pages) + count($this->structParentLinkKeys);
-                    $structParentPart = sprintf(' /StructParent %d', $structParentKey);
+                    $annotTail = sprintf(' /StructParent %d', $structParentKey);
+                }
+                // Link description for assistive technology (PDF/UA §7.18.5).
+                if ($ann['contents'] !== null) {
+                    $annotTail = ' /Contents '.$this->pdfTextString($ann['contents']).$annotTail;
                 }
                 $body = match ($ann['kind']) {
                     'uri' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /S /URI /URI %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                     'named' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /Named /N /%s >>%s >>',
                         $rect,
                         $ann['target'],
-                        $structParentPart,
+                        $annotTail,
                     ),
                     'javascript' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /JavaScript /JS %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                     'launch' => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /A << /Type /Action /S /Launch /F %s >>%s >>',
                         $rect,
                         $this->pdfString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                     default => sprintf(
-                        '<< /Type /Annot /Subtype /Link /Rect %s '
+                        '<< /Type /Annot /Subtype /Link /Rect %s /F 4 '
                         .'/Border [0 0 0] /Dest %s%s >>',
                         $rect,
                         $this->pdfNameString($ann['target']),
-                        $structParentPart,
+                        $annotTail,
                     ),
                 };
                 $linkAnnotId = $writer->addObject($body);
@@ -1260,16 +1432,23 @@ final class Document
                 // Tagged PDF — register /Link struct element referencing
                 // this annotation via /OBJR; reserve a ParentTree entry
                 // under the reserved StructParent key.
+                // A link placed with placeLinkInStructure() already has its
+                // element in reading order; any other goes at the root.
                 if ($this->tagged) {
-                    $structIdx = count($this->structElements);
-                    $this->structElements[] = [
-                        'type' => 'Link',
-                        'mcid' => null,
-                        'page' => $page,
-                        'objr' => $linkAnnotId,
-                        'parent' => null,
-                        'children' => [],
-                    ];
+                    $structIdx = $placedOnPage[$annIndex] ?? null;
+                    if ($structIdx !== null) {
+                        $this->structElements[$structIdx]['objr'] = $linkAnnotId;
+                    } else {
+                        $structIdx = count($this->structElements);
+                        $this->structElements[] = [
+                            'type' => 'Link',
+                            'mcid' => null,
+                            'page' => $page,
+                            'objr' => $linkAnnotId,
+                            'parent' => null,
+                            'children' => [],
+                        ];
+                    }
                     $this->structParentLinkKeys[$structIdx] = $structParentKey;
                 }
             }
@@ -1387,8 +1566,14 @@ final class Document
 
             // /Parent points to the immediate parent (root or intermediate).
             $parentId = $pageTree['parentOf'][$i];
-            // Optional /Tabs entry for form field tab navigation.
-            $tabsRef = $page->tabOrder() !== null ? ' /Tabs /'.$page->tabOrder() : '';
+            // Optional /Tabs entry for form field tab navigation. PDF/UA
+            // requires structure order on every page with annotations
+            // (ISO 14289-1 §7.18.3), so that is the default there.
+            $tabOrder = $page->tabOrder();
+            if ($tabOrder === null && $this->pdfUaPart !== null && $annotIds !== []) {
+                $tabOrder = 'S';
+            }
+            $tabsRef = $tabOrder !== null ? ' /Tabs /'.$tabOrder : '';
             $writer->setObject($pageIds[$i], sprintf(
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] '
                 .'/Contents %d 0 R /Resources %s%s%s%s%s%s%s%s%s >>',
@@ -1577,20 +1762,25 @@ final class Document
                 if (! empty($elem['altText'])) {
                     $altPart = ' /Alt '.$this->pdfTextString((string) $elem['altText']);
                 }
-                if (! empty($elem['objr'])) {
+                if (! empty($elem['objr']) && $elem['children'] === []) {
                     $kPart = sprintf('<< /Type /OBJR /Obj %d 0 R >>', $elem['objr']);
                 } elseif ($elem['mcid'] === null) {
                     $kids = array_map(
                         fn (int $childIdx) => sprintf('%d 0 R', $elemIds[$childIdx]),
                         array_values(array_filter($elem['children'], fn (int $c) => isset($elemIds[$c]))),
                     );
+                    // A Link container holds its text and its annotation.
+                    if (! empty($elem['objr'])) {
+                        $kids[] = sprintf('<< /Type /OBJR /Obj %d 0 R >>', $elem['objr']);
+                    }
                     $kPart = '['.implode(' ', $kids).']';
                 } else {
                     $kPart = (string) $elem['mcid'];
                 }
+                $attrPart = ($elem['attributes'] ?? '') !== '' ? ' /A '.$elem['attributes'] : '';
                 $writer->setObject($elemId, sprintf(
-                    '<< /Type /StructElem /S /%s /P %d 0 R /Pg %d 0 R /K %s%s >>',
-                    $elem['type'], $parentRef, $pageId, $kPart, $altPart,
+                    '<< /Type /StructElem /S /%s /P %d 0 R /Pg %d 0 R /K %s%s%s >>',
+                    $elem['type'], $parentRef, $pageId, $kPart, $altPart, $attrPart,
                 ));
                 if ($elem['parent'] === null) {
                     $childIds[] = $elemId;
@@ -1656,9 +1846,13 @@ final class Document
         }
 
         // PDF/A — Metadata stream + OutputIntent + /Lang.
+        // /Info values, resolved once: PDF/A requires the XMP packet to
+        // carry the same values (ISO 19005-1 §6.7.3).
+        $info = $this->infoEntries();
+
         $pdfARef = '';
         if ($this->pdfA !== null) {
-            $xmp = $this->pdfA->xmpMetadata();
+            $xmp = $this->pdfA->xmpMetadata(info: $info, pdfUaPart: $this->pdfUaPart);
             // Metadata stream — not filtered, not encrypted.
             $metadataId = $writer->addObject(sprintf(
                 "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
@@ -1691,6 +1885,20 @@ final class Document
                 $outputIntentId,
                 $this->pdfString($this->pdfA->lang),
             );
+        }
+
+        // PDF/UA without PDF/A — an XMP packet of its own, from the same
+        // /Info values (ISO 14289-1 §7.1: the Catalog's /Metadata with
+        // pdfuaid:part).
+        if ($this->pdfUaPart !== null && $this->pdfA === null) {
+            $xmp = XmpPacket::build($info, 'dskripchenko/php-pdf', identification: [
+                'pdfuaid' => ['part' => (string) $this->pdfUaPart],
+            ]);
+            $pdfARef = sprintf(' /Metadata %d 0 R', $writer->addObject(sprintf(
+                "<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream",
+                strlen($xmp),
+                $xmp,
+            )));
         }
 
         // PDF/X — Metadata stream + OutputIntent with /S /GTS_PDFX.
@@ -1801,7 +2009,12 @@ final class Document
 
         // /ViewerPreferences dict.
         $viewerPrefsRef = '';
-        if ($this->viewerPreferences !== []) {
+        $viewerPreferences = $this->viewerPreferences;
+        if ($this->pdfUaPart !== null) {
+            // PDF/UA: show the title, not the file name (ISO 14289-1 §7.1).
+            $viewerPreferences['displayDocTitle'] = true;
+        }
+        if ($viewerPreferences !== []) {
             $entries = [];
             $boolKeys = [
                 'hideToolbar' => 'HideToolbar', 'hideMenubar' => 'HideMenubar',
@@ -1809,18 +2022,18 @@ final class Document
                 'centerWindow' => 'CenterWindow', 'displayDocTitle' => 'DisplayDocTitle',
             ];
             foreach ($boolKeys as $k => $name) {
-                if (isset($this->viewerPreferences[$k])) {
-                    $entries[] = "/$name ".($this->viewerPreferences[$k] ? 'true' : 'false');
+                if (isset($viewerPreferences[$k])) {
+                    $entries[] = "/$name ".($viewerPreferences[$k] ? 'true' : 'false');
                 }
             }
-            if (isset($this->viewerPreferences['direction'])) {
-                $entries[] = '/Direction /'.$this->viewerPreferences['direction'];
+            if (isset($viewerPreferences['direction'])) {
+                $entries[] = '/Direction /'.$viewerPreferences['direction'];
             }
-            if (isset($this->viewerPreferences['printScaling'])) {
-                $entries[] = '/PrintScaling /'.$this->viewerPreferences['printScaling'];
+            if (isset($viewerPreferences['printScaling'])) {
+                $entries[] = '/PrintScaling /'.$viewerPreferences['printScaling'];
             }
-            if (isset($this->viewerPreferences['duplex'])) {
-                $entries[] = '/Duplex /'.$this->viewerPreferences['duplex'];
+            if (isset($viewerPreferences['duplex'])) {
+                $entries[] = '/Duplex /'.$viewerPreferences['duplex'];
             }
             if ($entries !== []) {
                 $viewerPrefsRef = ' /ViewerPreferences << '.implode(' ', $entries).' >>';
@@ -1885,12 +2098,7 @@ final class Document
 
         $writer->setRoot($catalogId);
 
-        // /Info dictionary is always emitted with default Producer +
-        // CreationDate (most readers expect Info dict in Properties dialog).
-        $meta = $this->metadata + [
-            'Producer' => 'dskripchenko/php-pdf',
-            'CreationDate' => $this->formatPdfDate(new \DateTimeImmutable),
-        ];
+        $meta = $info;
         $entries = [];
         foreach ($meta as $key => $value) {
             $entries[] = '/'.$key.' '.$this->pdfTextString((string) $value);
@@ -2219,7 +2427,7 @@ final class Document
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Tx /Rect %s /F 4 '
                 .'%s%s%s /Ff %d /P %d 0 R%s%s >>',
                 $rect, $namePart, $valuePart, $tooltipPart, $flags, $pageId, $apRef, $aaPart,
             );
@@ -2235,7 +2443,7 @@ final class Document
             $apRef = sprintf(' /AP << /N << /Yes %d 0 R /Off %d 0 R >> >>', $yesId, $offId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s /F 4 '
                 .'%s%s%s /Ff %d /P %d 0 R /AS %s%s%s >>',
                 $rect, $namePart, $vPart, $tooltipPart, $flags, $pageId,
                 $isChecked ? '/Yes' : '/Off',
@@ -2305,7 +2513,7 @@ final class Document
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Btn /Rect %s /F 4 '
                 .'%s%s /Ff %d /P %d 0 R%s%s%s%s >>',
                 $rect, $namePart, $tooltipPart, $flags, $pageId,
                 $mkPart, $actionPart, $apRef, $aaPart,
@@ -2325,7 +2533,7 @@ final class Document
             $apRef = sprintf(' /AP << /N %d 0 R >>', $apId);
 
             return sprintf(
-                '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /FT /Ch /Rect %s /F 4 '
                 .'%s%s%s /Opt %s /Ff %d /P %d 0 R%s%s >>',
                 $rect, $namePart, $valuePart, $tooltipPart, $optsArray, $flags, $pageId, $apRef, $aaPart,
             );
@@ -2372,7 +2580,7 @@ final class Document
             $exportKey = ltrim($exportName, '/');
             $apRef = sprintf(' /AP << /N << /%s %d 0 R /Off %d 0 R >> >>', $exportKey, $onId, $offId);
             $body = sprintf(
-                '<< /Type /Annot /Subtype /Widget /Rect %s '
+                '<< /Type /Annot /Subtype /Widget /Rect %s /F 4 '
                 .'/Parent %d 0 R /AS %s%s >>',
                 $rect, $parentId, $isChecked ? $exportName : '/Off', $apRef,
             );
